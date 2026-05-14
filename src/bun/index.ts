@@ -1,7 +1,38 @@
-import { BrowserWindow, Updater } from "electrobun/bun";
+import Electrobun, {
+	BrowserView,
+	BrowserWindow,
+	Updater,
+} from "electrobun/bun";
+import type { AppRpcSchema } from "../shared/appRpc";
+import {
+	startKokoroHubServer,
+	stopKokoroHubServer,
+} from "./kokoroHubServer";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+
+let kokoroHubBaseUrl: string | null = null;
+
+try {
+	kokoroHubBaseUrl = startKokoroHubServer();
+	console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
+} catch (e) {
+	console.warn("Kokoro hub server failed to start; using remote HF:", e);
+}
+
+Electrobun.events.on("before-quit", () => {
+	stopKokoroHubServer();
+});
+
+const appRpc = BrowserView.defineRPC<AppRpcSchema>({
+	handlers: {
+		requests: {
+			getKokoroHubBaseUrl: () => kokoroHubBaseUrl,
+		},
+		messages: {},
+	},
+});
 
 // Check if Vite dev server is running for HMR
 async function getMainViewUrl(): Promise<string> {
@@ -24,7 +55,7 @@ async function getMainViewUrl(): Promise<string> {
 const url = await getMainViewUrl();
 
 const mainWindow = new BrowserWindow({
-	title: "React + Tailwind + Vite",
+	title: "Cross TTS",
 	url,
 	frame: {
 		width: 900,
@@ -32,8 +63,9 @@ const mainWindow = new BrowserWindow({
 		x: 200,
 		y: 200,
 	},
+	rpc: appRpc,
 });
 
 void mainWindow;
 
-console.log("React Tailwind Vite app started!");
+console.log("Cross TTS started!");

@@ -1,4 +1,9 @@
-import { KOKORO_VOICE_IDS, voiceBinUrl } from "./kokoroVoices";
+import { getKokoroHubBaseUrlSync } from "./kokoroHubConfig";
+import {
+	KOKORO_VOICE_IDS,
+	voiceBinUrl,
+	voiceBinUrlFromHub,
+} from "./kokoroVoices";
 
 const VOICE_CACHE = "kokoro-voices";
 
@@ -30,7 +35,8 @@ export async function prefetchAllVoiceBins(options?: {
 
 	const fetchOne = async (id: string) => {
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-		const url = voiceBinUrl(id);
+		const hub = getKokoroHubBaseUrlSync();
+		const url = hub ? voiceBinUrlFromHub(hub, id) : voiceBinUrl(id);
 		if (cache) {
 			const hit = await cache.match(url);
 			if (hit) {

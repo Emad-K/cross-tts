@@ -2,9 +2,9 @@ import type { ElectrobunConfig } from "electrobun";
 
 export default {
 	app: {
-		name: "react-tailwind-vite",
-		identifier: "reacttailwindvite.electrobun.dev",
-		version: "0.0.1",
+		name: "Cross TTS",
+		identifier: "dev.cross-tts.app",
+		version: "1.0.0",
 	},
 	build: {
 		// Vite builds to dist/, we copy from there

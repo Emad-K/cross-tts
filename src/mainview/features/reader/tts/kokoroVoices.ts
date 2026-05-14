@@ -37,3 +37,12 @@ export const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 export function voiceBinUrl(voiceId: string): string {
 	return `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
 }
+
+/** Same path layout as Hugging Face, but served from the Electrobun localhost hub. */
+export function voiceBinUrlFromHub(
+	hubBaseUrl: string,
+	voiceId: string,
+): string {
+	const base = hubBaseUrl.endsWith("/") ? hubBaseUrl : `${hubBaseUrl}/`;
+	return `${base}${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
+}

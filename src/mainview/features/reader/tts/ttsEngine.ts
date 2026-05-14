@@ -1,4 +1,7 @@
+import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
+import { getKokoroHubBaseUrl } from "@/lib/electrobunRpc";
+import { setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
 import { useTtsStore } from "./ttsStore";
@@ -7,6 +10,22 @@ type TtsAudio = Awaited<ReturnType<KokoroTTS["generate"]>>;
 
 let ttsInstance: KokoroTTS | null = null;
 let loadPromise: Promise<KokoroTTS> | null = null;
+
+let hubEnvPromise: Promise<void> | null = null;
+
+async function configureKokoroHubEnv(): Promise<void> {
+	const base = await getKokoroHubBaseUrl();
+	setKokoroHubBaseUrl(base);
+	if (base) {
+		env.remoteHost = base;
+		env.useBrowserCache = false;
+	}
+}
+
+function ensureKokoroHubEnv(): Promise<void> {
+	if (!hubEnvPromise) hubEnvPromise = configureKokoroHubEnv();
+	return hubEnvPromise;
+}
 
 let audioContext: AudioContext | null = null;
 let gainNode: GainNode | null = null;
@@ -134,7 +153,9 @@ export async function ensureKokoroLoaded(): Promise<KokoroTTS> {
 			useTtsStore.getState();
 		setModelPhase("loading");
 		setModelProgress(0);
-		loadPromise = resolveKokoroLoadOptions().then(({ device, dtype }) =>
+		loadPromise = ensureKokoroHubEnv()
+			.then(() => resolveKokoroLoadOptions())
+			.then(({ device, dtype }) =>
 			KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
 				dtype,
 				device,

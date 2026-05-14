@@ -12,6 +12,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src/mainview"),
+			"@shared": path.resolve(__dirname, "./src/shared"),
 		},
 	},
 	build: {
