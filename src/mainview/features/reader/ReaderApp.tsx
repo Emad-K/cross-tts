@@ -36,7 +36,6 @@ export function ReaderApp() {
 			useTtsStore.getState().setSourceText("");
 		}
 	}, [document]);
-
 	const openFilePicker = useCallback(() => {
 		inputRef.current?.click();
 	}, []);
@@ -73,8 +72,7 @@ export function ReaderApp() {
 			<ReaderShell
 				className="min-h-0 flex-1"
 				document={document}
-				onOpenFile={openFilePicker}
-				onOpenSettings={() => {
+				onOpenFile={openFilePicker}				onOpenSettings={() => {
 					/* settings surface later */
 				}}
 				onLoadSample={() => setDocument(SAMPLE_TXT_DOCUMENT)}

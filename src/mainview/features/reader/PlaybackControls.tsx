@@ -44,12 +44,6 @@ function speedLabelToNumber(label: (typeof SPEEDS)[number]): number {
 	return Number.parseFloat(label.replace("x", ""));
 }
 
-function formatClock(sec: number): string {
-	const s = Math.max(0, Math.floor(sec % 60));
-	const m = Math.floor(sec / 60);
-	return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 export type PlaybackControlsProps = {
 	className?: string;
 };
@@ -65,8 +59,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 
 	const playback = useTtsStore((s) => s.playback);
 	const progressPct = useTtsStore((s) => s.progressPct);
-	const elapsedSec = useTtsStore((s) => s.elapsedSec);
-	const totalSec = useTtsStore((s) => s.totalSec);
+	const currentChunkIndex = useTtsStore((s) => s.currentChunkIndex);
 	const volumePct = useTtsStore((s) => s.volumePct);
 	const voice = useTtsStore((s) => s.voice);
 	const voiceOptions = useTtsStore((s) => s.voiceOptions);
@@ -127,17 +120,19 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const canSpeedUp = speedIndex < SPEEDS.length - 1;
 
 	const elapsedLabel =
-		chunks.length === 0 ? "0:00" : formatClock(elapsedSec);
-	const totalLabel =
-		totalSec != null && chunks.length > 0 ? formatClock(totalSec) : "—:—";
+		chunks.length === 0
+			? "Chunk —"
+			: `Chunk ${Math.min(chunks.length, currentChunkIndex + 1)}`;
+	const totalLabel = chunks.length === 0 ? "of —" : `of ${chunks.length}`;
 
 	const displayProgress =
 		isDraggingProgress ? progress[0]! : Math.round(progressPct);
 
 	const busyDownloading = voiceDownloadPhase === "running";
 	const canPlay = chunks.length > 0 && modelPhase !== "error";
-	const isPlaying = playback === "playing";
-	const isLoadingPlayback = playback === "loading_model";
+	const isModelLoading = playback === "loading_model";
+	const isSynthesizingChunk = playback === "buffering";
+	const isAudioPlaying = playback === "playing";
 
 	return (
 		<footer
@@ -190,13 +185,19 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							variant="outline"
 							size="icon"
 							className="size-12 rounded-full border-2 border-foreground/80 bg-transparent hover:bg-accent"
-							aria-label={isPlaying ? "Pause" : "Play"}
-							disabled={!canPlay || isLoadingPlayback}
+							aria-label={
+								isAudioPlaying
+									? "Pause"
+									: isSynthesizingChunk
+										? "Pause while synthesizing"
+										: "Play"
+							}
+							disabled={!canPlay || isModelLoading}
 							onClick={() => void togglePlayPause()}
 						>
-							{isLoadingPlayback ? (
+							{isModelLoading || isSynthesizingChunk ? (
 								<Loader2 className="size-5 animate-spin" />
-							) : isPlaying ? (
+							) : isAudioPlaying ? (
 								<Pause className="size-5" />
 							) : (
 								<Play className="size-5" />

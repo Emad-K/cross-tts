@@ -5,7 +5,12 @@ import type { KokoroVoiceId } from "./kokoroVoices";
 
 export type ModelPhase = "idle" | "loading" | "ready" | "error";
 export type VoiceDownloadPhase = "idle" | "running" | "done" | "error";
-export type PlaybackPhase = "idle" | "loading_model" | "playing" | "paused";
+export type PlaybackPhase =
+	| "idle"
+	| "loading_model"
+	| "buffering"
+	| "playing"
+	| "paused";
 
 export type VoiceOption = { id: KokoroVoiceId; label: string };
 
@@ -130,10 +135,13 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 		if (chunks.length === 0) return;
 		const clamped = Math.max(0, Math.min(chunks.length - 1, index));
 		const ch = chunks[clamped];
+		const n = chunks.length;
+		const progressPct =
+			n <= 1 ? 100 : (clamped / Math.max(1, n - 1)) * 100;
 		set({
 			currentChunkIndex: clamped,
 			highlightRange: { start: ch.start, end: ch.end },
-			progressPct: (clamped / chunks.length) * 100,
+			progressPct,
 		});
 	},
 }));

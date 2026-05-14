@@ -15,6 +15,12 @@ let activeSource: AudioBufferSourceNode | null = null;
 let playbackAbort: AbortController | null = null;
 let playbackLoopPromise: Promise<void> | null = null;
 
+function chunkProgressPct(idx: number, total: number): number {
+	if (total <= 0) return 0;
+	if (total <= 1) return 100;
+	return Math.min(100, (idx / (total - 1)) * 100);
+}
+
 function getAudioGraph(): { ctx: AudioContext; gain: GainNode } {
 	if (!audioContext) {
 		audioContext = new AudioContext();
@@ -197,10 +203,9 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 
 	if (signal.aborted) return;
 
-	useTtsStore.setState({ playback: "playing" });
-
 	let idx = useTtsStore.getState().currentChunkIndex;
-	const durations: number[] = [];
+	let nextPrefetchIdx: number | null = null;
+	let nextPrefetchBuffer: AudioBuffer | null = null;
 
 	while (!signal.aborted) {
 		const snap = useTtsStore.getState();
@@ -210,62 +215,86 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		const chunk = chunks[idx];
 		if (!chunk) break;
 
+		const total = chunks.length;
+
+		if (nextPrefetchIdx !== null && nextPrefetchIdx !== idx) {
+			nextPrefetchIdx = null;
+			nextPrefetchBuffer = null;
+		}
+
+		const usedPrefetch =
+			nextPrefetchIdx === idx && nextPrefetchBuffer !== null;
+
 		useTtsStore.setState({
+			playback: usedPrefetch ? "playing" : "buffering",
 			currentChunkIndex: idx,
 			highlightRange: { start: chunk.start, end: chunk.end },
+			progressPct: chunkProgressPct(idx, total),
+			elapsedSec: idx,
+			totalSec: total,
 		});
 
-		let raw: TtsAudio;
-		try {
-			raw = await tts.generate(chunk.text, {
-				voice: snap.voice,
-				speed: snap.speed,
-			});
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
-			useTtsStore.setState({ playback: "idle", playbackError: msg });
-			return;
+		let buffer: AudioBuffer;
+		if (usedPrefetch && nextPrefetchBuffer) {
+			buffer = nextPrefetchBuffer;
+			nextPrefetchIdx = null;
+			nextPrefetchBuffer = null;
+		} else {
+			let raw: TtsAudio;
+			try {
+				raw = await tts.generate(chunk.text, {
+					voice: snap.voice,
+					speed: snap.speed,
+				});
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				useTtsStore.setState({ playback: "idle", playbackError: msg });
+				return;
+			}
+
+			if (signal.aborted) break;
+
+			buffer = rawToBuffer(ctx, raw);
 		}
 
 		if (signal.aborted) break;
 
-		const buffer = rawToBuffer(ctx, raw);
-		durations[idx] = buffer.duration;
+		if (idx + 1 < chunks.length) {
+			const nextIndex = idx + 1;
+			const nextCh = chunks[nextIndex]!;
+			const voice = snap.voice;
+			const speed = snap.speed;
+			const nextTextSnapshot = nextCh.text;
+			void tts
+				.generate(nextCh.text, { voice, speed })
+				.then((r) => {
+					if (signal.aborted) return;
+					const st = useTtsStore.getState();
+					const ch = st.chunks[nextIndex];
+					if (
+						!ch ||
+						ch.text !== nextTextSnapshot ||
+						st.voice !== voice ||
+						st.speed !== speed
+					) {
+						return;
+					}
+					try {
+						nextPrefetchIdx = nextIndex;
+						nextPrefetchBuffer = rawToBuffer(ctx, r);
+					} catch {
+						nextPrefetchIdx = null;
+						nextPrefetchBuffer = null;
+					}
+				})
+				.catch(() => {});
+		}
 
-		const sumPrev = durations
-			.slice(0, idx)
-			.reduce((a, b) => a + (b ?? 0), 0);
-		const rest = chunks.length - idx - 1;
-		const known = durations.filter((d) => d > 0);
-		const avg =
-			known.length > 0
-				? known.reduce((a, b) => a + b, 0) / known.length
-				: buffer.duration;
-		const totalEst = sumPrev + buffer.duration + rest * avg;
-
-		const startedAt = ctx.currentTime;
-		let raf = 0;
-		const tick = () => {
-			if (signal.aborted) return;
-			const st = useTtsStore.getState();
-			if (st.playback !== "playing") return;
-			const playedNow = Math.min(
-				buffer.duration,
-				Math.max(0, ctx.currentTime - startedAt),
-			);
-			const elapsed = sumPrev + playedNow;
-			const pct = totalEst > 0 ? (elapsed / totalEst) * 100 : 0;
-			useTtsStore.setState({
-				elapsedSec: elapsed,
-				totalSec: totalEst,
-				progressPct: Math.min(100, pct),
-			});
-			raf = requestAnimationFrame(tick);
-		};
-		raf = requestAnimationFrame(tick);
+		if (useTtsStore.getState().playback !== "paused") {
+			useTtsStore.setState({ playback: "playing" });
+		}
 
 		await playBuffer(ctx, gain, buffer, signal);
-		cancelAnimationFrame(raf);
 
 		if (signal.aborted) break;
 
@@ -281,7 +310,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			highlightRange: null,
 			elapsedSec: 0,
 			totalSec: null,
-			progressPct: 0,
+			progressPct: 100,
 		});
 	} else if (!signal.aborted) {
 		useTtsStore.setState({ playback: "idle" });
@@ -292,7 +321,13 @@ export async function startOrResumePlayback(): Promise<void> {
 	const { playback, chunks } = useTtsStore.getState();
 	if (chunks.length === 0) return;
 
-	if (playback === "playing" || playback === "loading_model") return;
+	if (
+		playback === "playing" ||
+		playback === "loading_model" ||
+		playback === "buffering"
+	) {
+		return;
+	}
 
 	if (playback === "paused") {
 		await resumePlayback();
@@ -307,7 +342,8 @@ export async function startOrResumePlayback(): Promise<void> {
 }
 
 export function restartPlaybackIfPlaying(): void {
-	if (useTtsStore.getState().playback !== "playing") return;
+	const p = useTtsStore.getState().playback;
+	if (p !== "playing" && p !== "buffering") return;
 	interruptPlaybackForReschedule();
 	const ab = new AbortController();
 	playbackAbort = ab;
@@ -317,7 +353,7 @@ export function restartPlaybackIfPlaying(): void {
 
 export async function togglePlayPause(): Promise<void> {
 	const { playback } = useTtsStore.getState();
-	if (playback === "playing") {
+	if (playback === "playing" || playback === "buffering") {
 		await pausePlayback();
 		return;
 	}
@@ -327,7 +363,7 @@ export async function togglePlayPause(): Promise<void> {
 export function seekToChunkAndMaybePlay(index: number): void {
 	const { playback, seekToChunk } = useTtsStore.getState();
 	seekToChunk(index);
-	if (playback === "playing") {
+	if (playback === "playing" || playback === "buffering") {
 		interruptPlaybackForReschedule();
 		const ab = new AbortController();
 		playbackAbort = ab;
@@ -340,19 +376,18 @@ export function seekProgressPercent(pct: number): void {
 	const { chunks, seekToChunk } = useTtsStore.getState();
 	if (chunks.length === 0) return;
 	const clamped = Math.max(0, Math.min(100, pct));
-	const idx = Math.min(
-		chunks.length - 1,
-		Math.floor((clamped / 100) * chunks.length),
-	);
-	seekToChunk(idx);
-	if (useTtsStore.getState().playback === "playing") {
+	const n = chunks.length;
+	const idx =
+		n <= 1 ? 0 : Math.round((clamped / 100) * (n - 1));
+	const clampedIdx = Math.max(0, Math.min(n - 1, idx));
+	seekToChunk(clampedIdx);
+	const pb = useTtsStore.getState().playback;
+	if (pb === "playing" || pb === "buffering") {
 		interruptPlaybackForReschedule();
 		const ab = new AbortController();
 		playbackAbort = ab;
 		playbackLoopPromise = runPlaybackLoop(ab.signal);
 		void playbackLoopPromise;
-	} else {
-		useTtsStore.setState({ progressPct: clamped });
 	}
 }
 
@@ -364,7 +399,8 @@ export function skipChunk(delta: number): void {
 		Math.min(chunks.length - 1, currentChunkIndex + delta),
 	);
 	seekToChunk(next);
-	if (useTtsStore.getState().playback === "playing") {
+	const pb = useTtsStore.getState().playback;
+	if (pb === "playing" || pb === "buffering") {
 		interruptPlaybackForReschedule();
 		const ab = new AbortController();
 		playbackAbort = ab;
