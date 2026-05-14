@@ -1,3 +1,5 @@
+import { sentences as sbdSentences } from "sbd";
+
 export type TtsChunk = {
 	index: number;
 	/** Text passed to Kokoro (trimmed). */
@@ -9,99 +11,60 @@ export type TtsChunk = {
 };
 
 /** Prefer whole sentences; sub-split only when a sentence exceeds this. */
-const MAX_CHARS_IN_CHUNK = 160;
+const MAX_CHARS_IN_CHUNK = 300;
 
 /** Match TxtViewer: normalize newlines only (no trim) so indices line up. */
 export function normalizedReaderText(raw: string): string {
 	return raw.replace(/\r\n/g, "\n");
 }
 
-function hasSentenceSegmenter(): boolean {
-	return (
-		typeof Intl !== "undefined" &&
-		"Segmenter" in Intl &&
-		typeof (
-			Intl as unknown as {
-				Segmenter: new (
-					locales?: string | string[],
-					options?: { granularity?: "sentence" },
-				) => {
-					segment: (input: string) => Iterable<{
-						segment: string;
-						index: number;
-					}>;
-				};
-			}
-		).Segmenter === "function"
-	);
-}
-
 /**
- * Sentence spans in `full` using locale-aware boundaries when available.
+ * Collect sentence spans from `full`, running `sbd` line-by-line so that
+ * newlines between paragraphs never confuse the sentence detector.
+ *
+ * `sbd` with `preserve_whitespace: true` can bundle multiple sentences into
+ * one when newlines appear mid-paragraph (e.g. "Decree.\nFirst, to…").
+ * Processing each line independently avoids that while keeping character
+ * offsets accurate for highlighting sync.
  */
 function collectSentenceSpans(full: string): { start: number; end: number }[] {
-	if (hasSentenceSegmenter()) {
-		const IntlSeg = (
-			Intl as unknown as {
-				Segmenter: new (
-					locales?: string | string[],
-					options?: { granularity?: "sentence" },
-				) => {
-					segment: (input: string) => Iterable<{
-						segment: string;
-						index: number;
-					}>;
-				};
-			}
-		).Segmenter;
-		const seg = new IntlSeg("en", { granularity: "sentence" });
-		const spans: { start: number; end: number }[] = [];
-		for (const s of seg.segment(full)) {
-			const start = s.index;
-			const end = start + s.segment.length;
-			if (end > start) spans.push({ start, end });
-		}
-		if (spans.length > 0) return spans;
-	}
-	return fallbackSentenceSpans(full);
-}
-
-/**
- * Sentence-ish spans without `Intl.Segmenter`: punctuation + following closers/space,
- * or blank-line paragraph breaks.
- */
-function fallbackSentenceSpans(full: string): { start: number; end: number }[] {
-	const n = full.length;
 	const spans: { start: number; end: number }[] = [];
-	let from = 0;
+	const lines = full.split("\n");
+	let pos = 0;
 
-	const isAbbrevDot = (at: number) => {
-		const before = full.slice(Math.max(0, at - 8), at + 1);
-		return /\b(mr|mrs|ms|dr|st|vs|etc|e\.g|i\.e)\.$/i.test(before);
-	};
+	for (const line of lines) {
+		const lineStart = pos;
+		// Advance past this line and the \n that followed it.
+		// The last line has no trailing \n but that's fine — pos just overshoots
+		// by 1 beyond full.length, which is never used as an index.
+		pos += line.length + 1;
 
-	for (let i = 0; i < n; i++) {
-		const ch = full[i]!;
-		if (ch === "\n" && i + 1 < n && full[i + 1] === "\n") {
-			const end = i + 2;
-			if (end > from) spans.push({ start: from, end });
-			let k = end;
-			while (k < n && full[k] === "\n") k++;
-			from = k;
-			i = k - 1;
+		if (!line.trim()) continue;
+
+		const parts = sbdSentences(line, { preserve_whitespace: true });
+
+		if (parts.length === 0) {
+			spans.push({ start: lineStart, end: lineStart + line.length });
 			continue;
 		}
-		if (".!?…。！？".includes(ch) && !isAbbrevDot(i)) {
-			let j = i + 1;
-			while (j < n && /["'”'»\)\]]/.test(full[j]!)) j++;
-			while (j < n && /[\s\u00a0]/.test(full[j]!)) j++;
-			if (j > from) spans.push({ start: from, end: j });
-			from = j;
-			i = j - 1;
+
+		// Guard: if sbd mangled the text (shouldn't happen but be safe), fall
+		// back to treating the whole line as one span so offsets stay valid.
+		if (parts.join("") !== line) {
+			spans.push({ start: lineStart, end: lineStart + line.length });
+			continue;
+		}
+
+		let linePos = 0;
+		for (const seg of parts) {
+			const start = lineStart + linePos;
+			const end = start + seg.length;
+			if (end > start) spans.push({ start, end });
+			linePos += seg.length;
 		}
 	}
-	if (from < n) spans.push({ start: from, end: n });
-	return spans.filter((s) => s.end > s.start);
+
+	return spans;
 }
 
 /** Prefer commas / semicolons / colons, then spaces, inside a long clause. */

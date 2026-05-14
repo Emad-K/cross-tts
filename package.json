@@ -22,6 +22,7 @@
 		"lucide-react": "^1.16.0",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1",
+		"sbd": "^1.0.19",
 		"tailwind-merge": "^3.6.0",
 		"zustand": "^5.0.13"
 	},
