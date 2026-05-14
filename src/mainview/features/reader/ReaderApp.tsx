@@ -1,10 +1,8 @@
-import { useCallback, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { ReaderShell } from "./ReaderShell";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import type { LoadedDocument } from "./types";
-
-const DEMO_HIGHLIGHT =
-	"just remember that all the people in this world haven't had the advantages that you've had.";
+import { stopPlaybackUi, useTtsStore } from "./tts";
 
 function readTxtFile(file: File): Promise<LoadedDocument> {
 	return new Promise((resolve, reject) => {
@@ -29,6 +27,15 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 export function ReaderApp() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [document, setDocument] = useState<LoadedDocument | null>(null);
+
+	useEffect(() => {
+		if (document) {
+			useTtsStore.getState().setSourceText(document.text);
+		} else {
+			stopPlaybackUi();
+			useTtsStore.getState().setSourceText("");
+		}
+	}, [document]);
 
 	const openFilePicker = useCallback(() => {
 		inputRef.current?.click();
@@ -66,7 +73,6 @@ export function ReaderApp() {
 			<ReaderShell
 				className="min-h-0 flex-1"
 				document={document}
-				highlightPhrase={document ? DEMO_HIGHLIGHT : undefined}
 				onOpenFile={openFilePicker}
 				onOpenSettings={() => {
 					/* settings surface later */

@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
 	plugins: [react()],
+	worker: { format: "es" },
 	root: "src/mainview",
 	resolve: {
 		alias: {
@@ -14,6 +15,7 @@ export default defineConfig({
 		},
 	},
 	build: {
+		target: "esnext",
 		outDir: "../../dist",
 		emptyOutDir: true,
 	},

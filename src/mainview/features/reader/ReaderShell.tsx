@@ -1,4 +1,5 @@
 import type { LoadedDocument } from "./types";
+import { TtsSettingSync } from "./tts";
 import { DocumentViewer } from "./viewers/DocumentViewer";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
@@ -9,7 +10,6 @@ import { cn } from "@/lib/utils";
 
 export type ReaderShellProps = {
 	document: LoadedDocument | null;
-	highlightPhrase?: string;
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
 	onLoadSample?: () => void;
@@ -21,7 +21,6 @@ export type ReaderShellProps = {
  */
 export function ReaderShell({
 	document,
-	highlightPhrase,
 	onOpenFile,
 	onOpenSettings,
 	onLoadSample,
@@ -31,6 +30,7 @@ export function ReaderShell({
 
 	return (
 		<TooltipProvider delayDuration={300} skipDelayDuration={0}>
+			<TtsSettingSync />
 			<div
 				className={cn(
 					"dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground",
@@ -46,10 +46,7 @@ export function ReaderShell({
 					{hasDoc ? (
 						<div className="relative min-h-0 flex-1">
 							<ScrollArea className="absolute inset-0 h-full min-h-0 w-full">
-								<DocumentViewer
-									document={document}
-									highlightPhrase={highlightPhrase}
-								/>
+								<DocumentViewer document={document} />
 							</ScrollArea>
 						</div>
 					) : (

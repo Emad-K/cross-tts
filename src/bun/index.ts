@@ -34,4 +34,6 @@ const mainWindow = new BrowserWindow({
 	},
 });
 
+void mainWindow;
+
 console.log("React Tailwind Vite app started!");
