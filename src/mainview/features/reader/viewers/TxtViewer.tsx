@@ -1,7 +1,65 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import {
+	Fragment,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	type ReactNode,
+} from "react";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { normalizedReaderText } from "@/features/reader/tts/chunkText";
 import { cn } from "@/lib/utils";
+
+const SCROLL_EDGE_PADDING_PX = 12;
+
+/** Prefer Radix reader viewport; fall back to any vertical scroll ancestor. */
+function getScrollableViewport(el: HTMLElement): HTMLElement | null {
+	const radix = el.closest<HTMLElement>("[data-radix-scroll-area-viewport]");
+	if (radix) return radix;
+	let node: HTMLElement | null = el.parentElement;
+	while (node) {
+		const { overflowY } = getComputedStyle(node);
+		if (
+			(overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+			node.scrollHeight > node.clientHeight
+		) {
+			return node;
+		}
+		node = node.parentElement;
+	}
+	return null;
+}
+
+/**
+ * Scroll the nearest scroll viewport so the element is fully visible (with padding).
+ * If the element is taller than the viewport, align its top with padding below the
+ * viewport top so read-along starts where speech begins.
+ */
+function scrollElementFullyVisible(el: HTMLElement, padding = SCROLL_EDGE_PADDING_PX) {
+	const root = getScrollableViewport(el);
+	if (!root) {
+		el.scrollIntoView({ block: "nearest", inline: "nearest" });
+		return;
+	}
+	const er = el.getBoundingClientRect();
+	const rr = root.getBoundingClientRect();
+	const elTop = root.scrollTop + (er.top - rr.top);
+	const elBottom = elTop + er.height;
+	const viewH = root.clientHeight;
+	let top = root.scrollTop;
+
+	if (elTop < top + padding) {
+		top = elTop - padding;
+	}
+	if (elBottom > top + viewH - padding) {
+		top = elBottom - viewH + padding;
+	}
+	if (elTop < top + padding) {
+		top = elTop - padding;
+	}
+
+	const maxScroll = Math.max(0, root.scrollHeight - viewH);
+	root.scrollTop = Math.min(maxScroll, Math.max(0, top));
+}
 
 export type TxtViewerProps = {
 	text: string;
@@ -63,6 +121,14 @@ export function TxtViewer({
 	onChunkClick,
 }: TxtViewerProps) {
 	const normalized = useMemo(() => normalizedReaderText(text), [text]);
+	const activeChunkRef = useRef<HTMLSpanElement | null>(null);
+
+	useLayoutEffect(() => {
+		if (!chunks?.length || activeChunkIndex == null) return;
+		const el = activeChunkRef.current;
+		if (!el) return;
+		scrollElementFullyVisible(el);
+	}, [activeChunkIndex, chunks, normalized]);
 
 	const chunkBody = useMemo(() => {
 		if (!chunks?.length) return null;
@@ -78,6 +144,7 @@ export function TxtViewer({
 			parts.push(
 				<span
 					key={`chunk-${c.index}`}
+					ref={active ? activeChunkRef : undefined}
 					role="button"
 					tabIndex={0}
 					className={cn(
