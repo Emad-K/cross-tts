@@ -15,6 +15,37 @@ let activeSource: AudioBufferSourceNode | null = null;
 let playbackAbort: AbortController | null = null;
 let playbackLoopPromise: Promise<void> | null = null;
 
+type KokoroFromPretrainedDtype = NonNullable<
+	Parameters<typeof KokoroTTS.from_pretrained>[1]
+>["dtype"];
+
+/**
+ * Kokoro-js `device: "webgpu"` uses the **webview** standard WebGPU API
+ * (`navigator.gpu` + ONNX Runtime WebGPU EP). That is separate from Electrobun's
+ * Bun-side Dawn bundle (`build.*.bundleWGPU`, `GpuWindow`, `webgpu` from
+ * `electrobun/bun`), which does not inject a GPU into page JS.
+ *
+ * Official kokoro-js note: with `device: "webgpu"`, use `dtype: "fp32"` — q8 on
+ * WebGPU can give bad / garbage-sounding output.
+ */
+async function resolveKokoroLoadOptions(): Promise<{
+	device: "webgpu" | "wasm";
+	dtype: KokoroFromPretrainedDtype;
+}> {
+	let device: "webgpu" | "wasm" = "wasm";
+	try {
+		if (typeof navigator !== "undefined" && navigator.gpu) {
+			const adapter = await navigator.gpu.requestAdapter();
+			if (adapter) device = "webgpu";
+		}
+	} catch {
+		device = "wasm";
+	}
+	const dtype: KokoroFromPretrainedDtype =
+		device === "webgpu" ? "fp32" : "q8";
+	return { device, dtype };
+}
+
 function chunkProgressPct(idx: number, total: number): number {
 	if (total <= 0) return 0;
 	if (total <= 1) return 100;
@@ -103,15 +134,17 @@ export async function ensureKokoroLoaded(): Promise<KokoroTTS> {
 			useTtsStore.getState();
 		setModelPhase("loading");
 		setModelProgress(0);
-		loadPromise = KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-			dtype: "q8",
-			device: "wasm",
-			progress_callback: (info) => {
-				if (info.status === "progress") {
-					setModelProgress(info.progress / 100);
-				}
-			},
-		})
+		loadPromise = resolveKokoroLoadOptions().then(({ device, dtype }) =>
+			KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+				dtype,
+				device,
+				progress_callback: (info) => {
+					if (info.status === "progress") {
+						setModelProgress(info.progress / 100);
+					}
+				},
+			}),
+		)
 			.then((tts) => {
 				ttsInstance = tts;
 				setVoiceOptions(voiceOptionsFromTts(tts));
