@@ -1,61 +1,77 @@
-# React + Tailwind + Vite Electrobun Template
+# Cross TTS
 
-A fast Electrobun desktop app template with React, Tailwind CSS, and Vite for hot module replacement (HMR).
+Desktop text-to-speech reader built with [Electrobun](https://blackboard.sh/electrobun/) (Bun main process + system WebView), React, Tailwind, and Vite.
 
-## Getting Started
+## Requirements
+
+- [Bun](https://bun.sh/) (recommended for installs and scripts)
+
+## Development
 
 ```bash
-# Install dependencies
 bun install
-
-# Development without HMR (uses bundled assets)
-bun run dev
-
-# Development with HMR (recommended)
+# Hot reload (Vite + Electrobun)
 bun run dev:hmr
-
-# Build for production
-bun run build
-
-# Build for production release
-bun run build:prod
+# Or bundle views and run Electrobun watch
+bun run dev
 ```
 
-## How HMR Works
+## Production build
 
-When you run `bun run dev:hmr`:
+```bash
+bun run build:stable
+```
 
-1. **Vite dev server** starts on `http://localhost:5173` with HMR enabled
-2. **Electrobun** starts and detects the running Vite server
-3. The app loads from the Vite dev server instead of bundled assets
-4. Changes to React components update instantly without full page reload
+Outputs under `artifacts/` (and intermediate files under `build/`). `electrobun.config.ts` reads **`app.version` from `package.json`**, so you only bump the version in one place for releases.
 
-When you run `bun run dev` (without HMR):
+### What each artifact is
 
-1. Electrobun starts and loads from `views://mainview/index.html`
-2. You need to rebuild (`bun run build`) to see changes
+| Artifact | Role |
+|----------|------|
+| `stable-*-*.zip` (Windows, Electrobun default) | Single download: unzip and run the included `…-Setup.exe` with the matching `.tar.zst` kept alongside it (Electrobun’s layout). The `.exe` alone is **not** enough without that archive. |
+| `stable-*-*.tar.zst` | Compressed app bundle (used by the updater / installer path). |
+| `stable-*-update.json` | Metadata for Electrobun’s update mechanism if you host releases yourself. |
+| macOS `*.dmg` | Disk image when building on macOS (default Electrobun behavior). |
 
-## Project Structure
+Electrobun does **not** ship one monolithic `.exe`; the Windows **zip** from `artifacts/` is the normal “one file to distribute” option.
+
+## CI
+
+GitHub Actions workflow **Build** runs on pushes and pull requests to `main` / `master`: installs Bun, runs `bun run build:stable` on Windows, Ubuntu, and macOS, and uploads `artifacts/` from each runner.
+
+## Releases (tag workflow)
+
+1. Bump **`package.json`** `version` (and commit). `electrobun.config.ts` picks it up automatically.
+2. Create an **annotated** tag whose name is `v` plus that exact version, for example `1.2.3` → tag `v1.2.3`.
+3. Push the tag: `git push origin v1.2.3`.
+
+The **Release** workflow runs on `v*` tags, checks that the tag (without `v`) equals `package.json`’s `version`, rebuilds on all three OSes, and publishes the contents of each `artifacts/` folder to the GitHub Release.
+
+If the tag check fails, you likely tagged before bumping the version or used a mismatched tag name.
+
+### Suggested commands
+
+```bash
+# Bump patch version, commit, and create tag vX.Y.Z in one step (npm CLI)
+npm version patch -m "release v%s"
+git push origin main && git push origin --tags
+```
+
+If you prefer to edit `package.json` by hand, use `git tag -a v1.0.1 -m "1.0.1"` after committing the version bump.
+
+## Project layout
 
 ```
 ├── src/
-│   ├── bun/
-│   │   └── index.ts        # Main process (Electrobun/Bun)
-│   └── mainview/
-│       ├── App.tsx         # React app component
-│       ├── main.tsx        # React entry point
-│       ├── index.html      # HTML template
-│       └── index.css       # Tailwind CSS
-├── electrobun.config.ts    # Electrobun configuration
-├── vite.config.ts          # Vite configuration
-├── tailwind.config.js      # Tailwind configuration
+│   ├── bun/index.ts          # Main process
+│   └── mainview/             # React UI (Vite)
+├── electrobun.config.ts
+├── vite.config.ts
 └── package.json
 ```
 
 ## Customizing
 
-- **React components**: Edit files in `src/mainview/`
-- **Tailwind theme**: Edit `tailwind.config.js`
-- **Vite settings**: Edit `vite.config.ts`
-- **Window settings**: Edit `src/bun/index.ts`
-- **App metadata**: Edit `electrobun.config.ts`
+- **UI:** `src/mainview/`
+- **Window / app shell:** `src/bun/index.ts`
+- **App name, id, copy rules:** `electrobun.config.ts`
