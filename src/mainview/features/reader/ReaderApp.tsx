@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type ChangeEvent,
+} from "react";
 import { ReaderShell } from "./ReaderShell";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
+import {
+	loadPersistedReaderState,
+	subscribeDebouncedSessionSave,
+	touchSessionSave,
+} from "./sessionPersistence";
 import type { LoadedDocument } from "./types";
 import { stopPlaybackUi, useTtsStore } from "./tts";
 
@@ -27,15 +38,58 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 export function ReaderApp() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [document, setDocument] = useState<LoadedDocument | null>(null);
+	const [sessionReady, setSessionReady] = useState(false);
+	const documentRef = useRef(document);
+	documentRef.current = document;
+
+	const pendingChunkIndexRef = useRef<number | null>(null);
 
 	useEffect(() => {
+		let cancelled = false;
+		void (async () => {
+			try {
+				const { document: doc, pendingChunkIndex } =
+					await loadPersistedReaderState();
+				if (cancelled) return;
+				if (doc) {
+					pendingChunkIndexRef.current = pendingChunkIndex;
+					setDocument(doc);
+				}
+			} finally {
+				setSessionReady(true);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!sessionReady) return;
 		if (document) {
-			useTtsStore.getState().setSourceText(document.text);
+			const pending = pendingChunkIndexRef.current;
+			pendingChunkIndexRef.current = null;
+			const opts =
+				pending !== null && pending !== undefined
+					? { chunkIndex: pending }
+					: undefined;
+			useTtsStore.getState().setSourceText(document.text, opts);
 		} else {
 			stopPlaybackUi();
 			useTtsStore.getState().setSourceText("");
 		}
-	}, [document]);
+	}, [document, sessionReady]);
+
+	useEffect(() => {
+		if (!sessionReady) return;
+		return subscribeDebouncedSessionSave(() => documentRef.current);
+	}, [sessionReady]);
+
+	useEffect(() => {
+		if (!sessionReady) return;
+		touchSessionSave();
+	}, [document, sessionReady]);
+
 	const openFilePicker = useCallback(() => {
 		inputRef.current?.click();
 	}, []);
@@ -46,7 +100,6 @@ export function ReaderApp() {
 			e.target.value = "";
 			if (!file) return;
 			if (!file.name.toLowerCase().endsWith(".txt")) {
-				// v1: only txt; later a format registry can validate / route.
 				return;
 			}
 			try {
@@ -72,7 +125,8 @@ export function ReaderApp() {
 			<ReaderShell
 				className="min-h-0 flex-1"
 				document={document}
-				onOpenFile={openFilePicker}				onOpenSettings={() => {
+				onOpenFile={openFilePicker}
+				onOpenSettings={() => {
 					/* settings surface later */
 				}}
 				onLoadSample={() => setDocument(SAMPLE_TXT_DOCUMENT)}

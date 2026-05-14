@@ -3,7 +3,14 @@ import Electrobun, {
 	BrowserWindow,
 	Updater,
 } from "electrobun/bun";
+import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { AppRpcSchema } from "../shared/appRpc";
+import type { WebPersistedSlice } from "../shared/appSession";
+import {
+	loadAppSessionFile,
+	pickInitialWindowFrame,
+	saveAppSessionFile,
+} from "./appSessionStore";
 import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
@@ -11,6 +18,8 @@ import {
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+
+const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
 let kokoroHubBaseUrl: string | null = null;
 
@@ -25,10 +34,30 @@ Electrobun.events.on("before-quit", () => {
 	stopKokoroHubServer();
 });
 
+const savedSession = loadAppSessionFile();
+const initialFrame = pickInitialWindowFrame(savedSession, FALLBACK_FRAME);
+
+let mainWindow: BrowserWindow | null = null;
+
 const appRpc = BrowserView.defineRPC<AppRpcSchema>({
 	handlers: {
 		requests: {
 			getKokoroHubBaseUrl: () => kokoroHubBaseUrl,
+			loadAppSession: () => loadAppSessionFile(),
+			saveAppSession: (web: WebPersistedSlice) => {
+				if (!mainWindow) return;
+				const f = mainWindow.getFrame();
+				saveAppSessionFile({
+					version: APP_SESSION_VERSION,
+					window: {
+						x: f.x,
+						y: f.y,
+						width: f.width,
+						height: f.height,
+					},
+					web,
+				});
+			},
 		},
 		messages: {},
 	},
@@ -54,15 +83,10 @@ async function getMainViewUrl(): Promise<string> {
 // Create the main application window
 const url = await getMainViewUrl();
 
-const mainWindow = new BrowserWindow({
+mainWindow = new BrowserWindow({
 	title: "Cross TTS",
 	url,
-	frame: {
-		width: 900,
-		height: 700,
-		x: 200,
-		y: 200,
-	},
+	frame: initialFrame,
 	rpc: appRpc,
 });
 

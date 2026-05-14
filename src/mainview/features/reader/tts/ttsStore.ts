@@ -34,7 +34,7 @@ type TtsState = {
 	elapsedSec: number;
 	totalSec: number | null;
 	progressPct: number;
-	setSourceText: (raw: string) => void;
+	setSourceText: (raw: string, opts?: { chunkIndex?: number }) => void;
 	setVoiceOptions: (opts: VoiceOption[]) => void;
 	setVoice: (id: KokoroVoiceId) => void;
 	setVolumePct: (v: number) => void;
@@ -87,17 +87,30 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	totalSec: null,
 	progressPct: 0,
 
-	setSourceText: (raw) => {
+	setSourceText: (raw, opts) => {
 		const normalized = normalizedReaderText(raw);
 		const chunks = buildTtsChunks(raw);
+		let idx = 0;
+		if (
+			opts?.chunkIndex !== undefined &&
+			chunks.length > 0
+		) {
+			idx = Math.max(
+				0,
+				Math.min(chunks.length - 1, Math.floor(opts.chunkIndex)),
+			);
+		}
+		const ch = chunks[idx];
+		const n = chunks.length;
+		const progressPct = n <= 1 ? 100 : (idx / Math.max(1, n - 1)) * 100;
 		set({
 			sourceText: normalized,
 			chunks,
-			currentChunkIndex: 0,
-			highlightRange: null,
+			currentChunkIndex: idx,
+			highlightRange: ch ? { start: ch.start, end: ch.end } : null,
 			elapsedSec: 0,
 			totalSec: null,
-			progressPct: 0,
+			progressPct,
 			playback: "idle",
 			playbackError: null,
 		});

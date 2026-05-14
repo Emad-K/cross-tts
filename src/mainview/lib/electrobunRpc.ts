@@ -1,5 +1,6 @@
 import { Electroview } from "electrobun/view";
 import type { AppRpcSchema } from "@shared/appRpc";
+import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 
 const w = typeof window !== "undefined" ? window : undefined;
 const webviewId = (w as unknown as { __electrobunWebviewId?: number })
@@ -33,4 +34,16 @@ export async function getKokoroHubBaseUrl(): Promise<string | null> {
 	const r = ensureElectroview();
 	if (!r) return null;
 	return r.request.getKokoroHubBaseUrl();
+}
+
+export async function loadAppSession(): Promise<AppSessionFileV1 | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.loadAppSession();
+}
+
+export async function saveAppSession(web: WebPersistedSlice): Promise<void> {
+	const r = ensureElectroview();
+	if (!r) return;
+	await r.request.saveAppSession(web);
 }
