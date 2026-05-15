@@ -59,7 +59,22 @@ const appRpc = BrowserView.defineRPC<AppRpcSchema>({
 				});
 			},
 		},
-		messages: {},
+		messages: {
+			closeWindow: () => {
+				mainWindow?.close();
+			},
+			minimizeWindow: () => {
+				mainWindow?.minimize();
+			},
+			maximizeWindow: () => {
+				if (!mainWindow) return;
+				if (mainWindow.isMaximized()) {
+					mainWindow.unmaximize();
+				} else {
+					mainWindow.maximize();
+				}
+			},
+		},
 	},
 });
 
@@ -87,6 +102,9 @@ mainWindow = new BrowserWindow({
 	title: "Cross TTS",
 	url,
 	frame: initialFrame,
+	// "hidden" forces Titled:false in Electrobun and drops the resize frame on
+	// Windows. "hiddenInset" keeps Titled + FullSizeContentView for custom chrome.
+	titleBarStyle: "hiddenInset",
 	rpc: appRpc,
 });
 

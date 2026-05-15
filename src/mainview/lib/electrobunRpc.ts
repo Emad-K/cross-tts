@@ -2,14 +2,18 @@ import { Electroview } from "electrobun/view";
 import type { AppRpcSchema } from "@shared/appRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 
-const w = typeof window !== "undefined" ? window : undefined;
-const webviewId = (w as unknown as { __electrobunWebviewId?: number })
-	?.__electrobunWebviewId;
-const rpcPort = (w as unknown as { __electrobunRpcSocketPort?: number })
-	?.__electrobunRpcSocketPort;
-
-export const isElectrobunWebview =
-	typeof webviewId === "number" && typeof rpcPort === "number";
+/**
+ * Read globals each time — Electrobun injects `__electrobunWebviewId` /
+ * `__electrobunRpcSocketPort` after (or as) scripts run; a one-time module read
+ * stays false and hides the custom title bar + skips Electroview boot.
+ */
+export function isElectrobunWebview(): boolean {
+	if (typeof window === "undefined") return false;
+	return (
+		typeof window.__electrobunWebviewId === "number" &&
+		typeof window.__electrobunRpcSocketPort === "number"
+	);
+}
 
 let rpc: ReturnType<typeof Electroview.defineRPC<AppRpcSchema>> | null = null;
 let electroviewStarted = false;
@@ -17,7 +21,7 @@ let electroviewStarted = false;
 function ensureElectroview(): ReturnType<
 	typeof Electroview.defineRPC<AppRpcSchema>
 > | null {
-	if (!isElectrobunWebview) return null;
+	if (!isElectrobunWebview()) return null;
 	if (!rpc) {
 		rpc = Electroview.defineRPC<AppRpcSchema>({
 			handlers: { requests: {}, messages: {} },
@@ -28,6 +32,23 @@ function ensureElectroview(): ReturnType<
 		new Electroview({ rpc });
 	}
 	return rpc;
+}
+
+/** Start Electroview + RPC when embedded in Electrobun (needed for draggable title bar). */
+export function bootElectrobunMainView(): void {
+	ensureElectroview();
+}
+
+export function requestCloseWindow(): void {
+	ensureElectroview()?.send.closeWindow();
+}
+
+export function requestMinimizeWindow(): void {
+	ensureElectroview()?.send.minimizeWindow();
+}
+
+export function requestToggleMaximize(): void {
+	ensureElectroview()?.send.maximizeWindow();
 }
 
 export async function getKokoroHubBaseUrl(): Promise<string | null> {
