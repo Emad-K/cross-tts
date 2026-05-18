@@ -12,8 +12,10 @@ export type WebPersistedSlice = {
 	voice: string;
 	volumePct: number;
 	speed: number;
-	/** Absolute path to the open .txt file; content is read on demand, not stored in session. */
+	/** Absolute path to the open document; content is read on demand, not stored in session. */
 	documentPath: string | null;
+	/** Active EPUB chapter manifest id; null for .txt or unknown. */
+	activeChapterId: string | null;
 	currentChunkIndex: number;
 };
 
@@ -28,5 +30,6 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	volumePct: 80,
 	speed: 1,
 	documentPath: null,
+	activeChapterId: null,
 	currentChunkIndex: 0,
 });

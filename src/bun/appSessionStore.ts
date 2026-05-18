@@ -44,6 +44,11 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	} else if (o.documentPath === null) {
 		d.documentPath = null;
 	}
+	if (typeof o.activeChapterId === "string" && o.activeChapterId.length > 0) {
+		d.activeChapterId = o.activeChapterId;
+	} else if (o.activeChapterId === null) {
+		d.activeChapterId = null;
+	}
 	if (typeof o.currentChunkIndex === "number" && o.currentChunkIndex >= 0) {
 		d.currentChunkIndex = Math.floor(o.currentChunkIndex);
 	}
@@ -59,6 +64,10 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 		documentPath:
 			typeof web.documentPath === "string" && web.documentPath.length > 0
 				? web.documentPath
+				: null,
+		activeChapterId:
+			typeof web.activeChapterId === "string" && web.activeChapterId.length > 0
+				? web.activeChapterId
 				: null,
 		currentChunkIndex: web.currentChunkIndex,
 	};

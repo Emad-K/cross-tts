@@ -30,12 +30,11 @@ export function ReaderEmptyState({
 				Open a document
 			</h1>
 			<p className="mb-2 max-w-md text-sm text-muted-foreground sm:text-base">
-				Start with a plain text file. EPUB, PDF, and a library view will plug
-				into this flow later—the layout stays the same.
+				Open a plain text or EPUB book to read and listen with TTS.
 			</p>
 			<p className="mb-8 flex items-center justify-center gap-2 text-xs text-muted-foreground/90 sm:text-sm">
 				<FileText className="size-4 shrink-0" aria-hidden />
-				<span>v1 supports .txt only</span>
+				<span>.txt and .epub supported</span>
 			</p>
 			<div className="flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:justify-center">
 				<Button

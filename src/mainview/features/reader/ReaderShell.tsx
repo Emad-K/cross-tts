@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 
 export type ReaderShellProps = {
 	document: LoadedDocument | null;
+	activeChapterId?: string | null;
+	initialChapterId?: string | null;
+	onActiveChapterChange?: (chapterId: string | null) => void;
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
 	onLoadSample?: () => void;
@@ -21,6 +24,9 @@ export type ReaderShellProps = {
  */
 export function ReaderShell({
 	document,
+	activeChapterId = null,
+	initialChapterId = null,
+	onActiveChapterChange,
 	onOpenFile,
 	onOpenSettings,
 	onLoadSample,
@@ -30,7 +36,10 @@ export function ReaderShell({
 	const [chapterSidebarOpen, setChapterSidebarOpen] = useState(false);
 
 	useEffect(() => {
-		setChapterSidebarOpen(Boolean(document?.chapters?.length));
+		const hasChapters =
+			document?.format === "epub" ||
+			Boolean(document?.chapters?.length);
+		setChapterSidebarOpen(hasChapters);
 	}, [document]);
 
 	return (
@@ -57,6 +66,9 @@ export function ReaderShell({
 						<ReaderDocumentLayout
 							document={document}
 							chapterSidebarOpen={chapterSidebarOpen}
+							activeChapterId={activeChapterId}
+							initialChapterId={initialChapterId}
+							onActiveChapterChange={onActiveChapterChange}
 							className="min-h-0 flex-1"
 						/>
 					) : (

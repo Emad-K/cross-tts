@@ -12,9 +12,11 @@ import {
 	saveAppSessionFile,
 } from "./appSessionStore";
 import {
-	pickAndReadTextDocument,
-	readTextDocumentAtPath,
-} from "./textDocumentIo";
+	getEpubChapterContent,
+	pickDocument,
+	readDocumentAtPath,
+} from "./documentIo";
+import { readTextDocumentAtPath } from "./textDocumentIo";
 import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
@@ -62,7 +64,14 @@ const appRpc = BrowserView.defineRPC<AppRpcSchema>({
 					web,
 				});
 			},
-			pickTextDocument: () => pickAndReadTextDocument(),
+			pickDocument: () => pickDocument(),
+			readDocumentAtPath: ({ filePath }) => readDocumentAtPath(filePath),
+			getEpubChapterContent: ({ filePath, chapterId }) =>
+				getEpubChapterContent(filePath, chapterId),
+			pickTextDocument: async () => {
+				const doc = await pickDocument();
+				return doc?.format === "txt" ? doc : null;
+			},
 			readTextDocumentAtPath: ({ filePath }) =>
 				readTextDocumentAtPath(filePath),
 		},

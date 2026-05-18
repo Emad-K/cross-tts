@@ -1,7 +1,8 @@
 import type { WebPersistedSlice } from "@shared/appSession";
+import type { ReadDocumentResult } from "@shared/documentRpc";
 import {
 	loadAppSession as loadAppSessionRpc,
-	readTextDocumentAtPath,
+	readDocumentAtPath,
 	saveAppSession as saveAppSessionRpc,
 } from "@/lib/electrobunRpc";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
@@ -10,7 +11,6 @@ import type { LoadedDocument } from "./types";
 
 const DEBOUNCE_MS = 500;
 
-/** Wired while session autosave is active; call when document changes. */
 let scheduleSave: (() => void) | null = null;
 
 export function touchSessionSave(): void {
@@ -23,27 +23,48 @@ function coerceVoice(id: string): KokoroVoiceId {
 		: "af_heart";
 }
 
-function buildWebSlice(doc: LoadedDocument | null): WebPersistedSlice {
+export function buildWebSlice(
+	doc: LoadedDocument | null,
+	activeChapterId: string | null,
+): WebPersistedSlice {
 	const t = useTtsStore.getState();
 	return {
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
 		documentPath: doc?.filePath ?? null,
+		activeChapterId:
+			doc?.format === "epub" ? activeChapterId : null,
 		currentChunkIndex: t.currentChunkIndex,
 	};
 }
 
-/**
- * Hydrate Zustand + return document to restore (if any).
- */
+function toLoadedDocument(result: ReadDocumentResult): LoadedDocument {
+	if (result.format === "txt") {
+		return {
+			format: "txt",
+			fileName: result.fileName,
+			filePath: result.filePath,
+			text: result.text,
+		};
+	}
+	return {
+		format: "epub",
+		fileName: result.fileName,
+		filePath: result.filePath,
+		title: result.title,
+		chapters: result.chapters,
+	};
+}
+
 export async function loadPersistedReaderState(): Promise<{
 	document: LoadedDocument | null;
 	pendingChunkIndex: number | null;
+	activeChapterId: string | null;
 }> {
 	const file = await loadAppSessionRpc();
 	if (!file?.web) {
-		return { document: null, pendingChunkIndex: null };
+		return { document: null, pendingChunkIndex: null, activeChapterId: null };
 	}
 	const { web } = file;
 	const voice = coerceVoice(web.voice);
@@ -56,12 +77,12 @@ export async function loadPersistedReaderState(): Promise<{
 			? web.documentPath
 			: null;
 	if (!documentPath) {
-		return { document: null, pendingChunkIndex: null };
+		return { document: null, pendingChunkIndex: null, activeChapterId: null };
 	}
 
-	const loaded = await readTextDocumentAtPath(documentPath);
+	const loaded = await readDocumentAtPath(documentPath);
 	if (!loaded) {
-		return { document: null, pendingChunkIndex: null };
+		return { document: null, pendingChunkIndex: null, activeChapterId: null };
 	}
 
 	const chunk =
@@ -69,28 +90,29 @@ export async function loadPersistedReaderState(): Promise<{
 			? Math.floor(web.currentChunkIndex)
 			: 0;
 
+	const savedChapterId =
+		typeof web.activeChapterId === "string" && web.activeChapterId.length > 0
+			? web.activeChapterId
+			: null;
+
 	return {
-		document: {
-			format: "txt",
-			fileName: loaded.fileName,
-			filePath: loaded.filePath,
-			text: loaded.text,
-		},
+		document: toLoadedDocument(loaded),
 		pendingChunkIndex: chunk,
+		activeChapterId: savedChapterId,
 	};
 }
 
-/**
- * Debounced save of reader + TTS prefs; merges current window frame on the Bun side.
- */
 export function subscribeDebouncedSessionSave(
 	getDocument: () => LoadedDocument | null,
+	getActiveChapterId: () => string | null,
 ): () => void {
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
 	const flush = () => {
 		timer = null;
-		void saveAppSessionRpc(buildWebSlice(getDocument()));
+		void saveAppSessionRpc(
+			buildWebSlice(getDocument(), getActiveChapterId()),
+		);
 	};
 
 	const schedule = () => {
@@ -104,7 +126,9 @@ export function subscribeDebouncedSessionSave(
 				clearTimeout(timer);
 				timer = null;
 			}
-			void saveAppSessionRpc(buildWebSlice(getDocument()));
+			void saveAppSessionRpc(
+				buildWebSlice(getDocument(), getActiveChapterId()),
+			);
 		}
 	};
 
@@ -118,6 +142,8 @@ export function subscribeDebouncedSessionSave(
 		unsubStore();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
-		void saveAppSessionRpc(buildWebSlice(getDocument()));
+		void saveAppSessionRpc(
+			buildWebSlice(getDocument(), getActiveChapterId()),
+		);
 	};
 }

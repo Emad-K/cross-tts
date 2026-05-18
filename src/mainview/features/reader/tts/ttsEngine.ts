@@ -34,6 +34,17 @@ let activeSource: AudioBufferSourceNode | null = null;
 let playbackAbort: AbortController | null = null;
 let playbackLoopPromise: Promise<void> | null = null;
 
+/** Return true when the handler advanced to the next chapter and will resume playback. */
+type ChapterPlaybackFinishedHandler = () => boolean | Promise<boolean>;
+let chapterPlaybackFinishedHandler: ChapterPlaybackFinishedHandler | null =
+	null;
+
+export function setChapterPlaybackFinishedHandler(
+	handler: ChapterPlaybackFinishedHandler | null,
+): void {
+	chapterPlaybackFinishedHandler = handler;
+}
+
 type KokoroFromPretrainedDtype = NonNullable<
 	Parameters<typeof KokoroTTS.from_pretrained>[1]
 >["dtype"];
@@ -358,6 +369,14 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 
 	const snap = useTtsStore.getState();
 	if (!signal.aborted && idx >= snap.chunks.length) {
+		if (chapterPlaybackFinishedHandler) {
+			try {
+				const advanced = await chapterPlaybackFinishedHandler();
+				if (advanced) return;
+			} catch {
+				// Fall through to normal end-of-chapter idle state.
+			}
+		}
 		useTtsStore.setState({
 			playback: "idle",
 			currentChunkIndex: 0,
