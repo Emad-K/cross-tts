@@ -30,28 +30,14 @@ export function ReaderHeader({
 				className,
 			)}
 		>
-			<div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-3.5">
+			<div className="mx-auto flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-3.5">
 				<div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-					<span className="shrink-0 text-lg font-semibold tracking-tight text-foreground">
-						reader
-					</span>
-					{fileName ? (
-						<Badge
-							variant="secondary"
-							className="w-fit max-w-full truncate rounded-md border border-border bg-muted px-2.5 py-0.5 font-normal text-foreground"
-							title={fileName}
-						>
-							{fileName}
-						</Badge>
-					) : null}
-				</div>
-				<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
 					{showChapterToggle ? (
 						<Button
 							type="button"
 							variant="outline"
 							size="icon"
-							className="border-border bg-transparent text-foreground hover:bg-accent"
+							className="shrink-0 border-border bg-transparent text-foreground hover:bg-accent"
 							onClick={onToggleChapterSidebar}
 							aria-label={
 								chapterSidebarOpen ? "Hide chapters" : "Show chapters"
@@ -66,6 +52,17 @@ export function ReaderHeader({
 							)}
 						</Button>
 					) : null}
+					{fileName ? (
+						<Badge
+							variant="secondary"
+							className="w-fit max-w-full truncate rounded-md border border-border bg-muted px-2.5 py-0.5 font-normal text-foreground"
+							title={fileName}
+						>
+							{fileName}
+						</Badge>
+					) : null}
+				</div>
+				<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
 					<Button
 						type="button"
 						variant="outline"
