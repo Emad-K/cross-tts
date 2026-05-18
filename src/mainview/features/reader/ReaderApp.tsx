@@ -12,6 +12,7 @@ import {
 	pickDocument,
 } from "@/lib/electrobunRpc";
 import { ReaderShell } from "./ReaderShell";
+import { TtsRulesSettingsDialog } from "./ttsRules/TtsRulesSettingsDialog";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
 	loadPersistedReaderState,
@@ -90,6 +91,7 @@ export function ReaderApp() {
 	const prevEpubChapterIdRef = useRef<string | null>(null);
 	const continuePlaybackAfterChapterRef = useRef(false);
 	const [initialChapterId, setInitialChapterId] = useState<string | null>(null);
+	const [settingsOpen, setSettingsOpen] = useState(false);
 
 	function isPlaybackActive(
 		playback: ReturnType<typeof useTtsStore.getState>["playback"],
@@ -329,15 +331,17 @@ export function ReaderApp() {
 				initialChapterId={initialChapterId}
 				onActiveChapterChange={setActiveChapterId}
 				onOpenFile={openFilePicker}
-				onOpenSettings={() => {
-					/* settings surface later */
-				}}
+				onOpenSettings={() => setSettingsOpen(true)}
 				onLoadSample={() => {
 					pendingChunkIndexRef.current = null;
 					setInitialChapterId(null);
 					setActiveChapterId(null);
 					setDocument(SAMPLE_TXT_DOCUMENT);
 				}}
+			/>
+			<TtsRulesSettingsDialog
+				open={settingsOpen}
+				onOpenChange={setSettingsOpen}
 			/>
 		</div>
 	);

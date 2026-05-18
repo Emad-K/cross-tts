@@ -1,3 +1,6 @@
+import type { TtsTextRulesState } from "./ttsTextRules";
+import { defaultTtsTextRulesState } from "./ttsTextRules";
+
 /** Persisted UI session (v1). Kept in shared so Bun + webview stay aligned. */
 export const APP_SESSION_VERSION = 1;
 
@@ -17,6 +20,8 @@ export type WebPersistedSlice = {
 	/** Active EPUB chapter manifest id; null for .txt or unknown. */
 	activeChapterId: string | null;
 	currentChunkIndex: number;
+	/** Regex and pronunciation transforms applied at TTS synthesis time. */
+	ttsTextRules: TtsTextRulesState;
 };
 
 export type AppSessionFileV1 = {
@@ -32,4 +37,5 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	documentPath: null,
 	activeChapterId: null,
 	currentChunkIndex: 0,
+	ttsTextRules: defaultTtsTextRulesState(),
 });

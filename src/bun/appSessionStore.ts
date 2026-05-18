@@ -8,6 +8,7 @@ import {
 	type WebPersistedSlice,
 	defaultWebPersistedSlice,
 } from "../shared/appSession";
+import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 
 const SESSION_NAME = "app-session.json";
 
@@ -52,6 +53,9 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	if (typeof o.currentChunkIndex === "number" && o.currentChunkIndex >= 0) {
 		d.currentChunkIndex = Math.floor(o.currentChunkIndex);
 	}
+	if (o.ttsTextRules !== undefined) {
+		d.ttsTextRules = coerceTtsTextRulesState(o.ttsTextRules);
+	}
 	return d;
 }
 
@@ -70,6 +74,7 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 				? web.activeChapterId
 				: null,
 		currentChunkIndex: web.currentChunkIndex,
+		ttsTextRules: web.ttsTextRules,
 	};
 }
 
