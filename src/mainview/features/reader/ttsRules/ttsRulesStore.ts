@@ -7,6 +7,11 @@ import {
 	defaultTtsTextRulesState,
 	ttsTextRulesSignature,
 } from "@shared/ttsTextRules";
+import {
+	type ImportUserRulesMode,
+	type TtsRulesExportFile,
+	applyImportedUserRules,
+} from "@shared/ttsRulesExchange";
 
 type TtsRulesStore = TtsTextRulesState & {
 	signature: string;
@@ -23,6 +28,10 @@ type TtsRulesStore = TtsTextRulesState & {
 		rule: Omit<PronunciationRule, "kind">,
 	) => void;
 	removePronunciationRule: (id: string) => void;
+	importUserRules: (
+		file: TtsRulesExportFile,
+		mode: ImportUserRulesMode,
+	) => void;
 };
 
 function withSignature(state: TtsTextRulesState): TtsTextRulesState & {
@@ -101,6 +110,14 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 						(r) => r.id !== id,
 					),
 				}),
+			),
+		importUserRules: (file, mode) =>
+			set((s) =>
+				withSignature(
+					applyImportedUserRules(s, file, mode, (prefix) =>
+						`${prefix}-${crypto.randomUUID()}`,
+					),
+				),
 			),
 	};
 });

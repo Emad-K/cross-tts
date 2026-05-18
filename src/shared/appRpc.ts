@@ -43,6 +43,10 @@ export type AppRpcSchema = {
 				params: { filePath: string; chapterId: string };
 				response: EpubChapterContentResult | null;
 			};
+			exportTtsRulesToFile: {
+				params: { json: string; suggestedFileName: string };
+				response: { cancelled: boolean; filePath: string | null };
+			};
 			/** @deprecated Use pickDocument */
 			pickTextDocument: {
 				params: void;
