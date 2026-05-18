@@ -16,6 +16,7 @@ import {
 	pickDocument,
 	readDocumentAtPath,
 } from "./documentIo";
+import { exportTtsRulesToFile } from "./ttsRulesIo";
 import { readTextDocumentAtPath } from "./textDocumentIo";
 import {
 	startKokoroHubServer,
@@ -68,6 +69,8 @@ const appRpc = BrowserView.defineRPC<AppRpcSchema>({
 			readDocumentAtPath: ({ filePath }) => readDocumentAtPath(filePath),
 			getEpubChapterContent: ({ filePath, chapterId }) =>
 				getEpubChapterContent(filePath, chapterId),
+			exportTtsRulesToFile: ({ json, suggestedFileName }) =>
+				exportTtsRulesToFile(json, suggestedFileName),
 			pickTextDocument: async () => {
 				const doc = await pickDocument();
 				return doc?.format === "txt" ? doc : null;

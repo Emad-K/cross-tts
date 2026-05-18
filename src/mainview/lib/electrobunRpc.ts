@@ -96,6 +96,15 @@ export async function getEpubChapterContent(
 	return r.request.getEpubChapterContent({ filePath, chapterId });
 }
 
+export async function exportTtsRulesToFile(
+	json: string,
+	suggestedFileName: string,
+): Promise<{ cancelled: boolean; filePath: string | null }> {
+	const r = ensureElectroview();
+	if (!r) return { cancelled: true, filePath: null };
+	return r.request.exportTtsRulesToFile({ json, suggestedFileName });
+}
+
 /** @deprecated Use pickDocument */
 export async function pickTextDocument(): Promise<Extract<
 	ReadDocumentResult,

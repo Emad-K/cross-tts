@@ -1,5 +1,6 @@
-import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Download, Plus, Trash2, Upload } from "lucide-react";
+import { useRef, useState } from "react";
+import { parseTtsRulesExport } from "@shared/ttsRulesExchange";
 import { isValidRegexPattern } from "@shared/ttsTextRules";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useTtsRulesStore } from "./ttsRulesStore";
+import { exportTtsRulesForUser } from "./ttsRulesExchangeUi";
 
 export type TtsRulesSettingsDialogProps = {
 	open: boolean;
@@ -42,6 +44,11 @@ export function TtsRulesSettingsDialog({
 	const removePronunciationRule = useTtsRulesStore(
 		(s) => s.removePronunciationRule,
 	);
+	const importUserRules = useTtsRulesStore((s) => s.importUserRules);
+
+	const importInputRef = useRef<HTMLInputElement>(null);
+	const [importError, setImportError] = useState<string | null>(null);
+	const [importNotice, setImportNotice] = useState<string | null>(null);
 
 	const [regexLabel, setRegexLabel] = useState("");
 	const [regexPattern, setRegexPattern] = useState("");
@@ -96,6 +103,62 @@ export function TtsRulesSettingsDialog({
 		setPronError(null);
 	};
 
+	const handleExport = async () => {
+		setImportError(null);
+		setImportNotice(null);
+		const result = await exportTtsRulesForUser({
+			regexRules,
+			pronunciationRules,
+		});
+		if (!result.ok) {
+			if ("cancelled" in result && result.cancelled) return;
+			if ("error" in result) setImportError(result.error);
+			return;
+		}
+		if (result.via === "native") {
+			setImportNotice(`Saved to ${result.filePath}`);
+			return;
+		}
+		setImportNotice(
+			"Download started in your browser (check Downloads if you do not see a prompt).",
+		);
+	};
+
+	const handleImportClick = () => {
+		setImportError(null);
+		setImportNotice(null);
+		importInputRef.current?.click();
+	};
+
+	const handleImportFile = async (file: File | undefined) => {
+		if (!file) return;
+		setImportError(null);
+		setImportNotice(null);
+		try {
+			const text = await file.text();
+			const result = parseTtsRulesExport(text);
+			if (!result.ok) {
+				setImportError(result.error);
+				return;
+			}
+			const total =
+				result.data.regexRules.length +
+				result.data.pronunciationRules.length;
+			if (total === 0) {
+				setImportError("File contains no custom rules.");
+				return;
+			}
+			const replace = window.confirm(
+				`Import ${total} custom rule(s)?\n\nThis replaces your current custom rules. Built-in defaults are kept.`,
+			);
+			if (!replace) return;
+			importUserRules(result.data, "replace");
+			setImportNotice(`Imported ${total} custom rule(s).`);
+		} catch {
+			setImportError("Could not read the file.");
+		}
+	};
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="dark flex h-[min(90vh,40rem)] max-h-[min(90vh,40rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg [&>button]:z-10">
@@ -106,6 +169,47 @@ export function TtsRulesSettingsDialog({
 						original text. Pronunciation overrides inject IPA phonemes
 						(English voices only; not markdown).
 					</DialogDescription>
+					<div className="flex flex-wrap items-center gap-2 pt-2">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-1.5"
+							onClick={handleExport}
+						>
+							<Download className="size-4" aria-hidden />
+							Export…
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-1.5"
+							onClick={handleImportClick}
+						>
+							<Upload className="size-4" aria-hidden />
+							Import JSON
+						</Button>
+						<input
+							ref={importInputRef}
+							type="file"
+							accept=".json,application/json"
+							className="sr-only"
+							aria-hidden
+							tabIndex={-1}
+							onChange={(e) => {
+								const file = e.target.files?.[0];
+								e.target.value = "";
+								void handleImportFile(file);
+							}}
+						/>
+					</div>
+					{importError ? (
+						<p className="text-xs text-destructive">{importError}</p>
+					) : null}
+					{importNotice ? (
+						<p className="text-xs text-muted-foreground">{importNotice}</p>
+					) : null}
 				</DialogHeader>
 
 				<ScrollArea className="min-h-0 w-full flex-1">
