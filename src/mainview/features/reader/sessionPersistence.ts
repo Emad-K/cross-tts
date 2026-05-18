@@ -1,6 +1,7 @@
 import type { WebPersistedSlice } from "@shared/appSession";
 import {
 	loadAppSession as loadAppSessionRpc,
+	readTextDocumentAtPath,
 	saveAppSession as saveAppSessionRpc,
 } from "@/lib/electrobunRpc";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
@@ -28,9 +29,8 @@ function buildWebSlice(doc: LoadedDocument | null): WebPersistedSlice {
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
-		sourceText: doc?.text ?? t.sourceText,
+		documentPath: doc?.filePath ?? null,
 		currentChunkIndex: t.currentChunkIndex,
-		fileName: doc?.fileName ?? null,
 	};
 }
 
@@ -51,22 +51,31 @@ export async function loadPersistedReaderState(): Promise<{
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
 
-	const text = typeof web.sourceText === "string" ? web.sourceText : "";
-	if (!text.trim()) {
+	const documentPath =
+		typeof web.documentPath === "string" && web.documentPath.length > 0
+			? web.documentPath
+			: null;
+	if (!documentPath) {
 		return { document: null, pendingChunkIndex: null };
 	}
 
-	const fileName =
-		typeof web.fileName === "string" && web.fileName.length > 0
-			? web.fileName
-			: "Restored.txt";
+	const loaded = await readTextDocumentAtPath(documentPath);
+	if (!loaded) {
+		return { document: null, pendingChunkIndex: null };
+	}
+
 	const chunk =
 		typeof web.currentChunkIndex === "number" && web.currentChunkIndex >= 0
 			? Math.floor(web.currentChunkIndex)
 			: 0;
 
 	return {
-		document: { format: "txt", fileName, text },
+		document: {
+			format: "txt",
+			fileName: loaded.fileName,
+			filePath: loaded.filePath,
+			text: loaded.text,
+		},
 		pendingChunkIndex: chunk,
 	};
 }

@@ -1,5 +1,5 @@
 import { Electroview } from "electrobun/view";
-import type { AppRpcSchema } from "@shared/appRpc";
+import type { AppRpcSchema, ReadTextDocumentResult } from "@shared/appRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 
 /**
@@ -24,6 +24,8 @@ function ensureElectroview(): ReturnType<
 	if (!isElectrobunWebview()) return null;
 	if (!rpc) {
 		rpc = Electroview.defineRPC<AppRpcSchema>({
+			// Default 1s is too short for native file dialogs while the user browses.
+			maxRequestTime: 120_000,
 			handlers: { requests: {}, messages: {} },
 		});
 	}
@@ -67,4 +69,18 @@ export async function saveAppSession(web: WebPersistedSlice): Promise<void> {
 	const r = ensureElectroview();
 	if (!r) return;
 	await r.request.saveAppSession(web);
+}
+
+export async function pickTextDocument(): Promise<ReadTextDocumentResult | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.pickTextDocument();
+}
+
+export async function readTextDocumentAtPath(
+	filePath: string,
+): Promise<ReadTextDocumentResult | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.readTextDocumentAtPath({ filePath });
 }

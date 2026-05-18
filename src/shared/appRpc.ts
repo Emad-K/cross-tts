@@ -1,5 +1,11 @@
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 
+export type ReadTextDocumentResult = {
+	filePath: string;
+	fileName: string;
+	text: string;
+};
+
 /**
  * Fire-and-forget messages the main webview sends for native window chrome.
  * Declared on both `bun` and `webview` so Electrobun's typed RPC matches wire ids.
@@ -28,6 +34,14 @@ export type AppRpcSchema = {
 			saveAppSession: {
 				params: WebPersistedSlice;
 				response: void;
+			};
+			pickTextDocument: {
+				params: void;
+				response: ReadTextDocumentResult | null;
+			};
+			readTextDocumentAtPath: {
+				params: { filePath: string };
+				response: ReadTextDocumentResult | null;
 			};
 		};
 		messages: AppWindowChromeMessages;

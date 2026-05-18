@@ -5,6 +5,10 @@ import {
 	useState,
 	type ChangeEvent,
 } from "react";
+import {
+	isElectrobunWebview,
+	pickTextDocument,
+} from "@/lib/electrobunRpc";
 import { ReaderShell } from "./ReaderShell";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
@@ -15,15 +19,32 @@ import {
 import type { LoadedDocument } from "./types";
 import { stopPlaybackUi, useTtsStore } from "./tts";
 
+function loadedFromPick(
+	picked: NonNullable<Awaited<ReturnType<typeof pickTextDocument>>>,
+): LoadedDocument {
+	return {
+		format: "txt",
+		fileName: picked.fileName,
+		filePath: picked.filePath,
+		text: picked.text,
+	};
+}
+
 function readTxtFile(file: File): Promise<LoadedDocument> {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader();
 		reader.onload = () => {
 			const text =
 				typeof reader.result === "string" ? reader.result : "";
+			const path =
+				"path" in file &&
+				typeof (file as File & { path?: string }).path === "string"
+					? (file as File & { path: string }).path
+					: undefined;
 			resolve({
 				format: "txt",
 				fileName: file.name,
+				...(path ? { filePath: path } : {}),
 				text,
 			});
 		};
@@ -91,25 +112,32 @@ export function ReaderApp() {
 	}, [document, sessionReady]);
 
 	const openFilePicker = useCallback(() => {
-		inputRef.current?.click();
+		if (!isElectrobunWebview()) {
+			inputRef.current?.click();
+			return;
+		}
+		void (async () => {
+			try {
+				const picked = await pickTextDocument();
+				if (picked) setDocument(loadedFromPick(picked));
+			} catch {
+				// Fall back to the web file input if the native dialog RPC fails.
+				inputRef.current?.click();
+			}
+		})();
 	}, []);
 
-	const onFileChange = useCallback(
-		async (e: ChangeEvent<HTMLInputElement>) => {
-			const file = e.target.files?.[0];
-			e.target.value = "";
-			if (!file) return;
-			if (!file.name.toLowerCase().endsWith(".txt")) {
-				return;
-			}
-			try {
-				setDocument(await readTxtFile(file));
-			} catch {
-				// Engine / toast layer can surface errors later.
-			}
-		},
-		[],
-	);
+	const onFileChange = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		e.target.value = "";
+		if (!file) return;
+		if (!file.name.toLowerCase().endsWith(".txt")) return;
+		try {
+			setDocument(await readTxtFile(file));
+		} catch {
+			// Engine / toast layer can surface errors later.
+		}
+	}, []);
 
 	return (
 		<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">

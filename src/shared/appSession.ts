@@ -12,9 +12,9 @@ export type WebPersistedSlice = {
 	voice: string;
 	volumePct: number;
 	speed: number;
-	sourceText: string;
+	/** Absolute path to the open .txt file; content is read on demand, not stored in session. */
+	documentPath: string | null;
 	currentChunkIndex: number;
-	fileName: string | null;
 };
 
 export type AppSessionFileV1 = {
@@ -27,7 +27,6 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	voice: "af_heart",
 	volumePct: 80,
 	speed: 1,
-	sourceText: "",
+	documentPath: null,
 	currentChunkIndex: 0,
-	fileName: null,
 });

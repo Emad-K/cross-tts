@@ -12,6 +12,10 @@ import {
 	saveAppSessionFile,
 } from "./appSessionStore";
 import {
+	pickAndReadTextDocument,
+	readTextDocumentAtPath,
+} from "./textDocumentIo";
+import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
@@ -58,6 +62,9 @@ const appRpc = BrowserView.defineRPC<AppRpcSchema>({
 					web,
 				});
 			},
+			pickTextDocument: () => pickAndReadTextDocument(),
+			readTextDocumentAtPath: ({ filePath }) =>
+				readTextDocumentAtPath(filePath),
 		},
 		messages: {
 			closeWindow: () => {

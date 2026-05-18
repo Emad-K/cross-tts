@@ -39,13 +39,29 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	if (typeof o.speed === "number" && o.speed >= 0.5 && o.speed <= 2) {
 		d.speed = o.speed;
 	}
-	if (typeof o.sourceText === "string") d.sourceText = o.sourceText;
+	if (typeof o.documentPath === "string" && o.documentPath.length > 0) {
+		d.documentPath = o.documentPath;
+	} else if (o.documentPath === null) {
+		d.documentPath = null;
+	}
 	if (typeof o.currentChunkIndex === "number" && o.currentChunkIndex >= 0) {
 		d.currentChunkIndex = Math.floor(o.currentChunkIndex);
 	}
-	if (typeof o.fileName === "string") d.fileName = o.fileName;
-	else if (o.fileName === null) d.fileName = null;
 	return d;
+}
+
+/** Session file stores paths and prefs only — never document body text. */
+function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
+	return {
+		voice: web.voice,
+		volumePct: web.volumePct,
+		speed: web.speed,
+		documentPath:
+			typeof web.documentPath === "string" && web.documentPath.length > 0
+				? web.documentPath
+				: null,
+		currentChunkIndex: web.currentChunkIndex,
+	};
 }
 
 export function loadAppSessionFile(): AppSessionFileV1 | null {
@@ -78,7 +94,11 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 export function saveAppSessionFile(session: AppSessionFileV1): void {
 	const p = appSessionPath();
 	mkdirSync(Utils.paths.userData, { recursive: true });
-	Bun.write(p, JSON.stringify(session, null, "\t"));
+	const safe: AppSessionFileV1 = {
+		...session,
+		web: webForDisk(session.web),
+	};
+	Bun.write(p, JSON.stringify(safe, null, "\t"));
 }
 
 export function pickInitialWindowFrame(
