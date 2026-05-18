@@ -91,7 +91,7 @@ export function ChapterSidebar({
 								No chapters in this document yet.
 							</p>
 							<p className="mt-1 text-xs text-muted-foreground/80">
-								EPUB books will show their table of contents here.
+								Open an EPUB or a multi-section text file to see chapters.
 							</p>
 						</div>
 					)}

@@ -1,14 +1,11 @@
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
-
-export type ReadTextDocumentResult = {
-	filePath: string;
-	fileName: string;
-	text: string;
-};
+import type {
+	EpubChapterContentResult,
+	ReadDocumentResult,
+} from "./documentRpc";
 
 /**
  * Fire-and-forget messages the main webview sends for native window chrome.
- * Declared on both `bun` and `webview` so Electrobun's typed RPC matches wire ids.
  */
 export type AppWindowChromeMessages = {
 	closeWindow: void;
@@ -17,8 +14,7 @@ export type AppWindowChromeMessages = {
 };
 
 /**
- * Bun ↔ main webview RPC. Bun handles `getKokoroHubBaseUrl` so the renderer can
- * load Hugging Face assets from a disk mirror under the user data directory.
+ * Bun ↔ main webview RPC.
  */
 export type AppRpcSchema = {
 	bun: {
@@ -35,13 +31,27 @@ export type AppRpcSchema = {
 				params: WebPersistedSlice;
 				response: void;
 			};
+			pickDocument: {
+				params: void;
+				response: ReadDocumentResult | null;
+			};
+			readDocumentAtPath: {
+				params: { filePath: string };
+				response: ReadDocumentResult | null;
+			};
+			getEpubChapterContent: {
+				params: { filePath: string; chapterId: string };
+				response: EpubChapterContentResult | null;
+			};
+			/** @deprecated Use pickDocument */
 			pickTextDocument: {
 				params: void;
-				response: ReadTextDocumentResult | null;
+				response: Extract<ReadDocumentResult, { format: "txt" }> | null;
 			};
+			/** @deprecated Use readDocumentAtPath */
 			readTextDocumentAtPath: {
 				params: { filePath: string };
-				response: ReadTextDocumentResult | null;
+				response: Extract<ReadDocumentResult, { format: "txt" }> | null;
 			};
 		};
 		messages: AppWindowChromeMessages;
@@ -51,3 +61,9 @@ export type AppRpcSchema = {
 		messages: AppWindowChromeMessages;
 	};
 };
+
+/** @deprecated Import from documentRpc */
+export type ReadTextDocumentResult = Extract<
+	ReadDocumentResult,
+	{ format: "txt" }
+>;

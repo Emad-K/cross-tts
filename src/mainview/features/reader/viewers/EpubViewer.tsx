@@ -1,0 +1,123 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { getEpubChapterContent } from "@/lib/electrobunRpc";
+import type { TtsChunk } from "@/features/reader/tts/chunkText";
+import { cn } from "@/lib/utils";
+import {
+	plainTextFromHtmlDom,
+	renderEpubHtmlWithReadAlong,
+} from "./epubHtmlRender";
+import { scrollElementFullyVisible } from "./scrollActiveChunk";
+
+export type EpubViewerProps = {
+	filePath: string;
+	chapterId: string;
+	chunks: TtsChunk[];
+	activeChunkIndex: number | null;
+	highlightRange: { start: number; end: number } | null;
+	onChunkClick?: (index: number) => void;
+};
+
+export function EpubViewer({
+	filePath,
+	chapterId,
+	chunks,
+	activeChunkIndex,
+	highlightRange,
+	onChunkClick,
+}: EpubViewerProps) {
+	const [html, setHtml] = useState<string | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const activeChunkRef = useRef<HTMLSpanElement | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		setLoading(true);
+		setError(null);
+		setHtml(null);
+		void (async () => {
+			try {
+				const content = await getEpubChapterContent(filePath, chapterId);
+				if (cancelled) return;
+				if (!content?.html) {
+					setError("Could not load this chapter.");
+					return;
+				}
+				setHtml(content.html);
+			} catch {
+				if (!cancelled) setError("Could not load this chapter.");
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [filePath, chapterId]);
+
+	useLayoutEffect(() => {
+		if (!chunks.length || activeChunkIndex == null) return;
+		const el = activeChunkRef.current;
+		if (!el) return;
+		scrollElementFullyVisible(el);
+	}, [activeChunkIndex, chunks, html]);
+
+	const body = useMemo(() => {
+		if (!html) return null;
+		return renderEpubHtmlWithReadAlong(html, {
+			chunks,
+			activeChunkIndex,
+			highlightRange,
+			onChunkClick,
+			activeChunkRef: (el) => {
+				activeChunkRef.current = el;
+			},
+		});
+	}, [html, chunks, activeChunkIndex, highlightRange, onChunkClick]);
+
+	useEffect(() => {
+		if (!html || !chunks.length) return;
+		const domPlain = plainTextFromHtmlDom(html);
+		const chunkEnd = chunks[chunks.length - 1]?.end ?? 0;
+		if (domPlain.length !== chunkEnd) {
+			console.warn(
+				"EPUB highlight offset drift: extracted length",
+				domPlain.length,
+				"TTS length",
+				chunkEnd,
+			);
+		}
+	}, [html, chunks]);
+
+	if (loading) {
+		return (
+			<div className="flex min-h-[12rem] items-center justify-center px-8 py-16">
+				<p className="text-sm text-muted-foreground">Loading chapter…</p>
+			</div>
+		);
+	}
+
+	if (error || !html || !body) {
+		return (
+			<div className="flex min-h-[12rem] items-center justify-center px-8 py-16">
+				<p className="text-sm text-destructive">{error ?? "Chapter unavailable."}</p>
+			</div>
+		);
+	}
+
+	return (
+		<div
+			className={cn(
+				"epub-chapter mx-auto w-full min-w-0 max-w-prose px-4 py-8 sm:px-8 sm:py-10 md:py-14",
+				"font-serif text-[1.05rem] leading-[1.75] text-foreground/95 sm:text-lg sm:leading-8",
+				"[&_img]:max-w-full [&_img]:h-auto",
+				"[&_a]:text-amber-400 [&_a]:underline-offset-2 hover:[&_a]:underline",
+				"[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold",
+				"[&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold",
+				"[&_p]:mb-4",
+			)}
+		>
+			{body}
+		</div>
+	);
+}

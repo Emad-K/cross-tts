@@ -1,5 +1,9 @@
 import { Electroview } from "electrobun/view";
-import type { AppRpcSchema, ReadTextDocumentResult } from "@shared/appRpc";
+import type { AppRpcSchema } from "@shared/appRpc";
+import type {
+	EpubChapterContentResult,
+	ReadDocumentResult,
+} from "@shared/documentRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 
 /**
@@ -24,7 +28,6 @@ function ensureElectroview(): ReturnType<
 	if (!isElectrobunWebview()) return null;
 	if (!rpc) {
 		rpc = Electroview.defineRPC<AppRpcSchema>({
-			// Default 1s is too short for native file dialogs while the user browses.
 			maxRequestTime: 120_000,
 			handlers: { requests: {}, messages: {} },
 		});
@@ -36,7 +39,6 @@ function ensureElectroview(): ReturnType<
 	return rpc;
 }
 
-/** Start Electroview + RPC when embedded in Electrobun (needed for draggable title bar). */
 export function bootElectrobunMainView(): void {
 	ensureElectroview();
 }
@@ -71,15 +73,43 @@ export async function saveAppSession(web: WebPersistedSlice): Promise<void> {
 	await r.request.saveAppSession(web);
 }
 
-export async function pickTextDocument(): Promise<ReadTextDocumentResult | null> {
+export async function pickDocument(): Promise<ReadDocumentResult | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.pickDocument();
+}
+
+export async function readDocumentAtPath(
+	filePath: string,
+): Promise<ReadDocumentResult | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.readDocumentAtPath({ filePath });
+}
+
+export async function getEpubChapterContent(
+	filePath: string,
+	chapterId: string,
+): Promise<EpubChapterContentResult | null> {
+	const r = ensureElectroview();
+	if (!r) return null;
+	return r.request.getEpubChapterContent({ filePath, chapterId });
+}
+
+/** @deprecated Use pickDocument */
+export async function pickTextDocument(): Promise<Extract<
+	ReadDocumentResult,
+	{ format: "txt" }
+> | null> {
 	const r = ensureElectroview();
 	if (!r) return null;
 	return r.request.pickTextDocument();
 }
 
+/** @deprecated Use readDocumentAtPath */
 export async function readTextDocumentAtPath(
 	filePath: string,
-): Promise<ReadTextDocumentResult | null> {
+): Promise<Extract<ReadDocumentResult, { format: "txt" }> | null> {
 	const r = ensureElectroview();
 	if (!r) return null;
 	return r.request.readTextDocumentAtPath({ filePath });
