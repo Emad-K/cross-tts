@@ -128,6 +128,21 @@ function splitLongSentence(
 	return out;
 }
 
+/** Paragraph / block boundaries from {@link htmlToPlainText} (`\n\n` between blocks). */
+function blockSpans(full: string): { start: number; end: number }[] {
+	const spans: { start: number; end: number }[] = [];
+	const re = /\n\n+/g;
+	let last = 0;
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(full)) !== null) {
+		if (m.index > last) spans.push({ start: last, end: m.index });
+		last = m.index + m[0].length;
+	}
+	if (last < full.length) spans.push({ start: last, end: full.length });
+	if (spans.length === 0 && full.trim()) spans.push({ start: 0, end: full.length });
+	return spans;
+}
+
 /** Avoid tiny Kokoro utterances by merging with the following chunk when still under the cap. */
 function mergeUndersizedChunks(
 	full: string,
@@ -175,11 +190,23 @@ export function buildTtsChunks(raw: string): TtsChunk[] {
 	const full = normalizedReaderText(raw);
 	if (!full.trim()) return [];
 
-	const spans = collectSentenceSpans(full);
-	const pieces: Omit<TtsChunk, "index">[] = [];
-	for (const { start, end } of spans) {
-		pieces.push(...splitLongSentence(full, start, end));
+	const merged: Omit<TtsChunk, "index">[] = [];
+	for (const { start: blockStart, end: blockEnd } of blockSpans(full)) {
+		const block = full.slice(blockStart, blockEnd);
+		if (!block.trim()) continue;
+
+		const spans = collectSentenceSpans(block);
+		const pieces: Omit<TtsChunk, "index">[] = [];
+		for (const { start, end } of spans) {
+			pieces.push(
+				...splitLongSentence(
+					full,
+					blockStart + start,
+					blockStart + end,
+				),
+			);
+		}
+		merged.push(...mergeUndersizedChunks(full, pieces));
 	}
-	const merged = mergeUndersizedChunks(full, pieces);
 	return merged.map((c, i) => ({ ...c, index: i }));
 }
