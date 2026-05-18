@@ -6,6 +6,7 @@ import {
 	saveAppSession as saveAppSessionRpc,
 } from "@/lib/electrobunRpc";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";
 import type { LoadedDocument } from "./types";
 
@@ -28,6 +29,7 @@ export function buildWebSlice(
 	activeChapterId: string | null,
 ): WebPersistedSlice {
 	const t = useTtsStore.getState();
+	const rules = useTtsRulesStore.getState();
 	return {
 		voice: t.voice,
 		volumePct: t.volumePct,
@@ -36,6 +38,10 @@ export function buildWebSlice(
 		activeChapterId:
 			doc?.format === "epub" ? activeChapterId : null,
 		currentChunkIndex: t.currentChunkIndex,
+		ttsTextRules: {
+			regexRules: rules.regexRules,
+			pronunciationRules: rules.pronunciationRules,
+		},
 	};
 }
 
@@ -71,6 +77,9 @@ export async function loadPersistedReaderState(): Promise<{
 	useTtsStore.getState().setVoice(voice);
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
+	if (web.ttsTextRules) {
+		useTtsRulesStore.getState().hydrate(web.ttsTextRules);
+	}
 
 	const documentPath =
 		typeof web.documentPath === "string" && web.documentPath.length > 0
@@ -133,6 +142,7 @@ export function subscribeDebouncedSessionSave(
 	};
 
 	const unsubStore = useTtsStore.subscribe(schedule);
+	const unsubRules = useTtsRulesStore.subscribe(schedule);
 	document.addEventListener("visibilitychange", onVisibility);
 	scheduleSave = schedule;
 	schedule();
@@ -140,6 +150,7 @@ export function subscribeDebouncedSessionSave(
 	return () => {
 		document.removeEventListener("visibilitychange", onVisibility);
 		unsubStore();
+		unsubRules();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
 		void saveAppSessionRpc(

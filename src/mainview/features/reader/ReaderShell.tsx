@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LoadedDocument } from "./types";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
+import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { ReaderEmptyState } from "./ReaderEmptyState";
@@ -46,6 +47,7 @@ export function ReaderShell({
 	return (
 		<TooltipProvider delayDuration={300} skipDelayDuration={0}>
 			<TtsSettingSync />
+			<TtsRulesSettingSync />
 			<SleepTimerEffect />
 			<div
 				className={cn(

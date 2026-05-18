@@ -4,6 +4,8 @@ import { getKokoroHubBaseUrl } from "@/lib/electrobunRpc";
 import { setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
+import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
+import { phonemesForTtsSynthesis } from "./ttsChunkText";
 import { useTtsStore } from "./ttsStore";
 
 type TtsAudio = Awaited<ReturnType<KokoroTTS["generate"]>>;
@@ -307,7 +309,14 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		} else {
 			let raw: TtsAudio;
 			try {
-				raw = await tts.generate(chunk.text, {
+				const phonemes = await phonemesForTtsSynthesis(
+					chunk.text,
+					snap.voice,
+				);
+				const { input_ids } = tts.tokenizer(phonemes, {
+					truncation: true,
+				});
+				raw = await tts.generate_from_ids(input_ids, {
 					voice: snap.voice,
 					speed: snap.speed,
 				});
@@ -329,9 +338,15 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			const nextCh = chunks[nextIndex]!;
 			const voice = snap.voice;
 			const speed = snap.speed;
+			const rulesSig = useTtsRulesStore.getState().signature;
 			const nextTextSnapshot = nextCh.text;
-			void tts
-				.generate(nextCh.text, { voice, speed })
+			void phonemesForTtsSynthesis(nextTextSnapshot, voice)
+				.then((nextPhonemes) => {
+					const { input_ids } = tts.tokenizer(nextPhonemes, {
+						truncation: true,
+					});
+					return tts.generate_from_ids(input_ids, { voice, speed });
+				})
 				.then((r) => {
 					if (signal.aborted) return;
 					const st = useTtsStore.getState();
@@ -340,7 +355,8 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 						!ch ||
 						ch.text !== nextTextSnapshot ||
 						st.voice !== voice ||
-						st.speed !== speed
+						st.speed !== speed ||
+						useTtsRulesStore.getState().signature !== rulesSig
 					) {
 						return;
 					}
