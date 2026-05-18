@@ -4,6 +4,12 @@ import type { LoadedDocument } from "../types";
 export const SAMPLE_TXT_DOCUMENT: Extract<LoadedDocument, { format: "txt" }> = {
 	format: "txt",
 	fileName: "the-great-gatsby.txt",
+	chapters: [
+		{ id: "gatsby-1", title: "Chapter I", level: 0 },
+		{ id: "gatsby-1a", title: "Opening reflection", level: 1 },
+		{ id: "gatsby-2", title: "The advice", level: 0 },
+		{ id: "gatsby-3", title: "Reserved communicators", level: 0 },
+	],
 	text: `In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since.
 
 "Whenever you feel like criticizing any one," he told me, "just remember that all the people in this world haven't had the advantages that you've had."

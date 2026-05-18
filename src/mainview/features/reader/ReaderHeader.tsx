@@ -1,4 +1,4 @@
-import { FolderOpen, Settings } from "lucide-react";
+import { FolderOpen, PanelLeft, PanelLeftClose, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,9 @@ export type ReaderHeaderProps = {
 	fileName?: string | null;
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
+	showChapterToggle?: boolean;
+	chapterSidebarOpen?: boolean;
+	onToggleChapterSidebar?: () => void;
 	className?: string;
 };
 
@@ -15,6 +18,9 @@ export function ReaderHeader({
 	fileName,
 	onOpenFile,
 	onOpenSettings,
+	showChapterToggle = false,
+	chapterSidebarOpen = false,
+	onToggleChapterSidebar,
 	className,
 }: ReaderHeaderProps) {
 	return (
@@ -40,6 +46,26 @@ export function ReaderHeader({
 					) : null}
 				</div>
 				<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+					{showChapterToggle ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="icon"
+							className="border-border bg-transparent text-foreground hover:bg-accent"
+							onClick={onToggleChapterSidebar}
+							aria-label={
+								chapterSidebarOpen ? "Hide chapters" : "Show chapters"
+							}
+							aria-pressed={chapterSidebarOpen}
+							title={chapterSidebarOpen ? "Hide chapters" : "Show chapters"}
+						>
+							{chapterSidebarOpen ? (
+								<PanelLeftClose className="size-4" aria-hidden />
+							) : (
+								<PanelLeft className="size-4" aria-hidden />
+							)}
+						</Button>
+					) : null}
 					<Button
 						type="button"
 						variant="outline"
