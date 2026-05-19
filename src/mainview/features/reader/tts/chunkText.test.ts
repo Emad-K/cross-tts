@@ -25,4 +25,15 @@ describe("buildTtsChunks", () => {
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0]!.text).toBe("Hi.\nThere.");
 	});
+
+	test("does not split on abbreviations like U.S.A.", () => {
+		const text =
+			"For many years he lived peacefully in the U.S.A. in a small town. " +
+			"Then he left home and traveled abroad for many years.";
+		const chunks = buildTtsChunks(text);
+		expect(chunks.length).toBeGreaterThanOrEqual(2);
+		expect(chunks[0]!.text).toContain("U.S.A.");
+		expect(chunks[0]!.text).not.toMatch(/U\.\s*$/);
+		expect(chunks[1]!.text).toMatch(/^Then he left home/);
+	});
 });

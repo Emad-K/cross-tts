@@ -1,3 +1,9 @@
+import {
+	EPUB_BLOCK_TAGS,
+	EPUB_SKIP_TAGS,
+	stripNoTextVoidTags,
+} from "./epubHtmlPolicy";
+
 const ENTITY_MAP: Record<string, string> = {
 	amp: "&",
 	lt: "<",
@@ -6,6 +12,11 @@ const ENTITY_MAP: Record<string, string> = {
 	apos: "'",
 	nbsp: " ",
 };
+
+export { EPUB_BLOCK_TAGS, EPUB_SKIP_TAGS };
+
+const BLOCK_END_TAGS =
+	/(?:<\/)(p|div|section|article|h[1-6]|li|tr|blockquote|pre|figcaption|dd)(?:\s[^>]*)?>/gi;
 
 export function decodeHtmlEntities(raw: string): string {
 	return raw
@@ -22,9 +33,6 @@ export function decodeHtmlEntities(raw: string): string {
 		})
 		.replace(/\u00a0/g, " ");
 }
-
-const BLOCK_END_TAGS =
-	/(?:<\/)(p|div|section|article|h[1-6]|li|tr)(?:\s[^>]*)?>/gi;
 
 /** Collapse whitespace without trimming ends (used for offset mapping). */
 export function finalizePlainTextInner(raw: string): string {
@@ -51,6 +59,7 @@ export function htmlToPlainText(html: string): string {
 	let s = body;
 	s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
 	s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+	s = stripNoTextVoidTags(s);
 	s = s.replace(/<br\s*\/?>/gi, "\n");
 	s = s.replace(BLOCK_END_TAGS, "\n\n");
 	s = s.replace(/<[^>]+>/g, " ");
@@ -89,23 +98,6 @@ export function buildPreToCanonicalMap(pre: string): PreToCanonicalMap {
 
 	return { canonical, map };
 }
-
-export const EPUB_BLOCK_TAGS = new Set([
-	"p",
-	"div",
-	"section",
-	"article",
-	"h1",
-	"h2",
-	"h3",
-	"h4",
-	"h5",
-	"h6",
-	"li",
-	"tr",
-]);
-
-export const EPUB_SKIP_TAGS = new Set(["script", "style", "svg", "math"]);
 
 /** Normalize text nodes to match entity decoding in {@link htmlToPlainText}. */
 export function normalizeTextNodeContent(raw: string): string {

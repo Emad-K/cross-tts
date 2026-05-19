@@ -12,6 +12,12 @@ describe("htmlToPlainText", () => {
 			"<html><head><title>Title</title></head><body><p>Body</p></body></html>";
 		expect(htmlToPlainText(html)).toBe("Body");
 	});
+
+	test("hr and img contribute no characters to plain text", () => {
+		const html =
+			'<h1>Chapter 1</h1><hr/><img src="x.png" alt="pic"/><p>Martial arts.</p>';
+		expect(htmlToPlainText(html)).toBe("Chapter 1\n\n Martial arts.");
+	});
 });
 
 describe("buildPreToCanonicalMap", () => {
