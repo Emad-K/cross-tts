@@ -3,14 +3,6 @@ import {
 	finalizePlainText,
 	htmlToPlainText,
 } from "../../shared/htmlPlainText";
+import { sanitizeEpubHtml } from "../../shared/sanitizeEpubHtml";
 
-export { decodeHtmlEntities, finalizePlainText, htmlToPlainText };
-
-/** Remove executable content before rendering EPUB HTML in the webview. */
-export function sanitizeEpubHtml(html: string): string {
-	return html
-		.replace(/<script[\s\S]*?<\/script>/gi, "")
-		.replace(/<style[\s\S]*?<\/style>/gi, "")
-		.replace(/\s+on\w+="[^"]*"/gi, "")
-		.replace(/\s+on\w+='[^']*'/gi, "");
-}
+export { decodeHtmlEntities, finalizePlainText, htmlToPlainText, sanitizeEpubHtml };

@@ -1,4 +1,4 @@
-import { sentences as sbdSentences } from "sbd";
+import { getWinkNlp, tokenCharBounds } from "./winkNlp";
 
 export type TtsChunk = {
 	index: number;
@@ -19,49 +19,36 @@ export function normalizedReaderText(raw: string): string {
 }
 
 /**
- * Collect sentence spans from `full`, running `sbd` line-by-line so that
- * newlines between paragraphs never confuse the sentence detector.
- *
- * `sbd` with `preserve_whitespace: true` can bundle multiple sentences into
- * one when newlines appear mid-paragraph (e.g. "Decree.\nFirst, to…").
- * Processing each line independently avoids that while keeping character
- * offsets accurate for highlighting sync.
+ * Collect sentence spans from `full`, running wink-nlp line-by-line so paragraph
+ * newlines are preserved and offsets stay aligned with the source text.
  */
 function collectSentenceSpans(full: string): { start: number; end: number }[] {
+	const nlp = getWinkNlp();
+	const its = nlp.its;
 	const spans: { start: number; end: number }[] = [];
 	const lines = full.split("\n");
 	let pos = 0;
 
 	for (const line of lines) {
 		const lineStart = pos;
-		// Advance past this line and the \n that followed it.
-		// The last line has no trailing \n but that's fine — pos just overshoots
-		// by 1 beyond full.length, which is never used as an index.
 		pos += line.length + 1;
 
 		if (!line.trim()) continue;
 
-		const parts = sbdSentences(line, { preserve_whitespace: true });
+		const doc = nlp.readDoc(line);
+		const bounds = tokenCharBounds(doc);
 
-		if (parts.length === 0) {
+		if (doc.sentences().out().length === 0) {
 			spans.push({ start: lineStart, end: lineStart + line.length });
 			continue;
 		}
 
-		// Guard: if sbd mangled the text (shouldn't happen but be safe), fall
-		// back to treating the whole line as one span so offsets stay valid.
-		if (parts.join("") !== line) {
-			spans.push({ start: lineStart, end: lineStart + line.length });
-			continue;
-		}
-
-		let linePos = 0;
-		for (const seg of parts) {
-			const start = lineStart + linePos;
-			const end = start + seg.length;
+		doc.sentences().each((s: { out: (f?: unknown) => unknown }) => {
+			const [t0, t1] = s.out(its.span) as [number, number];
+			const start = lineStart + (bounds.starts[t0] ?? 0);
+			const end = lineStart + (bounds.ends[t1] ?? line.length);
 			if (end > start) spans.push({ start, end });
-			linePos += seg.length;
-		}
+		});
 	}
 
 	return spans;
