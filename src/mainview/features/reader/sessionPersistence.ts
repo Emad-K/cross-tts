@@ -45,7 +45,7 @@ export function buildWebSlice(
 	};
 }
 
-function toLoadedDocument(result: ReadDocumentResult): LoadedDocument {
+export function toLoadedDocument(result: ReadDocumentResult): LoadedDocument {
 	if (result.format === "txt") {
 		return {
 			format: "txt",
@@ -63,14 +63,21 @@ function toLoadedDocument(result: ReadDocumentResult): LoadedDocument {
 	};
 }
 
-export async function loadPersistedReaderState(): Promise<{
-	document: LoadedDocument | null;
+export type HydratedSession = {
+	documentPath: string | null;
 	pendingChunkIndex: number | null;
 	activeChapterId: string | null;
-}> {
+};
+
+/** Restores TTS settings from disk without loading the document body. */
+export async function hydratePersistedSession(): Promise<HydratedSession> {
 	const file = await loadAppSessionRpc();
 	if (!file?.web) {
-		return { document: null, pendingChunkIndex: null, activeChapterId: null };
+		return {
+			documentPath: null,
+			pendingChunkIndex: null,
+			activeChapterId: null,
+		};
 	}
 	const { web } = file;
 	const voice = coerceVoice(web.voice);
@@ -85,14 +92,6 @@ export async function loadPersistedReaderState(): Promise<{
 		typeof web.documentPath === "string" && web.documentPath.length > 0
 			? web.documentPath
 			: null;
-	if (!documentPath) {
-		return { document: null, pendingChunkIndex: null, activeChapterId: null };
-	}
-
-	const loaded = await readDocumentAtPath(documentPath);
-	if (!loaded) {
-		return { document: null, pendingChunkIndex: null, activeChapterId: null };
-	}
 
 	const chunk =
 		typeof web.currentChunkIndex === "number" && web.currentChunkIndex >= 0
@@ -105,9 +104,39 @@ export async function loadPersistedReaderState(): Promise<{
 			: null;
 
 	return {
-		document: toLoadedDocument(loaded),
+		documentPath,
 		pendingChunkIndex: chunk,
 		activeChapterId: savedChapterId,
+	};
+}
+
+export async function loadDocumentFromPath(
+	documentPath: string,
+): Promise<LoadedDocument | null> {
+	const loaded = await readDocumentAtPath(documentPath);
+	if (!loaded) return null;
+	return toLoadedDocument(loaded);
+}
+
+/** @deprecated Use hydratePersistedSession + loadDocumentFromPath */
+export async function loadPersistedReaderState(): Promise<{
+	document: LoadedDocument | null;
+	pendingChunkIndex: number | null;
+	activeChapterId: string | null;
+}> {
+	const session = await hydratePersistedSession();
+	if (!session.documentPath) {
+		return {
+			document: null,
+			pendingChunkIndex: session.pendingChunkIndex,
+			activeChapterId: session.activeChapterId,
+		};
+	}
+	const document = await loadDocumentFromPath(session.documentPath);
+	return {
+		document,
+		pendingChunkIndex: session.pendingChunkIndex,
+		activeChapterId: session.activeChapterId,
 	};
 }
 

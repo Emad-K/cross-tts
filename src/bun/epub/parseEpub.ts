@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
@@ -17,12 +16,16 @@ type ManifestItem = {
 	properties?: string;
 };
 
-type ParsedEpub = {
+type EpubArchive = {
 	zip: JSZip;
 	opfDir: string;
 	title: string;
 	manifest: Map<string, ManifestItem>;
 	spineIds: string[];
+	hrefToId: Map<string, string>;
+};
+
+type ParsedEpub = EpubArchive & {
 	chapters: ReaderChapter[];
 };
 
@@ -49,8 +52,34 @@ function textContent(node: unknown): string {
 }
 
 function resolveHref(opfDir: string, href: string): string {
-	const combined = normalize(join(opfDir, decodeURIComponent(href))).replace(/\\/g, "/");
+	const combined = normalize(join(opfDir, decodeURIComponent(href))).replace(
+		/\\/g,
+		"/",
+	);
 	return combined.startsWith("/") ? combined.slice(1) : combined;
+}
+
+/** Resolved manifest href → manifest id (first wins). */
+export function buildManifestHrefLookup(
+	manifest: Map<string, ManifestItem>,
+	opfDir: string,
+): Map<string, string> {
+	const lookup = new Map<string, string>();
+	for (const [id, item] of manifest) {
+		const resolved = resolveHref(opfDir, item.href);
+		if (!lookup.has(resolved)) lookup.set(resolved, id);
+	}
+	return lookup;
+}
+
+function findManifestIdByHref(
+	hrefToId: Map<string, string>,
+	opfDir: string,
+	hrefPart: string,
+): string | null {
+	if (!hrefPart) return null;
+	const target = resolveHref(opfDir, hrefPart);
+	return hrefToId.get(target) ?? null;
 }
 
 async function readZipEntry(zip: JSZip, path: string): Promise<string | null> {
@@ -59,7 +88,20 @@ async function readZipEntry(zip: JSZip, path: string): Promise<string | null> {
 	return entry.async("string");
 }
 
-function parseOpf(opfXml: string, opfPath: string): Omit<ParsedEpub, "zip"> {
+async function readEpubFileBytes(filePath: string): Promise<Uint8Array | null> {
+	try {
+		const file = Bun.file(filePath);
+		if (!(await file.exists())) return null;
+		return new Uint8Array(await file.arrayBuffer());
+	} catch {
+		return null;
+	}
+}
+
+function parseOpf(
+	opfXml: string,
+	opfPath: string,
+): Omit<EpubArchive, "zip"> {
 	const opfDir = dirname(opfPath).replace(/\\/g, "/");
 	const root = xml.parse(opfXml) as Record<string, unknown>;
 	const pkg =
@@ -96,13 +138,14 @@ function parseOpf(opfXml: string, opfPath: string): Omit<ParsedEpub, "zip"> {
 		if (idref) spineIds.push(idref);
 	}
 
-	return { opfDir, title, manifest, spineIds, chapters: [] };
+	const hrefToId = buildManifestHrefLookup(manifest, opfDir);
+	return { opfDir, title, manifest, spineIds, hrefToId };
 }
 
 function chaptersFromNavOl(
 	ol: Record<string, unknown> | undefined,
 	opfDir: string,
-	manifest: Map<string, ManifestItem>,
+	hrefToId: Map<string, string>,
 	level: number,
 	out: ReaderChapter[],
 ): void {
@@ -111,35 +154,22 @@ function chaptersFromNavOl(
 		const hrefRaw = anchor ? String(anchor["@_href"] ?? "") : "";
 		const title = anchor ? textContent(anchor) : textContent(li);
 		const [pathPart] = hrefRaw.split("#");
-		const chapterId = findManifestIdByHref(manifest, opfDir, pathPart);
+		const chapterId = findManifestIdByHref(hrefToId, opfDir, pathPart);
 		if (chapterId && title) {
 			out.push({ id: chapterId, title, level });
 		}
 		const nested = li.ol as Record<string, unknown> | undefined;
 		if (nested) {
-			chaptersFromNavOl(nested, opfDir, manifest, level + 1, out);
+			chaptersFromNavOl(nested, opfDir, hrefToId, level + 1, out);
 		}
 	}
-}
-
-function findManifestIdByHref(
-	manifest: Map<string, ManifestItem>,
-	opfDir: string,
-	hrefPart: string,
-): string | null {
-	if (!hrefPart) return null;
-	const target = resolveHref(opfDir, hrefPart);
-	for (const [id, item] of manifest) {
-		if (resolveHref(opfDir, item.href) === target) return id;
-	}
-	return null;
 }
 
 async function chaptersFromNavXhtml(
 	zip: JSZip,
 	navHref: string,
 	opfDir: string,
-	manifest: Map<string, ManifestItem>,
+	hrefToId: Map<string, string>,
 ): Promise<ReaderChapter[]> {
 	const navPath = resolveHref(opfDir, navHref);
 	const raw = await readZipEntry(zip, navPath);
@@ -151,7 +181,7 @@ async function chaptersFromNavXhtml(
 	if (!nav) return [];
 	const ol = nav.ol as Record<string, unknown> | undefined;
 	const chapters: ReaderChapter[] = [];
-	chaptersFromNavOl(ol, opfDir, manifest, 0, chapters);
+	chaptersFromNavOl(ol, opfDir, hrefToId, 0, chapters);
 	return chapters;
 }
 
@@ -176,7 +206,7 @@ function findNavElement(node: Record<string, unknown>): Record<string, unknown> 
 function chaptersFromNcx(
 	ncxXml: string,
 	opfDir: string,
-	manifest: Map<string, ManifestItem>,
+	hrefToId: Map<string, string>,
 ): ReaderChapter[] {
 	const root = xml.parse(ncxXml) as Record<string, unknown>;
 	const ncx =
@@ -193,7 +223,7 @@ function chaptersFromNcx(
 			const content = point.content as Record<string, unknown> | undefined;
 			const src = content ? String(content["@_src"] ?? "") : "";
 			const [pathPart] = src.split("#");
-			const chapterId = findManifestIdByHref(manifest, opfDir, pathPart);
+			const chapterId = findManifestIdByHref(hrefToId, opfDir, pathPart);
 			if (chapterId && title) {
 				chapters.push({ id: chapterId, title, level });
 			}
@@ -227,12 +257,49 @@ function chaptersFromSpine(
 	return chapters;
 }
 
+async function buildChapterList(archive: EpubArchive): Promise<ReaderChapter[]> {
+	let chapters: ReaderChapter[] = [];
+
+	const navItem = [...archive.manifest.values()].find((item) =>
+		item.properties?.split(/\s+/).includes("nav"),
+	);
+	if (navItem) {
+		chapters = await chaptersFromNavXhtml(
+			archive.zip,
+			navItem.href,
+			archive.opfDir,
+			archive.hrefToId,
+		);
+	}
+
+	if (chapters.length === 0) {
+		const ncxItem = [...archive.manifest.values()].find((item) =>
+			item.mediaType.includes("ncx"),
+		);
+		if (ncxItem) {
+			const ncxPath = resolveHref(archive.opfDir, ncxItem.href);
+			const ncxXml = await readZipEntry(archive.zip, ncxPath);
+			if (ncxXml) {
+				chapters = chaptersFromNcx(ncxXml, archive.opfDir, archive.hrefToId);
+			}
+		}
+	}
+
+	if (chapters.length === 0) {
+		chapters = chaptersFromSpine(archive.spineIds, archive.manifest);
+	}
+
+	return chapters;
+}
+
 async function loadParsedEpub(filePath: string): Promise<ParsedEpub | null> {
 	const cached = epubCache.get(filePath);
 	if (cached) return cached;
 
-	const buffer = readFileSync(filePath);
-	const zip = await JSZip.loadAsync(new Uint8Array(buffer));
+	const bytes = await readEpubFileBytes(filePath);
+	if (!bytes) return null;
+
+	const zip = await JSZip.loadAsync(bytes);
 
 	const containerXml = await readZipEntry(zip, "META-INF/container.xml");
 	if (!containerXml) return null;
@@ -253,38 +320,10 @@ async function loadParsedEpub(filePath: string): Promise<ParsedEpub | null> {
 	if (!opfXml) return null;
 
 	const base = parseOpf(opfXml, opfPath);
-	let chapters: ReaderChapter[] = [];
+	const archive: EpubArchive = { zip, ...base };
+	const chapters = await buildChapterList(archive);
 
-	const navItem = [...base.manifest.values()].find((item) =>
-		item.properties?.split(/\s+/).includes("nav"),
-	);
-	if (navItem) {
-		chapters = await chaptersFromNavXhtml(
-			zip,
-			navItem.href,
-			base.opfDir,
-			base.manifest,
-		);
-	}
-
-	if (chapters.length === 0) {
-		const ncxItem = [...base.manifest.values()].find((item) =>
-			item.mediaType.includes("ncx"),
-		);
-		if (ncxItem) {
-			const ncxPath = resolveHref(base.opfDir, ncxItem.href);
-			const ncxXml = await readZipEntry(zip, ncxPath);
-			if (ncxXml) {
-				chapters = chaptersFromNcx(ncxXml, base.opfDir, base.manifest);
-			}
-		}
-	}
-
-	if (chapters.length === 0) {
-		chapters = chaptersFromSpine(base.spineIds, base.manifest);
-	}
-
-	const parsed: ParsedEpub = { zip, ...base, chapters };
+	const parsed: ParsedEpub = { ...archive, chapters };
 	epubCache.set(filePath, parsed);
 	return parsed;
 }
@@ -294,7 +333,8 @@ export async function readEpubManifest(filePath: string): Promise<{
 	chapters: ReaderChapter[];
 } | null> {
 	const parsed = await loadParsedEpub(filePath);
-	if (!parsed?.chapters.length) return null;
+	if (!parsed) return null;
+	if (parsed.chapters.length === 0) return null;
 	return { title: parsed.title, chapters: parsed.chapters };
 }
 

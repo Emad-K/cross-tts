@@ -2,6 +2,7 @@ import { BookMarked } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ReaderChapter } from "../types";
+import { VirtualChapterList } from "./VirtualChapterList";
 
 export type ChapterSidebarProps = {
 	open: boolean;
@@ -54,37 +55,11 @@ export function ChapterSidebar({
 				</div>
 				<ScrollArea className="min-h-0 flex-1">
 					{hasChapters ? (
-						<nav className="px-2 py-2" aria-label="Chapter list">
-							<ul className="flex flex-col gap-0.5">
-								{chapters.map((chapter) => {
-									const active = chapter.id === activeChapterId;
-									const level = chapter.level ?? 0;
-									return (
-										<li key={chapter.id}>
-											<button
-												type="button"
-												onClick={() => onSelectChapter(chapter.id)}
-												className={cn(
-													"w-full rounded-md px-3 py-2 text-left text-sm leading-snug transition-colors",
-													"hover:bg-accent/80 hover:text-accent-foreground",
-													"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-													active &&
-														"bg-accent text-accent-foreground shadow-sm",
-													!active && "text-foreground/85",
-												)}
-												style={{
-													paddingLeft: `${0.75 + level * 0.75}rem`,
-												}}
-												aria-current={active ? "location" : undefined}
-												title={chapter.title}
-											>
-												<span className="line-clamp-2">{chapter.title}</span>
-											</button>
-										</li>
-									);
-								})}
-							</ul>
-						</nav>
+						<VirtualChapterList
+							chapters={chapters}
+							activeChapterId={activeChapterId}
+							onSelectChapter={onSelectChapter}
+						/>
 					) : (
 						<div className="px-4 py-8 text-center">
 							<p className="text-sm text-muted-foreground">
