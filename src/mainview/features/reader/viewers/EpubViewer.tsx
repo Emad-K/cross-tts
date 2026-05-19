@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getEpubChapterContent } from "@/lib/electrobunRpc";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
@@ -91,7 +92,16 @@ export function EpubViewer({
 
 	if (loading) {
 		return (
-			<div className="flex min-h-[12rem] items-center justify-center px-8 py-16">
+			<div
+				className="flex min-h-[12rem] flex-col items-center justify-center gap-3 px-8 py-16"
+				role="status"
+				aria-live="polite"
+				aria-busy="true"
+			>
+				<Loader2
+					className="size-7 animate-spin text-muted-foreground"
+					aria-hidden
+				/>
 				<p className="text-sm text-muted-foreground">Loading chapter…</p>
 			</div>
 		);

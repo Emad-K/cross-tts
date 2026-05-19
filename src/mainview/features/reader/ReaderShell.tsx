@@ -6,12 +6,15 @@ import { TtsSettingSync } from "./tts";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
+import { ReaderLoadingOverlay } from "./ReaderLoadingOverlay";
 import { PlaybackControls } from "./PlaybackControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type ReaderShellProps = {
 	document: LoadedDocument | null;
+	documentLoading?: boolean;
+	loadingMessage?: string;
 	activeChapterId?: string | null;
 	initialChapterId?: string | null;
 	onActiveChapterChange?: (chapterId: string | null) => void;
@@ -26,6 +29,8 @@ export type ReaderShellProps = {
  */
 export function ReaderShell({
 	document,
+	documentLoading = false,
+	loadingMessage = "Opening document…",
 	activeChapterId = null,
 	initialChapterId = null,
 	onActiveChapterChange,
@@ -65,7 +70,10 @@ export function ReaderShell({
 						setChapterSidebarOpen((open) => !open)
 					}
 				/>
-				<main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+					{documentLoading ? (
+						<ReaderLoadingOverlay message={loadingMessage} />
+					) : null}
 					{hasDoc ? (
 						<ReaderDocumentLayout
 							document={document}

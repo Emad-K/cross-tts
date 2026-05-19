@@ -5,7 +5,6 @@ import {
 	useState,
 	type ChangeEvent,
 } from "react";
-import type { ReadDocumentResult } from "@shared/documentRpc";
 import {
 	getEpubChapterContent,
 	isElectrobunWebview,
@@ -15,8 +14,10 @@ import { ReaderShell } from "./ReaderShell";
 import { TtsRulesSettingsDialog } from "./ttsRules/TtsRulesSettingsDialog";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
-	loadPersistedReaderState,
+	hydratePersistedSession,
+	loadDocumentFromPath,
 	subscribeDebouncedSessionSave,
+	toLoadedDocument,
 	touchSessionSave,
 } from "./sessionPersistence";
 import type { LoadedDocument } from "./types";
@@ -26,24 +27,6 @@ import {
 	stopPlaybackUi,
 	useTtsStore,
 } from "./tts";
-
-function toLoadedDocument(picked: ReadDocumentResult): LoadedDocument {
-	if (picked.format === "txt") {
-		return {
-			format: "txt",
-			fileName: picked.fileName,
-			filePath: picked.filePath,
-			text: picked.text,
-		};
-	}
-	return {
-		format: "epub",
-		fileName: picked.fileName,
-		filePath: picked.filePath,
-		title: picked.title,
-		chapters: picked.chapters,
-	};
-}
 
 function documentKey(doc: LoadedDocument): string {
 	return `${doc.format}:${doc.filePath ?? doc.fileName}`;
@@ -91,6 +74,8 @@ export function ReaderApp() {
 	const prevEpubChapterIdRef = useRef<string | null>(null);
 	const continuePlaybackAfterChapterRef = useRef(false);
 	const [initialChapterId, setInitialChapterId] = useState<string | null>(null);
+	const [documentLoading, setDocumentLoading] = useState(false);
+	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
 	const [settingsOpen, setSettingsOpen] = useState(false);
 
 	function isPlaybackActive(
@@ -106,21 +91,26 @@ export function ReaderApp() {
 	useEffect(() => {
 		let cancelled = false;
 		void (async () => {
+			const session = await hydratePersistedSession();
+			if (cancelled) return;
+			setSessionReady(true);
+
+			if (!session.documentPath) return;
+
+			pendingChunkIndexRef.current = session.pendingChunkIndex;
+			setInitialChapterId(session.activeChapterId);
+			if (session.activeChapterId) {
+				setActiveChapterId(session.activeChapterId);
+			}
+
+			setLoadingMessage("Restoring your book…");
+			setDocumentLoading(true);
 			try {
-				const {
-					document: doc,
-					pendingChunkIndex,
-					activeChapterId: savedChapter,
-				} = await loadPersistedReaderState();
-				if (cancelled) return;
-				if (doc) {
-					pendingChunkIndexRef.current = pendingChunkIndex;
-					setInitialChapterId(savedChapter);
-					setDocument(doc);
-					if (savedChapter) setActiveChapterId(savedChapter);
-				}
+				const doc = await loadDocumentFromPath(session.documentPath);
+				if (cancelled || !doc) return;
+				setDocument(doc);
 			} finally {
-				if (!cancelled) setSessionReady(true);
+				if (!cancelled) setDocumentLoading(false);
 			}
 		})();
 		return () => {
@@ -278,6 +268,8 @@ export function ReaderApp() {
 			return;
 		}
 		void (async () => {
+			setLoadingMessage("Opening document…");
+			setDocumentLoading(true);
 			try {
 				const picked = await pickDocument();
 				if (picked) {
@@ -292,6 +284,8 @@ export function ReaderApp() {
 				}
 			} catch {
 				inputRef.current?.click();
+			} finally {
+				setDocumentLoading(false);
 			}
 		})();
 	}, []);
@@ -327,6 +321,8 @@ export function ReaderApp() {
 			<ReaderShell
 				className="min-h-0 flex-1"
 				document={document}
+				documentLoading={documentLoading}
+				loadingMessage={loadingMessage}
 				activeChapterId={activeChapterId}
 				initialChapterId={initialChapterId}
 				onActiveChapterChange={setActiveChapterId}
