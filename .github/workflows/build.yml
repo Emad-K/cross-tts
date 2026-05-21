@@ -36,6 +36,11 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/embed-win-icons.ps1
 
+      # NSIS is not preinstalled on windows-latest (Server 2025)
+      - name: Install NSIS
+        if: runner.os == 'Windows'
+        uses: negrutiu/nsis-install@v2
+
       - name: Build NSIS installer
         if: runner.os == 'Windows'
         shell: pwsh
