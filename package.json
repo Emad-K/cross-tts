@@ -1,6 +1,6 @@
 {
 	"name": "cross-tts",
-	"version": "1.5.1",
+	"version": "1.5.2",
 	"description": "Cross-platform TTS reader (Electrobun + React + Vite)",
 	"scripts": {
 		"start": "vite build && electrobun dev",
