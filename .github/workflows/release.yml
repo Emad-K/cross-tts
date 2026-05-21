@@ -1,13 +1,10 @@
 name: Release
-
 on:
   push:
     tags:
       - "v*"
-
 permissions:
   contents: write
-
 jobs:
   build:
     strategy:
@@ -20,13 +17,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
       - run: bun install --frozen-lockfile
       - run: bun run build:stable
+
+      # https://github.com/blackboardsh/electrobun/issues/429 — patch icons in CI only
+      - name: Embed Windows icons (Electrobun rcedit workaround)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/embed-win-icons.ps1
+
+      - name: Build NSIS installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/build-win-installer.ps1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -39,7 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Verify tag matches package.json version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -49,16 +54,13 @@ jobs:
             exit 1
           fi
           echo "Release version $PKG matches tag."
-
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
           pattern: dist-*
           merge-multiple: true
-
       - name: List release files
         run: find release-assets -type f | sort
-
       - uses: softprops/action-gh-release@v2
         with:
           draft: false

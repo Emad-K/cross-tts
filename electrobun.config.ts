@@ -33,7 +33,7 @@ export default {
 		},
 		win: {
 			bundleCEF: false,
-			icon: "assets/windows/icon_256x256.png",
+			icon: "assets/windows/icon.ico",
 		},
 	},
 } satisfies ElectrobunConfig;
