@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { htmlToPlainText } from "@shared/htmlPlainText";
+import { isSpeakableChunkText } from "./ttsChunkText";
 import { buildTtsChunks } from "./chunkText";
 
 describe("buildTtsChunks", () => {
@@ -24,6 +25,21 @@ describe("buildTtsChunks", () => {
 		const chunks = buildTtsChunks(text);
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0]!.text).toBe("Hi.\nThere.");
+	});
+
+	test("drops chunks empty after TTS text rules (e.g. separator lines)", () => {
+		const text = "Hello world.\n\n====\n\nThen he left.";
+		const chunks = buildTtsChunks(text);
+		expect(chunks.some((c) => c.text === "====")).toBe(false);
+		expect(chunks.every((c) => isSpeakableChunkText(c.text))).toBe(true);
+		expect(chunks.some((c) => c.text.includes("Hello"))).toBe(true);
+		expect(chunks.some((c) => c.text.includes("Then he"))).toBe(true);
+	});
+
+	test("isSpeakableChunkText rejects punctuation-only lines", () => {
+		expect(isSpeakableChunkText("====")).toBe(false);
+		expect(isSpeakableChunkText("...")).toBe(false);
+		expect(isSpeakableChunkText("Hello")).toBe(true);
 	});
 
 	test("does not split on abbreviations like U.S.A.", () => {

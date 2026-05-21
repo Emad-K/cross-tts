@@ -6,6 +6,7 @@ export type RegexReplaceRule = {
 	pattern: string;
 	replacement: string;
 	enabled: boolean;
+	caseSensitive: boolean;
 	/** Built-in rules cannot be deleted (pattern may still be edited). */
 	builtIn?: boolean;
 };
@@ -18,7 +19,19 @@ export type PronunciationRule = {
 	phonetic: string;
 	caseSensitive: boolean;
 	enabled: boolean;
+	/** Built-in rules cannot be deleted from the UI. */
+	builtIn?: boolean;
 };
+
+/** Case-insensitive line-start chapter / part / volume headings (EPUB styles). */
+const BUILTIN_CHAPTER_HEADING = String.raw`(?:chapter|chapters?|ch\.?|parts?|vol(?:umes?)?\.?|books?)[ \t]*(?:#|no\.?[ \t]*)?(?:\d{1,5}(?:[\-–—]\d{1,5})?|[ivxlcdm]{1,8})(?:(?:[ \t]*:[ \t]*|[ \t]*[\-–—][ \t]*|[ \t]+)[^\n\r]*)?`;
+
+/** Whole-line match: `Chapter 1: Title` or `(Chapter 1: Title)`. */
+export const BUILTIN_CHAPTER_LINE_PATTERN = String.raw`(?:^|\n)[ \t]*(?:\(\s*` +
+	BUILTIN_CHAPTER_HEADING +
+	String.raw`[ \t]*\)|` +
+	BUILTIN_CHAPTER_HEADING +
+	`)`;
 
 export type TtsTextRule = RegexReplaceRule | PronunciationRule;
 
@@ -38,15 +51,17 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 					"[\\u3000-\\u303f\\u3040-\\u309f\\u30a0-\\u30ff\\u4e00-\\u9fff\\uac00-\\ud7af]+",
 				replacement: " ",
 				enabled: true,
+				caseSensitive: false,
 				builtIn: true,
 			},
 			{
-				id: "builtin-equals",
+				id: "builtin-separators",
 				kind: "regex",
-				label: "Remove ==== style separators",
-				pattern: "[=]{2,}",
+				label: "Remove separator lines (e.g. ....., =====, *****)",
+				pattern: "(?:\\s+|^)[.=\\*\\-_]{2,}(?=\\s|$)",
 				replacement: "",
 				enabled: true,
+				caseSensitive: false,
 				builtIn: true,
 			},
 			{
@@ -56,10 +71,32 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				pattern: "https?:\\/\\/\\S+",
 				replacement: "",
 				enabled: true,
+				caseSensitive: false,
+				builtIn: true,
+			},
+			{
+				id: "builtin-chapter-lines",
+				kind: "regex",
+				label:
+					"Remove chapter headings (Chapter 1: …, Ch. 2 - …, Part III, etc.)",
+				pattern: BUILTIN_CHAPTER_LINE_PATTERN,
+				replacement: "",
+				enabled: true,
+				caseSensitive: false,
 				builtIn: true,
 			},
 		],
-		pronunciationRules: [],
+		pronunciationRules: [
+			{
+				id: "builtin-pron-qi",
+				kind: "pronunciation",
+				word: "qi",
+				phonetic: "tʃiː",
+				caseSensitive: false,
+				enabled: true,
+				builtIn: true,
+			},
+		],
 	};
 }
 
@@ -69,7 +106,10 @@ export function escapeRegexLiteral(word: string): string {
 
 /** Collapse runs of whitespace after removals. */
 export function normalizeTtsWhitespace(text: string): string {
-	return text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
+	return text
+		.replace(/[ \t]+/g, " ")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
 }
 
 export function applyRegexReplaceRule(
@@ -79,7 +119,7 @@ export function applyRegexReplaceRule(
 	if (!rule.enabled || !rule.pattern.trim()) return text;
 	let re: RegExp;
 	try {
-		re = new RegExp(rule.pattern, "gu");
+		re = new RegExp(rule.pattern, rule.caseSensitive ? "gu" : "giu");
 	} catch {
 		return text;
 	}
@@ -136,6 +176,7 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 				replacement:
 					typeof r.replacement === "string" ? r.replacement : "",
 				enabled: r.enabled !== false,
+				caseSensitive: r.caseSensitive === true,
 				builtIn: r.builtIn === true,
 			});
 		}
@@ -158,11 +199,12 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 				phonetic,
 				caseSensitive: r.caseSensitive === true,
 				enabled: r.enabled !== false,
+				builtIn: r.builtIn === true,
 			});
 		}
 	}
 
-	const builtInIds = new Set(
+	const builtInRegexIds = new Set(
 		defaults.regexRules.filter((r) => r.builtIn).map((r) => r.id),
 	);
 	for (const builtin of defaults.regexRules) {
@@ -171,13 +213,30 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 		}
 	}
 	for (const r of regexRules) {
-		if (builtInIds.has(r.id)) r.builtIn = true;
+		if (builtInRegexIds.has(r.id)) r.builtIn = true;
+	}
+
+	const builtInPronIds = new Set(
+		defaults.pronunciationRules
+			.filter((r) => r.builtIn)
+			.map((r) => r.id),
+	);
+	for (const builtin of defaults.pronunciationRules) {
+		if (!pronunciationRules.some((r) => r.id === builtin.id)) {
+			pronunciationRules.unshift(builtin);
+		}
+	}
+	for (const r of pronunciationRules) {
+		if (builtInPronIds.has(r.id)) r.builtIn = true;
 	}
 
 	return {
 		regexRules:
 			regexRules.length > 0 ? regexRules : defaults.regexRules,
-		pronunciationRules,
+		pronunciationRules:
+			pronunciationRules.length > 0
+				? pronunciationRules
+				: defaults.pronunciationRules,
 	};
 }
 
