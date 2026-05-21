@@ -39,6 +39,8 @@ Electrobun does **not** ship one monolithic `.exe`; the Windows **zip** from `ar
 
 GitHub Actions workflow **Build** runs on pushes and pull requests to `main` / `master`: installs Bun, runs `bun run build:stable` on Windows, Ubuntu, and macOS, and uploads `artifacts/` from each runner.
 
+On Windows, CI patches icons into `*Setup.zip` with `rcedit` ([Electrobun #429](https://github.com/blackboardsh/electrobun/issues/429)) and builds an optional NSIS installer (`Cross-TTS-<version>-Setup.exe`). Local `bun run start` may still log icon embed warnings until upstream fixes the CLI.
+
 ## Releases (tag workflow)
 
 1. Bump **`package.json`** `version` (and commit). `electrobun.config.ts` picks it up automatically.
