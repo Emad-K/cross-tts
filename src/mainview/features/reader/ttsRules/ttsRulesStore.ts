@@ -19,11 +19,17 @@ type TtsRulesStore = TtsTextRulesState & {
 	setRegexEnabled: (id: string, enabled: boolean) => void;
 	updateRegexRule: (
 		id: string,
-		patch: Partial<Pick<RegexReplaceRule, "label" | "pattern" | "replacement">>,
+		patch: Partial<Pick<RegexReplaceRule, "label" | "pattern" | "replacement" | "caseSensitive">>,
 	) => void;
 	addRegexRule: (rule: Omit<RegexReplaceRule, "kind" | "builtIn">) => void;
 	removeRegexRule: (id: string) => void;
 	setPronunciationEnabled: (id: string, enabled: boolean) => void;
+	updatePronunciationRule: (
+		id: string,
+		patch: Partial<
+			Pick<PronunciationRule, "word" | "phonetic" | "caseSensitive">
+		>,
+	) => void;
 	addPronunciationRule: (
 		rule: Omit<PronunciationRule, "kind">,
 	) => void;
@@ -59,7 +65,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 				withSignature({
 					...s,
 					regexRules: s.regexRules.map((r) =>
-						r.id === id ? { ...r, ...patch } : r,
+						r.id === id && !r.builtIn ? { ...r, ...patch } : r,
 					),
 				}),
 			),
@@ -92,6 +98,15 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 					),
 				}),
 			),
+		updatePronunciationRule: (id, patch) =>
+			set((s) =>
+				withSignature({
+					...s,
+					pronunciationRules: s.pronunciationRules.map((r) =>
+						r.id === id ? { ...r, ...patch } : r,
+					),
+				}),
+			),
 		addPronunciationRule: (rule) =>
 			set((s) =>
 				withSignature({
@@ -102,7 +117,9 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 					],
 				}),
 			),
-		removePronunciationRule: (id) =>
+		removePronunciationRule: (id) => {
+			const target = get().pronunciationRules.find((r) => r.id === id);
+			if (target?.builtIn) return;
 			set((s) =>
 				withSignature({
 					...s,
@@ -110,7 +127,8 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 						(r) => r.id !== id,
 					),
 				}),
-			),
+			);
+		},
 		importUserRules: (file, mode) =>
 			set((s) =>
 				withSignature(

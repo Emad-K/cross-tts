@@ -1,4 +1,5 @@
 import { getWinkNlp, tokenCharBounds } from "./winkNlp";
+import { isSpeakableChunkText } from "./ttsChunkText";
 
 export type TtsChunk = {
 	index: number;
@@ -195,5 +196,7 @@ export function buildTtsChunks(raw: string): TtsChunk[] {
 		}
 		merged.push(...mergeUndersizedChunks(full, pieces));
 	}
-	return merged.map((c, i) => ({ ...c, index: i }));
+	return merged
+		.filter((c) => isSpeakableChunkText(c.text))
+		.map((c, i) => ({ ...c, index: i }));
 }

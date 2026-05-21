@@ -19,11 +19,13 @@ describe("ttsRulesExchange", () => {
 			pattern: "\\d+",
 			replacement: "",
 			enabled: false,
+			caseSensitive: true,
 			builtIn: false,
 		});
 		const exp = buildTtsRulesExport(state);
 		expect(exp.regexRules).toHaveLength(1);
 		expect(exp.regexRules[0]?.enabled).toBe(false);
+		expect(exp.regexRules[0]?.caseSensitive).toBe(true);
 		expect(exp.format).toBe(TTS_RULES_EXPORT_FORMAT);
 		expect(exp.version).toBe(TTS_RULES_EXPORT_VERSION);
 	});
@@ -50,10 +52,11 @@ describe("ttsRulesExchange", () => {
 			"replace",
 			(prefix) => `${prefix}-${++id}`,
 		);
-		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(3);
+		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(4);
 		expect(merged.regexRules.filter((r) => !r.builtIn)).toHaveLength(0);
-		expect(merged.pronunciationRules).toHaveLength(1);
-		expect(merged.pronunciationRules[0]?.word).toBe("gif");
+		expect(merged.pronunciationRules).toHaveLength(2);
+		expect(merged.pronunciationRules.find((r) => r.word === "gif")).toBeTruthy();
+		expect(merged.pronunciationRules.find((r) => r.id === "builtin-pron-qi")).toBeTruthy();
 	});
 
 	test("rejects invalid format", () => {

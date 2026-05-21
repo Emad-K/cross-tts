@@ -13,6 +13,7 @@ export type TtsRulesExportRegexRule = {
 	pattern: string;
 	replacement: string;
 	enabled: boolean;
+	caseSensitive: boolean;
 };
 
 export type TtsRulesExportPronunciationRule = {
@@ -53,13 +54,16 @@ export function buildTtsRulesExport(
 				pattern: r.pattern,
 				replacement: r.replacement,
 				enabled: r.enabled,
+				caseSensitive: r.caseSensitive,
 			})),
-		pronunciationRules: state.pronunciationRules.map((r) => ({
-			word: r.word,
-			phonetic: r.phonetic,
-			caseSensitive: r.caseSensitive,
-			enabled: r.enabled,
-		})),
+		pronunciationRules: state.pronunciationRules
+			.filter((r) => !r.builtIn)
+			.map((r) => ({
+				word: r.word,
+				phonetic: r.phonetic,
+				caseSensitive: r.caseSensitive,
+				enabled: r.enabled,
+			})),
 	};
 }
 
@@ -88,6 +92,7 @@ function parseRegexExportItem(
 		replacement:
 			typeof item.replacement === "string" ? item.replacement : "",
 		enabled: item.enabled !== false,
+		caseSensitive: item.caseSensitive === true,
 	};
 }
 
@@ -187,12 +192,17 @@ export function applyImportedUserRules(
 	newId: (prefix: string) => string,
 ): TtsTextRulesState {
 	const builtins = current.regexRules.filter((r) => r.builtIn);
+	const builtinPronunciation = current.pronunciationRules.filter(
+		(r) => r.builtIn,
+	);
 	const customRegex =
 		mode === "replace"
 			? []
 			: current.regexRules.filter((r) => !r.builtIn);
 	const pronunciation =
-		mode === "replace" ? [] : [...current.pronunciationRules];
+		mode === "replace"
+			? [...builtinPronunciation]
+			: [...current.pronunciationRules];
 
 	const importedRegex: RegexReplaceRule[] = imported.regexRules.map(
 		(r) => ({
@@ -202,6 +212,7 @@ export function applyImportedUserRules(
 			pattern: r.pattern,
 			replacement: r.replacement,
 			enabled: r.enabled,
+			caseSensitive: r.caseSensitive,
 			builtIn: false,
 		}),
 	);
