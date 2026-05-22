@@ -1,15 +1,19 @@
 name: Build
+
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
 permissions:
   contents: read
+
 jobs:
   build:
     strategy:
@@ -22,24 +26,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
       - name: Production build
         run: bun run build:stable
-
-      # https://github.com/blackboardsh/electrobun/issues/429 — patch icons in CI only
-      - name: Embed Windows icons (Electrobun rcedit workaround)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./.github/scripts/embed-win-icons.ps1
-
-      - name: Build NSIS installer
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./.github/scripts/build-win-installer.ps1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
