@@ -123,8 +123,25 @@ mainWindow = new BrowserWindow({
 	frame: initialFrame,
 	// "hidden" forces Titled:false in Electrobun and drops the resize frame on
 	// Windows. "hiddenInset" keeps Titled + FullSizeContentView for custom chrome.
-	titleBarStyle: "hiddenInset",
+	titleBarStyle: "default",
 	rpc: appRpc,
+});
+
+// After load, force a proper layout pass
+// This is a workaround for a bug in Electrobun where the window is not properly sized after loading
+// For the love of god, if you know a better way to do this, please do it.
+mainWindow.webview.on("dom-ready", () => {
+  setTimeout(() => {
+    const frame = mainWindow.getFrame();
+    
+    // Nudge by 1px then restore
+    mainWindow.setFrame(frame.x, frame.y, frame.width + 1, frame.height);
+    
+    // Restore immediately after
+    setTimeout(() => {
+      mainWindow.setFrame(frame.x, frame.y, frame.width, frame.height);
+    }, 16); // ~1 frame
+  }, 10); // Small delay after dom-ready
 });
 
 void mainWindow;
