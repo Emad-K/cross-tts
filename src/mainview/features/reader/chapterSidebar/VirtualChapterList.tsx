@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ReaderChapter } from "../types";
 
-const ROW_HEIGHT_PX = 44;
+const ROW_HEIGHT_PX = 36;
 const OVERSCAN_ROWS = 8;
 const VIRTUALIZE_THRESHOLD = 80;
 
@@ -36,7 +36,7 @@ function ChapterRow({
 			type="button"
 			onClick={onSelect}
 			className={cn(
-				"w-full rounded-md px-3 py-2 text-left text-sm leading-snug transition-colors",
+				"min-w-0 w-full overflow-hidden rounded-md px-3 py-1.5 text-left text-sm leading-snug transition-colors",
 				"hover:bg-accent/80 hover:text-accent-foreground",
 				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 				active && "bg-accent text-accent-foreground shadow-sm",
@@ -46,7 +46,9 @@ function ChapterRow({
 			aria-current={active ? "location" : undefined}
 			title={chapter.title}
 		>
-			<span className="line-clamp-2">{chapter.title}</span>
+			<span className="block min-w-0 overflow-hidden whitespace-nowrap [mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)] [-webkit-mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)]">
+				{chapter.title}
+			</span>
 		</button>
 	);
 }
