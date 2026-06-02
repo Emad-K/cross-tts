@@ -7,6 +7,7 @@
 		"target": "ES2020",
 		"useDefineForClassFields": true,
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": ["node", "@webgpu/types"],
 		"module": "ESNext",
 		"skipLibCheck": true,
 		"moduleResolution": "bundler",
@@ -21,5 +22,13 @@
 		"noFallthroughCasesInSwitch": true
 	},
 	"include": ["src"],
-	"exclude": ["node_modules", "dist", "build", "../../package/dist"]
+	"exclude": [
+		"node_modules",
+		"dist",
+		"build",
+		"out",
+		"release",
+		"**/*.test.ts",
+		"../../package/dist"
+	]
 }

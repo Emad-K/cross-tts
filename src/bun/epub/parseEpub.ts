@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
@@ -90,9 +92,8 @@ async function readZipEntry(zip: JSZip, path: string): Promise<string | null> {
 
 async function readEpubFileBytes(filePath: string): Promise<Uint8Array | null> {
 	try {
-		const file = Bun.file(filePath);
-		if (!(await file.exists())) return null;
-		return new Uint8Array(await file.arrayBuffer());
+		if (!existsSync(filePath)) return null;
+		return new Uint8Array(await readFile(filePath));
 	} catch {
 		return null;
 	}

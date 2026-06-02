@@ -1,13 +1,24 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import {
+	createReadStream,
+	createWriteStream,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+} from "node:fs";
+import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
-import { Utils } from "electrobun/bun";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { app } from "electron";
 
 const HF_ORIGIN = "https://huggingface.co";
 
-type HubServer = ReturnType<typeof Bun.serve>;
-
-let hub: HubServer | null = null;
-export const hubCacheDirectory = () => join(Utils.paths.userData, "kokoro-hf-hub");
+let hub: Server | null = null;
+let hubBaseUrl: string | null = null;
+export const hubCacheDirectory = () =>
+	join(app.getPath("userData"), "kokoro-hf-hub");
 const inFlight = new Map<string, Promise<void>>();
 
 function safeHubFile(urlPathname: string): string | null {
@@ -54,11 +65,14 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 		mkdirSync(join(dest, ".."), { recursive: true });
 		const url = `${HF_ORIGIN}${hfPath}`;
 		const res = await fetch(url, { redirect: "follow" });
-		if (!res.ok) {
+		if (!res.ok || !res.body) {
 			throw new Error(`Kokoro hub fetch failed ${res.status}: ${url}`);
 		}
 		const tmp = `${dest}.download`;
-		await Bun.write(tmp, res);
+		await pipeline(
+			Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
+			createWriteStream(tmp),
+		);
 		renameSync(tmp, dest);
 	})();
 
@@ -71,52 +85,69 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 }
 
 export function startKokoroHubServer(): string {
-	if (hub) {
-		return hub.url.toString();
+	if (hub && hubBaseUrl) {
+		return hubBaseUrl;
 	}
 	mkdirSync(hubCacheDirectory(), { recursive: true });
 	console.log(`Kokoro HF files on disk: ${hubCacheDirectory()}`);
 
-	hub = Bun.serve({
-		hostname: "127.0.0.1",
-		port: 0,
-		async fetch(req) {
-			const u = new URL(req.url);
+	hub = createServer((req, res) => {
+		void (async () => {
+			const u = new URL(req.url ?? "/", "http://127.0.0.1");
 			if (req.method !== "GET") {
-				return new Response("Method Not Allowed", { status: 405 });
+				res.writeHead(405);
+				res.end("Method Not Allowed");
+				return;
 			}
 			const dest = safeHubFile(u.pathname);
 			if (!dest) {
-				return new Response("Bad path", { status: 400 });
+				res.writeHead(400);
+				res.end("Bad path");
+				return;
 			}
 			try {
 				await ensureOnDisk(u.pathname, dest);
 			} catch (e) {
 				const msg = e instanceof Error ? e.message : String(e);
 				console.error("[kokoro-hub]", msg);
-				return new Response(msg, { status: 502 });
+				res.writeHead(502);
+				res.end(msg);
+				return;
 			}
 			if (!existsSync(dest)) {
-				return new Response("Not found", { status: 404 });
+				res.writeHead(404);
+				res.end("Not found");
+				return;
 			}
-			const file = Bun.file(dest);
-			const headers = new Headers({
+			const headers: Record<string, string> = {
 				"Access-Control-Allow-Origin": "*",
 				"Cache-Control": "public, max-age=31536000, immutable",
-			});
+			};
 			const ct = contentTypeFor(dest);
-			if (ct) headers.set("Content-Type", ct);
-			return new Response(file, { headers });
-		},
+			if (ct) headers["Content-Type"] = ct;
+			res.writeHead(200, headers);
+			createReadStream(dest)
+				.on("error", () => {
+					if (!res.headersSent) res.writeHead(500);
+					res.end();
+				})
+				.pipe(res);
+		})();
 	});
 
-	const url = hub.url.toString();
-	return url.endsWith("/") ? url : `${url}/`;
+	hub.listen(0, "127.0.0.1");
+	const address = hub.address();
+	if (!address || typeof address === "string") {
+		throw new Error("Kokoro hub server failed to bind a port");
+	}
+	hubBaseUrl = `http://127.0.0.1:${address.port}/`;
+	return hubBaseUrl;
 }
 
 export function stopKokoroHubServer(): void {
-	hub?.stop?.();
+	hub?.close();
 	hub = null;
+	hubBaseUrl = null;
 }
 
 function contentTypeFor(filePath: string): string | null {

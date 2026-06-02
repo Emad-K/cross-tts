@@ -1,10 +1,6 @@
-import Electrobun, {
-	BrowserView,
-	BrowserWindow,
-	Updater,
-} from "electrobun/bun";
+import { join } from "node:path";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
-import type { AppRpcSchema } from "../shared/appRpc";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
 	loadAppSessionFile,
@@ -23,127 +19,119 @@ import {
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
 
-const DEV_SERVER_PORT = 5173;
-const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
-
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
 let kokoroHubBaseUrl: string | null = null;
+let mainWindow: BrowserWindow | null = null;
 
-try {
-	kokoroHubBaseUrl = startKokoroHubServer();
-	console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
-} catch (e) {
-	console.warn("Kokoro hub server failed to start; using remote HF:", e);
+function registerRpcHandlers(): void {
+	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubBaseUrl);
+	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
+	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
+		if (!mainWindow) return;
+		const f = mainWindow.getBounds();
+		saveAppSessionFile({
+			version: APP_SESSION_VERSION,
+			window: { x: f.x, y: f.y, width: f.width, height: f.height },
+			web,
+		});
+	});
+	ipcMain.handle("pickDocument", () => pickDocument(mainWindow));
+	ipcMain.handle(
+		"readDocumentAtPath",
+		(_event, { filePath }: { filePath: string }) =>
+			readDocumentAtPath(filePath),
+	);
+	ipcMain.handle(
+		"getEpubChapterContent",
+		(
+			_event,
+			{ filePath, chapterId }: { filePath: string; chapterId: string },
+		) => getEpubChapterContent(filePath, chapterId),
+	);
+	ipcMain.handle(
+		"exportTtsRulesToFile",
+		(
+			_event,
+			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
+		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
+	);
+	ipcMain.handle("pickTextDocument", async () => {
+		const doc = await pickDocument(mainWindow);
+		return doc?.format === "txt" ? doc : null;
+	});
+	ipcMain.handle(
+		"readTextDocumentAtPath",
+		(_event, { filePath }: { filePath: string }) =>
+			readTextDocumentAtPath(filePath),
+	);
+
+	ipcMain.on("closeWindow", () => mainWindow?.close());
+	ipcMain.on("minimizeWindow", () => mainWindow?.minimize());
+	ipcMain.on("maximizeWindow", () => {
+		if (!mainWindow) return;
+		if (mainWindow.isMaximized()) {
+			mainWindow.unmaximize();
+		} else {
+			mainWindow.maximize();
+		}
+	});
 }
 
-Electrobun.events.on("before-quit", () => {
+function createWindow(): void {
+	const savedSession = loadAppSessionFile();
+	const frame = pickInitialWindowFrame(savedSession, FALLBACK_FRAME);
+
+	mainWindow = new BrowserWindow({
+		title: "Cross TTS",
+		x: frame.x,
+		y: frame.y,
+		width: frame.width,
+		height: frame.height,
+		webPreferences: {
+			preload: join(__dirname, "../preload/index.js"),
+			contextIsolation: true,
+			nodeIntegration: false,
+			sandbox: false,
+		},
+	});
+
+	const devUrl = process.env["ELECTRON_RENDERER_URL"];
+	if (!app.isPackaged && devUrl) {
+		void mainWindow.loadURL(devUrl);
+	} else {
+		void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+	}
+
+	mainWindow.on("closed", () => {
+		mainWindow = null;
+	});
+}
+
+app.whenReady().then(() => {
+	try {
+		kokoroHubBaseUrl = startKokoroHubServer();
+		console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
+	} catch (e) {
+		console.warn("Kokoro hub server failed to start; using remote HF:", e);
+	}
+
+	registerRpcHandlers();
+	createWindow();
+
+	app.on("activate", () => {
+		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+
+	console.log("Cross TTS started!");
+});
+
+app.on("before-quit", () => {
 	stopKokoroHubServer();
 });
 
-const savedSession = loadAppSessionFile();
-const initialFrame = pickInitialWindowFrame(savedSession, FALLBACK_FRAME);
-
-let mainWindow: BrowserWindow | null = null;
-
-const appRpc = BrowserView.defineRPC<AppRpcSchema>({
-	handlers: {
-		requests: {
-			getKokoroHubBaseUrl: () => kokoroHubBaseUrl,
-			loadAppSession: () => loadAppSessionFile(),
-			saveAppSession: (web: WebPersistedSlice) => {
-				if (!mainWindow) return;
-				const f = mainWindow.getFrame();
-				saveAppSessionFile({
-					version: APP_SESSION_VERSION,
-					window: {
-						x: f.x,
-						y: f.y,
-						width: f.width,
-						height: f.height,
-					},
-					web,
-				});
-			},
-			pickDocument: () => pickDocument(),
-			readDocumentAtPath: ({ filePath }) => readDocumentAtPath(filePath),
-			getEpubChapterContent: ({ filePath, chapterId }) =>
-				getEpubChapterContent(filePath, chapterId),
-			exportTtsRulesToFile: ({ json, suggestedFileName }) =>
-				exportTtsRulesToFile(json, suggestedFileName),
-			pickTextDocument: async () => {
-				const doc = await pickDocument();
-				return doc?.format === "txt" ? doc : null;
-			},
-			readTextDocumentAtPath: ({ filePath }) =>
-				readTextDocumentAtPath(filePath),
-		},
-		messages: {
-			closeWindow: () => {
-				mainWindow?.close();
-			},
-			minimizeWindow: () => {
-				mainWindow?.minimize();
-			},
-			maximizeWindow: () => {
-				if (!mainWindow) return;
-				if (mainWindow.isMaximized()) {
-					mainWindow.unmaximize();
-				} else {
-					mainWindow.maximize();
-				}
-			},
-		},
-	},
-});
-
-// Check if Vite dev server is running for HMR
-async function getMainViewUrl(): Promise<string> {
-	const channel = await Updater.localInfo.channel();
-	if (channel === "dev") {
-		try {
-			await fetch(DEV_SERVER_URL, { method: "HEAD" });
-			console.log(`HMR enabled: Using Vite dev server at ${DEV_SERVER_URL}`);
-			return DEV_SERVER_URL;
-		} catch {
-			console.log(
-				"Vite dev server not running. Run 'bun run dev:hmr' for HMR support.",
-			);
-		}
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
 	}
-	return "views://mainview/index.html";
-}
-
-// Create the main application window
-const url = await getMainViewUrl();
-
-mainWindow = new BrowserWindow({
-	title: "Cross TTS",
-	url,
-	frame: initialFrame,
-	// "hidden" forces Titled:false in Electrobun and drops the resize frame on
-	// Windows. "hiddenInset" keeps Titled + FullSizeContentView for custom chrome.
-	titleBarStyle: "default",
-	rpc: appRpc,
 });
-
-// After load, force a proper layout pass
-// This is a workaround for a bug in Electrobun where the window is not properly sized after loading
-// For the love of god, if you know a better way to do this, please do it.
-mainWindow.webview.on("dom-ready", () => {
-  setTimeout(() => {
-    const frame = mainWindow.getFrame();
-    
-    // Nudge by 1px then restore
-    mainWindow.setFrame(frame.x, frame.y, frame.width + 1, frame.height);
-    
-    // Restore immediately after
-    setTimeout(() => {
-      mainWindow.setFrame(frame.x, frame.y, frame.width, frame.height);
-    }, 16); // ~1 frame
-  }, 10); // Small delay after dom-ready
-});
-
-void mainWindow;
-
-console.log("Cross TTS started!");
