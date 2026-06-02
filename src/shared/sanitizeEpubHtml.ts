@@ -21,7 +21,7 @@ const sanitizeOptions: sanitizeHtml.IOptions = {
 
 /**
  * Sanitize EPUB chapter HTML before parsing or rendering.
- * Uses `sanitize-html` (htmlparser2) — no jsdom, safe for Electrobun's Bun bundle.
+ * Uses `sanitize-html` (htmlparser2) — no jsdom, safe in the Node main-process bundle.
  */
 export function sanitizeEpubHtml(html: string): string {
 	return sanitizeHtml(html, sanitizeOptions);

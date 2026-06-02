@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
@@ -13,7 +13,6 @@ import {
 	readDocumentAtPath,
 } from "./documentIo";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
-import { readTextDocumentAtPath } from "./textDocumentIo";
 import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
@@ -56,26 +55,6 @@ function registerRpcHandlers(): void {
 			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
 		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
 	);
-	ipcMain.handle("pickTextDocument", async () => {
-		const doc = await pickDocument(mainWindow);
-		return doc?.format === "txt" ? doc : null;
-	});
-	ipcMain.handle(
-		"readTextDocumentAtPath",
-		(_event, { filePath }: { filePath: string }) =>
-			readTextDocumentAtPath(filePath),
-	);
-
-	ipcMain.on("closeWindow", () => mainWindow?.close());
-	ipcMain.on("minimizeWindow", () => mainWindow?.minimize());
-	ipcMain.on("maximizeWindow", () => {
-		if (!mainWindow) return;
-		if (mainWindow.isMaximized()) {
-			mainWindow.unmaximize();
-		} else {
-			mainWindow.maximize();
-		}
-	});
 }
 
 function createWindow(): void {
@@ -84,6 +63,7 @@ function createWindow(): void {
 
 	mainWindow = new BrowserWindow({
 		title: "Cross TTS",
+		autoHideMenuBar: true,
 		x: frame.x,
 		y: frame.y,
 		width: frame.width,
@@ -109,6 +89,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+	// Remove the default application menu (File / Edit / View / …). This app
+	// has no menu commands; keyboard accelerators are handled in the renderer.
+	Menu.setApplicationMenu(null);
+
 	try {
 		kokoroHubBaseUrl = startKokoroHubServer();
 		console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
