@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Verify tag matches package.json version
         run: |
@@ -75,10 +78,24 @@ jobs:
       - name: List release files
         run: find release-assets -type f | sort
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          generate_release_notes: true
-          files: release-assets/**/*
+      # Pick the previous release by version order, not git ancestry. Release
+      # tags have historically landed off main's lineage (squash-merges), so
+      # GitHub's auto "previous tag" detection walks back to v1.0.0 and dumps
+      # every PR into the notes. Selecting the prior tag explicitly keeps the
+      # changelog scoped to changes since the last release.
+      - name: Compute previous release tag
+        id: prev
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep -vx "${GITHUB_REF_NAME}" | head -1)
+          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous release tag: ${PREV:-<none>}"
+
+      - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS=(--title "${GITHUB_REF_NAME}" --generate-notes)
+          if [ -n "${{ steps.prev.outputs.tag }}" ]; then
+            ARGS+=(--notes-start-tag "${{ steps.prev.outputs.tag }}")
+          fi
+          gh release create "${GITHUB_REF_NAME}" "${ARGS[@]}" release-assets/**/*
