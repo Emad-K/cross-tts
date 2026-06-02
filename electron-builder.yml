@@ -14,6 +14,9 @@ files:
 asar: true
 npmRebuild: false
 
+# Consistent, space-free names with version + arch for every target.
+artifactName: ${name}-${version}-${arch}.${ext}
+
 win:
   icon: assets/windows/icon_256x256.png
   target:
@@ -28,10 +31,10 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-${version}-Setup.${ext}
+  artifactName: ${name}-${version}-setup-${arch}.${ext}
 
 portable:
-  artifactName: ${productName}-${version}-portable.${ext}
+  artifactName: ${name}-${version}-portable-${arch}.${ext}
 
 mac:
   icon: assets/icon.iconset
