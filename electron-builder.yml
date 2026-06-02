@@ -1,0 +1,57 @@
+appId: dev.cross-tts.app
+productName: Cross TTS
+copyright: Cross TTS
+
+directories:
+  output: release
+  buildResources: assets
+
+# electron-vite emits main/preload/renderer here; package.json is needed for asar.
+files:
+  - out/**
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,*.flow,*.mk,*.d.ts,*.map}"
+
+asar: true
+npmRebuild: false
+
+win:
+  icon: assets/windows/icon_256x256.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+mac:
+  icon: assets/icon.iconset
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+linux:
+  icon: assets/linux/icon_256x256.png
+  category: AudioVideo
+  maintainer: Emad Kazemi <emadkazemi310@gmail.com>
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64

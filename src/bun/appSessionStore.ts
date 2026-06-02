@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Utils } from "electrobun/bun";
+import { app } from "electron";
 import {
 	APP_SESSION_VERSION,
 	type AppSessionFileV1,
@@ -13,7 +13,7 @@ import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 const SESSION_NAME = "app-session.json";
 
 export function appSessionPath(): string {
-	return join(Utils.paths.userData, SESSION_NAME);
+	return join(app.getPath("userData"), SESSION_NAME);
 }
 
 function isSaneFrame(f: StoredWindowFrame): boolean {
@@ -107,12 +107,12 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 
 export function saveAppSessionFile(session: AppSessionFileV1): void {
 	const p = appSessionPath();
-	mkdirSync(Utils.paths.userData, { recursive: true });
+	mkdirSync(app.getPath("userData"), { recursive: true });
 	const safe: AppSessionFileV1 = {
 		...session,
 		web: webForDisk(session.web),
 	};
-	Bun.write(p, JSON.stringify(safe, null, "\t"));
+	writeFileSync(p, JSON.stringify(safe, null, "\t"));
 }
 
 export function pickInitialWindowFrame(

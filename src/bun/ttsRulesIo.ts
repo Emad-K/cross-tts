@@ -1,5 +1,5 @@
-import { join } from "node:path";
-import { Utils } from "electrobun/bun";
+import { writeFile } from "node:fs/promises";
+import { type BrowserWindow, dialog, shell } from "electron";
 
 export type ExportTtsRulesFileResult = {
 	cancelled: boolean;
@@ -7,31 +7,34 @@ export type ExportTtsRulesFileResult = {
 };
 
 /**
- * Ask for a destination folder and write the JSON export there, then reveal it
+ * Ask for a destination file and write the JSON export there, then reveal it
  * in the system file manager.
  */
 export async function exportTtsRulesToFile(
+	parent: BrowserWindow | null,
 	json: string,
 	suggestedFileName: string,
 ): Promise<ExportTtsRulesFileResult> {
-	const chosen = await Utils.openFileDialog({
-		startingFolder: "~/",
-		allowedFileTypes: "*",
-		canChooseFiles: false,
-		canChooseDirectory: true,
-		allowsMultipleSelection: false,
-	});
+	const options = {
+		defaultPath: suggestedFileName,
+		filters: [
+			{ name: "JSON", extensions: ["json"] },
+			{ name: "All Files", extensions: ["*"] },
+		],
+	};
+	const result = parent
+		? await dialog.showSaveDialog(parent, options)
+		: await dialog.showSaveDialog(options);
 
-	const dir = chosen[0]?.trim();
-	if (!dir) {
+	if (result.canceled || !result.filePath) {
 		return { cancelled: true, filePath: null };
 	}
 
-	const filePath = join(dir, suggestedFileName);
-	await Bun.write(filePath, json);
+	const filePath = result.filePath;
+	await writeFile(filePath, json, "utf8");
 
 	try {
-		Utils.showItemInFolder(filePath);
+		shell.showItemInFolder(filePath);
 	} catch {
 		// Export still succeeded if reveal fails.
 	}

@@ -71,3 +71,24 @@ export type ReadTextDocumentResult = Extract<
 	ReadDocumentResult,
 	{ format: "txt" }
 >;
+
+type AppRequests = AppRpcSchema["bun"]["requests"];
+type AppMessages = AppRpcSchema["bun"]["messages"];
+
+/**
+ * Typed bridge exposed on `window.api` by the Electron preload script.
+ * `request.*` map to `ipcMain.handle` (async); `send.*` map to
+ * `ipcMain.on` (fire-and-forget window-chrome messages).
+ */
+export type AppApi = {
+	request: {
+		[K in keyof AppRequests]: (
+			...args: AppRequests[K]["params"] extends void
+				? []
+				: [AppRequests[K]["params"]]
+		) => Promise<AppRequests[K]["response"]>;
+	};
+	send: {
+		[K in keyof AppMessages]: () => void;
+	};
+};

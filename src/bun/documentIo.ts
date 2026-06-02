@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { Utils } from "electrobun/bun";
+import { type BrowserWindow, dialog } from "electron";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -14,6 +14,11 @@ function isEpubPath(path: string): boolean {
 function pathsFromOpenDialogResult(paths: string[]): string[] {
 	return paths.map((p) => p.trim()).filter((p) => p.length > 0);
 }
+
+const DOCUMENT_FILE_FILTERS = [
+	{ name: "Documents", extensions: ["txt", "epub"] },
+	{ name: "All Files", extensions: ["*"] },
+];
 
 export async function readDocumentAtPath(
 	filePath: string,
@@ -34,14 +39,20 @@ export async function readDocumentAtPath(
 	return txt;
 }
 
-export async function pickDocument(): Promise<ReadDocumentResult | null> {
-	const chosen = await Utils.openFileDialog({
-		allowedFileTypes: "*",
-		canChooseFiles: true,
-		canChooseDirectory: false,
-		allowsMultipleSelection: false,
-	});
-	const filePath = pathsFromOpenDialogResult(chosen)[0];
+export async function pickDocument(
+	parent: BrowserWindow | null,
+): Promise<ReadDocumentResult | null> {
+	const result = parent
+		? await dialog.showOpenDialog(parent, {
+				properties: ["openFile"],
+				filters: DOCUMENT_FILE_FILTERS,
+			})
+		: await dialog.showOpenDialog({
+				properties: ["openFile"],
+				filters: DOCUMENT_FILE_FILTERS,
+			});
+	if (result.canceled) return null;
+	const filePath = pathsFromOpenDialogResult(result.filePaths)[0];
 	if (!filePath) return null;
 	return readDocumentAtPath(filePath);
 }
