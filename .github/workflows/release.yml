@@ -93,9 +93,19 @@ jobs:
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
+          shopt -s globstar nullglob
+          assets=()
+          for f in release-assets/**/*; do
+            [ -f "$f" ] && assets+=("$f")
+          done
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::No release assets found under release-assets/"
+            exit 1
+          fi
           ARGS=(--title "${GITHUB_REF_NAME}" --generate-notes)
           if [ -n "${{ steps.prev.outputs.tag }}" ]; then
             ARGS+=(--notes-start-tag "${{ steps.prev.outputs.tag }}")
           fi
-          gh release create "${GITHUB_REF_NAME}" "${ARGS[@]}" release-assets/**/*
+          gh release create "${GITHUB_REF_NAME}" "${ARGS[@]}" "${assets[@]}"
