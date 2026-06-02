@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { getEpubChapterContent } from "@/lib/electrobunRpc";
+import { getEpubChapterContent } from "@/lib/desktopBridge";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { cn } from "@/lib/utils";
 import {

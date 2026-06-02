@@ -7,9 +7,9 @@ import {
 } from "react";
 import {
 	getEpubChapterContent,
-	isElectrobunWebview,
+	isDesktopApp,
 	pickDocument,
-} from "@/lib/electrobunRpc";
+} from "@/lib/desktopBridge";
 import { ReaderShell } from "./ReaderShell";
 import { TtsRulesSettingsDialog } from "./ttsRules/TtsRulesSettingsDialog";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
@@ -263,7 +263,7 @@ export function ReaderApp() {
 	}, [document, activeChapterId, sessionReady]);
 
 	const openFilePicker = useCallback(() => {
-		if (!isElectrobunWebview()) {
+		if (!isDesktopApp()) {
 			inputRef.current?.click();
 			return;
 		}

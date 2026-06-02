@@ -1,4 +1,4 @@
-/** Set by `configureKokoroHubEnv` when running inside Electrobun (localhost hub). */
+/** Set by `configureKokoroHubEnv` when running inside the Electron app (localhost hub). */
 let hubBaseUrl: string | null = null;
 
 export function setKokoroHubBaseUrl(url: string | null): void {

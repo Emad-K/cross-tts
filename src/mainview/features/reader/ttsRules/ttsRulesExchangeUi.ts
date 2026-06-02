@@ -5,8 +5,8 @@ import {
 import type { TtsTextRulesState } from "@shared/ttsTextRules";
 import {
 	exportTtsRulesToFile as exportTtsRulesToFileRpc,
-	isElectrobunWebview,
-} from "@/lib/electrobunRpc";
+	isDesktopApp,
+} from "@/lib/desktopBridge";
 
 export type ExportTtsRulesUiResult =
 	| { ok: true; filePath: string; via: "native" }
@@ -44,7 +44,7 @@ export async function exportTtsRulesForUser(
 	const filename = exportFilenameForDate();
 	const json = serializeTtsRulesExport(state, true);
 
-	if (isElectrobunWebview()) {
+	if (isDesktopApp()) {
 		const result = await exportTtsRulesToFileRpc(json, filename);
 		if (result.cancelled) {
 			return { ok: false, cancelled: true };

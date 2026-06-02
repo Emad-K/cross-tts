@@ -4,7 +4,7 @@ import {
 	loadAppSession as loadAppSessionRpc,
 	readDocumentAtPath,
 	saveAppSession as saveAppSessionRpc,
-} from "@/lib/electrobunRpc";
+} from "@/lib/desktopBridge";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";

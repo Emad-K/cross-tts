@@ -1,6 +1,6 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { getKokoroHubBaseUrl } from "@/lib/electrobunRpc";
+import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
 import { setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
@@ -55,10 +55,9 @@ type KokoroFromPretrainedDtype = NonNullable<
 >["dtype"];
 
 /**
- * Kokoro-js `device: "webgpu"` uses the **webview** standard WebGPU API
- * (`navigator.gpu` + ONNX Runtime WebGPU EP). That is separate from Electrobun's
- * Bun-side Dawn bundle (`build.*.bundleWGPU`, `GpuWindow`, `webgpu` from
- * `electrobun/bun`), which does not inject a GPU into page JS.
+ * Kokoro-js `device: "webgpu"` uses the renderer's standard WebGPU API
+ * (`navigator.gpu` + ONNX Runtime WebGPU EP), available in the Electron
+ * (Chromium) renderer process.
  *
  * Official kokoro-js note: with `device: "webgpu"`, use `dtype: "fp32"` — q8 on
  * WebGPU can give bad / garbage-sounding output.

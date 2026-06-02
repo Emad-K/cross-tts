@@ -38,7 +38,7 @@ export function voiceBinUrl(voiceId: string): string {
 	return `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
 }
 
-/** Same path layout as Hugging Face, but served from the Electrobun localhost hub. */
+/** Same path layout as Hugging Face, but served from the local Kokoro hub. */
 export function voiceBinUrlFromHub(
 	hubBaseUrl: string,
 	voiceId: string,
