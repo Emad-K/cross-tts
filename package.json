@@ -1,6 +1,6 @@
 {
 	"name": "cross-tts",
-	"version": "1.6.0",
+	"version": "1.6.1",
 	"description": "Cross-platform TTS reader (Electron + React + Vite)",
 	"author": {
 		"name": "Emad Kazemi",
