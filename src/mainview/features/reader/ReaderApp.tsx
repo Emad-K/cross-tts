@@ -11,7 +11,8 @@ import {
 	pickDocument,
 } from "@/lib/desktopBridge";
 import { ReaderShell } from "./ReaderShell";
-import { TtsRulesSettingsDialog } from "./ttsRules/TtsRulesSettingsDialog";
+import { SettingsDialog } from "./settings/SettingsDialog";
+import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
 	hydratePersistedSession,
@@ -116,6 +117,10 @@ export function ReaderApp() {
 		return () => {
 			cancelled = true;
 		};
+	}, []);
+
+	useEffect(() => {
+		void useAppSettingsStore.getState().hydrate();
 	}, []);
 
 	useEffect(() => {
@@ -335,10 +340,7 @@ export function ReaderApp() {
 					setDocument(SAMPLE_TXT_DOCUMENT);
 				}}
 			/>
-			<TtsRulesSettingsDialog
-				open={settingsOpen}
-				onOpenChange={setSettingsOpen}
-			/>
+			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 		</div>
 	);
 }

@@ -18,6 +18,12 @@ const api: AppApi = {
 			ipcRenderer.invoke("getEpubChapterContent", params),
 		exportTtsRulesToFile: (params) =>
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
+		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
+		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
+		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
+		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
+		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
+		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
 	},
 };
 

@@ -115,13 +115,56 @@ export const EPUB_SANITIZE_ALLOWED_ATTR = [
 	"epub:type",
 ] as string[];
 
-/** Regex: drop void/media tags before generic strip (must match EPUB_VOID_NO_TEXT_TAGS). */
-const NO_TEXT_VOID_TAG_PATTERN =
-	/<(?:hr|img|input|link|meta|area|col|embed|param|source|track|wbr|base|iframe|object|video|audio|canvas|picture)\b[^>]*\/?>/gi;
+/** Build a regex-escaped `tag1|tag2|…` alternation for the given tags. */
+function tagAlternation(tags: Iterable<string>): string {
+	return [...tags]
+		.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+		.join("|");
+}
+
+/**
+ * Regex: drop void / no-text tags before the generic strip.
+ * Derived from {@link EPUB_VOID_NO_TEXT_TAGS} so the regex (TTS) path and the
+ * DOM read-along walk can never disagree about which tags add zero characters
+ * (the class of bug behind hr/img highlight drift).
+ */
+const NO_TEXT_VOID_TAG_PATTERN = new RegExp(
+	`<(?:${tagAlternation(EPUB_VOID_NO_TEXT_TAGS)})\\b[^>]*\\/?>`,
+	"gi",
+);
 
 export function stripNoTextVoidTags(html: string): string {
 	return html.replace(NO_TEXT_VOID_TAG_PATTERN, "");
 }
+
+/**
+ * Regex: remove skip-tag subtrees (opening tag + contents + closing tag), then
+ * any leftover self-closing skip tags. Mirrors the DOM walk, which drops these
+ * elements without descending into them. Derived from {@link EPUB_SKIP_TAGS}.
+ */
+const SKIP_SUBTREE_PATTERN = new RegExp(
+	`<(${tagAlternation(EPUB_SKIP_TAGS)})\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>`,
+	"gi",
+);
+const SKIP_VOID_PATTERN = new RegExp(
+	`<(?:${tagAlternation(EPUB_SKIP_TAGS)})\\b[^>]*\\/?>`,
+	"gi",
+);
+
+export function stripSkipTags(html: string): string {
+	return html
+		.replace(SKIP_SUBTREE_PATTERN, " ")
+		.replace(SKIP_VOID_PATTERN, " ");
+}
+
+/**
+ * Regex: closing block tag → paragraph break. Derived from {@link EPUB_BLOCK_TAGS}
+ * so it stays aligned with the DOM walk's `\n\n`-after-block behavior.
+ */
+export const BLOCK_END_TAG_PATTERN = new RegExp(
+	`</(?:${tagAlternation(EPUB_BLOCK_TAGS)})(?:\\s[^>]*)?>`,
+	"gi",
+);
 
 export function isEpubSkipTag(tag: string): boolean {
 	return EPUB_SKIP_TAGS.has(tag);

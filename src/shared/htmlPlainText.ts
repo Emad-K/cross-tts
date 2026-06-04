@@ -1,7 +1,9 @@
 import {
+	BLOCK_END_TAG_PATTERN,
 	EPUB_BLOCK_TAGS,
 	EPUB_SKIP_TAGS,
 	stripNoTextVoidTags,
+	stripSkipTags,
 } from "./epubHtmlPolicy";
 
 const ENTITY_MAP: Record<string, string> = {
@@ -14,9 +16,6 @@ const ENTITY_MAP: Record<string, string> = {
 };
 
 export { EPUB_BLOCK_TAGS, EPUB_SKIP_TAGS };
-
-const BLOCK_END_TAGS =
-	/(?:<\/)(p|div|section|article|h[1-6]|li|tr|blockquote|pre|figcaption|dd)(?:\s[^>]*)?>/gi;
 
 export function decodeHtmlEntities(raw: string): string {
 	return raw
@@ -57,11 +56,10 @@ export function extractBodyHtml(html: string): string {
 export function htmlToPlainText(html: string): string {
 	const body = extractBodyHtml(html);
 	let s = body;
-	s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
-	s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+	s = stripSkipTags(s);
 	s = stripNoTextVoidTags(s);
 	s = s.replace(/<br\s*\/?>/gi, "\n");
-	s = s.replace(BLOCK_END_TAGS, "\n\n");
+	s = s.replace(BLOCK_END_TAG_PATTERN, "\n\n");
 	s = s.replace(/<[^>]+>/g, " ");
 	s = decodeHtmlEntities(s);
 	return finalizePlainText(s);

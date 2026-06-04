@@ -5,3 +5,6 @@ artifacts/
 out/
 release/
 *.tsbuildinfo
+
+# Local Claude Code session/config
+.claude/

@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { app } from "electron";
 import {
 	APP_SESSION_VERSION,
 	type AppSessionFileV1,
@@ -9,11 +8,12 @@ import {
 	defaultWebPersistedSlice,
 } from "../shared/appSession";
 import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
+import { dataDir } from "./appConfigStore";
 
 const SESSION_NAME = "app-session.json";
 
 export function appSessionPath(): string {
-	return join(app.getPath("userData"), SESSION_NAME);
+	return join(dataDir(), SESSION_NAME);
 }
 
 function isSaneFrame(f: StoredWindowFrame): boolean {
@@ -107,7 +107,7 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 
 export function saveAppSessionFile(session: AppSessionFileV1): void {
 	const p = appSessionPath();
-	mkdirSync(app.getPath("userData"), { recursive: true });
+	mkdirSync(dataDir(), { recursive: true });
 	const safe: AppSessionFileV1 = {
 		...session,
 		web: webForDisk(session.web),

@@ -1,4 +1,5 @@
 import type { AppApi } from "@shared/appRpc";
+import type { AppConfigInfo } from "@shared/appConfig";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -69,4 +70,42 @@ export async function exportTtsRulesToFile(
 	const b = bridge();
 	if (!b) return { cancelled: true, filePath: null };
 	return b.request.exportTtsRulesToFile({ json, suggestedFileName });
+}
+
+export async function getAppConfig(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getAppConfig();
+}
+
+export async function setGpuEnabled(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setGpuEnabled({ enabled });
+}
+
+export async function chooseDataDirectory(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.chooseDataDirectory();
+}
+
+export async function resetDataDirectory(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.resetDataDirectory();
+}
+
+export async function revealDataDirectory(): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.revealDataDirectory();
+}
+
+export async function relaunchApp(): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.relaunchApp();
 }

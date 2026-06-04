@@ -11,14 +11,13 @@ import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { app } from "electron";
+import { modelCacheDir } from "./appConfigStore";
 
 const HF_ORIGIN = "https://huggingface.co";
 
 let hub: Server | null = null;
 let hubBaseUrl: string | null = null;
-export const hubCacheDirectory = () =>
-	join(app.getPath("userData"), "kokoro-hf-hub");
+export const hubCacheDirectory = () => modelCacheDir();
 const inFlight = new Map<string, Promise<void>>();
 
 function safeHubFile(urlPathname: string): string | null {

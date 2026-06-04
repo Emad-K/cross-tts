@@ -4,13 +4,6 @@ import { parseTtsRulesExport } from "@shared/ttsRulesExchange";
 import type { PronunciationRule, RegexReplaceRule } from "@shared/ttsTextRules";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,12 +14,12 @@ import {
 } from "@/components/ui/accordion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useTtsRulesStore } from "./ttsRulesStore";
-import { exportTtsRulesForUser } from "./ttsRulesExchangeUi";
+import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
+import { exportTtsRulesForUser } from "../ttsRules/ttsRulesExchangeUi";
 
-export type TtsRulesSettingsDialogProps = {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
+export type TtsRulesPanelProps = {
+	/** True when this panel is the active settings section (drives scroll-into-view). */
+	active: boolean;
 };
 
 function newId(prefix: string): string {
@@ -161,11 +154,7 @@ function RulesAccordionSection({
 				<div className="flex flex-col gap-2.5 pb-1">
 					<ScrollArea className="h-[min(15rem,40vh)] w-full rounded-md border border-border/60 bg-muted/5">
 						<div className="p-1.5 pr-3">
-							{isEmpty ? (
-								<RulesEmptyState message={emptyMessage} />
-							) : (
-								list
-							)}
+							{isEmpty ? <RulesEmptyState message={emptyMessage} /> : list}
 						</div>
 					</ScrollArea>
 					<Button
@@ -254,9 +243,7 @@ function InlineRegexForm({
 				<Checkbox
 					id="regex-form-case"
 					checked={draft.caseSensitive}
-					onCheckedChange={(v) =>
-						onDraftChange({ caseSensitive: v === true })
-					}
+					onCheckedChange={(v) => onDraftChange({ caseSensitive: v === true })}
 				/>
 				<Label htmlFor="regex-form-case" className="cursor-pointer text-sm">
 					Case sensitive
@@ -317,9 +304,7 @@ function InlinePronForm({
 				<Checkbox
 					id="pron-form-case"
 					checked={draft.caseSensitive}
-					onCheckedChange={(v) =>
-						onDraftChange({ caseSensitive: v === true })
-					}
+					onCheckedChange={(v) => onDraftChange({ caseSensitive: v === true })}
 				/>
 				<Label htmlFor="pron-form-case" className="cursor-pointer text-sm">
 					Case sensitive
@@ -338,10 +323,11 @@ function InlinePronForm({
 	);
 }
 
-export function TtsRulesSettingsDialog({
-	open,
-	onOpenChange,
-}: TtsRulesSettingsDialogProps) {
+/**
+ * Text-cleanup and pronunciation rules editor. Rendered as a section inside the
+ * unified Settings dialog (see {@link SettingsDialog}).
+ */
+export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 	const regexRules = useTtsRulesStore((s) => s.regexRules);
 	const pronunciationRules = useTtsRulesStore((s) => s.pronunciationRules);
 	const setRegexEnabled = useTtsRulesStore((s) => s.setRegexEnabled);
@@ -395,7 +381,7 @@ export function TtsRulesSettingsDialog({
 				: null;
 
 	useLayoutEffect(() => {
-		if (!open || !editingRuleId) return;
+		if (!active || !editingRuleId) return;
 
 		const scroll = () => {
 			const el = inlineEditRef.current;
@@ -409,7 +395,7 @@ export function TtsRulesSettingsDialog({
 			window.clearTimeout(t1);
 			window.clearTimeout(t2);
 		};
-	}, [open, editingRuleId]);
+	}, [active, editingRuleId]);
 
 	const closeRegexForm = () => {
 		setRegexFormKey(null);
@@ -585,8 +571,7 @@ export function TtsRulesSettingsDialog({
 				return;
 			}
 			const total =
-				result.data.regexRules.length +
-				result.data.pronunciationRules.length;
+				result.data.regexRules.length + result.data.pronunciationRules.length;
 			if (total === 0) {
 				setImportError("File contains no custom rules.");
 				return;
@@ -605,65 +590,66 @@ export function TtsRulesSettingsDialog({
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="dark flex h-[min(90vh,40rem)] max-h-[min(90vh,40rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg [&>button]:z-10">
-				<DialogHeader className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12">
-					<DialogTitle>TTS text rules</DialogTitle>
-					<DialogDescription>
-						Clean up chunk text before speech. Highlights still use the
-						original text. Pronunciation overrides inject IPA phonemes
-						(English voices only; not markdown).
-					</DialogDescription>
-					<div className="flex flex-wrap items-center gap-2 pt-2">
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="gap-1.5"
-							onClick={handleExport}
-						>
-							<Download className="size-4" aria-hidden />
-							Export…
-						</Button>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="gap-1.5"
-							onClick={handleImportClick}
-						>
-							<Upload className="size-4" aria-hidden />
-							Import JSON
-						</Button>
-						<input
-							ref={importInputRef}
-							type="file"
-							accept=".json,application/json"
-							className="sr-only"
-							aria-hidden
-							tabIndex={-1}
-							onChange={(e) => {
-								const file = e.target.files?.[0];
-								e.target.value = "";
-								void handleImportFile(file);
-							}}
-						/>
-					</div>
-					{importError ? (
-						<p className="text-xs text-destructive">{importError}</p>
-					) : null}
-					{importNotice ? (
-						<p className="text-xs text-muted-foreground">{importNotice}</p>
-					) : null}
-				</DialogHeader>
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4">
+				<h2 className="text-base font-semibold leading-none">
+					Text &amp; pronunciation rules
+				</h2>
+				<p className="text-sm text-muted-foreground">
+					Clean up chunk text before speech. Highlights still use the original
+					text. Pronunciation overrides inject IPA phonemes (English voices
+					only; not markdown).
+				</p>
+				<div className="flex flex-wrap items-center gap-2 pt-2">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="gap-1.5"
+						onClick={handleExport}
+					>
+						<Download className="size-4" aria-hidden />
+						Export…
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="gap-1.5"
+						onClick={handleImportClick}
+					>
+						<Upload className="size-4" aria-hidden />
+						Import JSON
+					</Button>
+					<input
+						ref={importInputRef}
+						type="file"
+						accept=".json,application/json"
+						className="sr-only"
+						aria-hidden
+						tabIndex={-1}
+						onChange={(e) => {
+							const file = e.target.files?.[0];
+							e.target.value = "";
+							void handleImportFile(file);
+						}}
+					/>
+				</div>
+				{importError ? (
+					<p className="text-xs text-destructive">{importError}</p>
+				) : null}
+				{importNotice ? (
+					<p className="text-xs text-muted-foreground">{importNotice}</p>
+				) : null}
+			</div>
 
-				<ScrollArea className="min-h-0 w-full flex-1">
-					<div className="px-6 py-4 pr-4">
-						<Accordion
-							type="multiple"
-							defaultValue={["regex", "pronunciation"]}
-							className="w-full"
-						>
+			<ScrollArea className="min-h-0 w-full flex-1">
+				<div className="px-6 py-4 pr-4">
+					<Accordion
+						type="multiple"
+						defaultValue={["regex", "pronunciation"]}
+						className="w-full"
+					>
 						<RulesAccordionSection
 							value="regex"
 							title="Text cleanup (regex)"
@@ -681,23 +667,21 @@ export function TtsRulesSettingsDialog({
 										<li key={rule.id} className="space-y-1.5">
 											<RuleRow
 												enabled={rule.enabled}
-												onEnabledChange={(v) =>
-													setRegexEnabled(rule.id, v)
-												}
+												onEnabledChange={(v) => setRegexEnabled(rule.id, v)}
 												checkboxId={`regex-en-${rule.id}`}
 												title={
 													<>
-													{rule.label}
-													{rule.builtIn ? (
-														<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-															(default)
-														</span>
-													) : null}
-													{rule.caseSensitive ? (
-														<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-															(case sensitive)
-														</span>
-													) : null}
+														{rule.label}
+														{rule.builtIn ? (
+															<span className="ml-1.5 text-xs font-normal text-muted-foreground">
+																(default)
+															</span>
+														) : null}
+														{rule.caseSensitive ? (
+															<span className="ml-1.5 text-xs font-normal text-muted-foreground">
+																(case sensitive)
+															</span>
+														) : null}
 													</>
 												}
 												actions={
@@ -726,19 +710,13 @@ export function TtsRulesSettingsDialog({
 												}
 											/>
 											{regexFormKey === rule.id ? (
-												<div
-													ref={inlineEditRef}
-													className="scroll-mt-2"
-												>
+												<div ref={inlineEditRef} className="scroll-mt-2">
 													<InlineRegexForm
 														draft={regexDraft}
 														error={regexError}
 														submitLabel="Save"
 														onDraftChange={(patch) => {
-															setRegexDraft((d) => ({
-																...d,
-																...patch,
-															}));
+															setRegexDraft((d) => ({ ...d, ...patch }));
 															setRegexError(null);
 														}}
 														onSubmit={submitRegexEdit}
@@ -828,19 +806,13 @@ export function TtsRulesSettingsDialog({
 												}
 											/>
 											{pronFormKey === rule.id ? (
-												<div
-													ref={inlineEditRef}
-													className="scroll-mt-2"
-												>
+												<div ref={inlineEditRef} className="scroll-mt-2">
 													<InlinePronForm
 														draft={pronDraft}
 														error={pronError}
 														submitLabel="Save"
 														onDraftChange={(patch) => {
-															setPronDraft((d) => ({
-																...d,
-																...patch,
-															}));
+															setPronDraft((d) => ({ ...d, ...patch }));
 															setPronError(null);
 														}}
 														onSubmit={submitPronEdit}
@@ -868,10 +840,9 @@ export function TtsRulesSettingsDialog({
 								) : null
 							}
 						/>
-						</Accordion>
-					</div>
-				</ScrollArea>
-			</DialogContent>
-		</Dialog>
+					</Accordion>
+				</div>
+			</ScrollArea>
+		</div>
 	);
 }

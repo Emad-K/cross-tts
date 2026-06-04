@@ -1,3 +1,4 @@
+import type { AppConfigInfo } from "./appConfig";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
 	EpubChapterContentResult,
@@ -36,6 +37,34 @@ export type AppRpcSchema = {
 		exportTtsRulesToFile: {
 			params: { json: string; suggestedFileName: string };
 			response: { cancelled: boolean; filePath: string | null };
+		};
+		getAppConfig: {
+			params: void;
+			response: AppConfigInfo;
+		};
+		setGpuEnabled: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
+		chooseDataDirectory: {
+			params: void;
+			response: AppConfigInfo | null;
+		};
+		/** Reset the data directory back to the OS default (needs relaunch to apply). */
+		resetDataDirectory: {
+			params: void;
+			response: AppConfigInfo;
+		};
+		/** Reveal the current data directory in the OS file manager. */
+		revealDataDirectory: {
+			params: void;
+			response: void;
+		};
+		/** Restart the app so a new data directory takes effect. */
+		relaunchApp: {
+			params: void;
+			response: void;
 		};
 	};
 };
