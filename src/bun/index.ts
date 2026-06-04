@@ -28,11 +28,14 @@ import {
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
-let kokoroHubBaseUrl: string | null = null;
+/** Resolves once the hub finished binding (or failed → null). */
+let kokoroHubReady: Promise<string | null> = Promise.resolve(null);
 let mainWindow: BrowserWindow | null = null;
 
 function registerRpcHandlers(): void {
-	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubBaseUrl);
+	// Await hub readiness so the renderer never sees a transient null during
+	// startup and wrongly commits to the remote HuggingFace + browser cache.
+	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
 	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
 		if (!mainWindow) return;
@@ -142,7 +145,7 @@ function createWindow(): void {
 	});
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 	// Remove the default application menu (File / Edit / View / …). This app
 	// has no menu commands; keyboard accelerators are handled in the renderer.
 	Menu.setApplicationMenu(null);
@@ -150,17 +153,22 @@ app.whenReady().then(() => {
 	registerRpcHandlers();
 	createWindow();
 
-	try {
-		kokoroHubBaseUrl = startKokoroHubServer();
-		console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
-	} catch (e) {
-		mainLog({
-			level: "warn",
-			source: "models",
-			message: "Local model cache server failed to start; using remote HuggingFace.",
-			detail: e instanceof Error ? e.message : String(e),
+	kokoroHubReady = startKokoroHubServer()
+		.then((url) => {
+			console.log(`Kokoro hub URL (for webview): ${url}`);
+			return url;
+		})
+		.catch((e: unknown) => {
+			mainLog({
+				level: "warn",
+				source: "models",
+				message:
+					"Local model cache server failed to start; using remote HuggingFace.",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+			return null;
 		});
-	}
+	await kokoroHubReady;
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();

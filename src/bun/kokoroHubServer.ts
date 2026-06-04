@@ -83,14 +83,14 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	}
 }
 
-export function startKokoroHubServer(): string {
+export function startKokoroHubServer(): Promise<string> {
 	if (hub && hubBaseUrl) {
-		return hubBaseUrl;
+		return Promise.resolve(hubBaseUrl);
 	}
 	mkdirSync(hubCacheDirectory(), { recursive: true });
 	console.log(`Kokoro HF files on disk: ${hubCacheDirectory()}`);
 
-	hub = createServer((req, res) => {
+	const server = createServer((req, res) => {
 		void (async () => {
 			const u = new URL(req.url ?? "/", "http://127.0.0.1");
 			if (req.method !== "GET") {
@@ -134,13 +134,32 @@ export function startKokoroHubServer(): string {
 		})();
 	});
 
-	hub.listen(0, "127.0.0.1");
-	const address = hub.address();
-	if (!address || typeof address === "string") {
-		throw new Error("Kokoro hub server failed to bind a port");
-	}
-	hubBaseUrl = `http://127.0.0.1:${address.port}/`;
-	return hubBaseUrl;
+	hub = server;
+
+	// `listen()` is asynchronous: the socket is not bound (and `address()` is
+	// null) until the "listening" event fires. Wait for it before reading the
+	// port, otherwise we'd always think binding failed and fall back to remote.
+	return new Promise<string>((resolveStart, rejectStart) => {
+		const onError = (err: Error) => {
+			server.off("listening", onListening);
+			hub = null;
+			rejectStart(err);
+		};
+		const onListening = () => {
+			server.off("error", onError);
+			const address = server.address();
+			if (!address || typeof address === "string") {
+				hub = null;
+				rejectStart(new Error("Kokoro hub server failed to bind a port"));
+				return;
+			}
+			hubBaseUrl = `http://127.0.0.1:${address.port}/`;
+			resolveStart(hubBaseUrl);
+		};
+		server.once("error", onError);
+		server.once("listening", onListening);
+		server.listen(0, "127.0.0.1");
+	});
 }
 
 export function stopKokoroHubServer(): void {
