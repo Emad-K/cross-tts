@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AppApi } from "../shared/appRpc";
+import type { ForwardedLogEntry } from "../shared/logEntry";
 
 /**
  * Typed RPC bridge between the renderer and the Electron main process.
@@ -24,6 +25,14 @@ const api: AppApi = {
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
 		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+	},
+	onLog: (listener: (entry: ForwardedLogEntry) => void) => {
+		const handler = (_event: unknown, entry: ForwardedLogEntry) =>
+			listener(entry);
+		ipcRenderer.on("app:log", handler);
+		return () => {
+			ipcRenderer.removeListener("app:log", handler);
+		};
 	},
 };
 
