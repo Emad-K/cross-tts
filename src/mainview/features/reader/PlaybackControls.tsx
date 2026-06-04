@@ -2,7 +2,6 @@ import {
 	ChevronDown,
 	ChevronsDown,
 	ChevronsUp,
-	Download,
 	Loader2,
 	Pause,
 	Play,
@@ -29,7 +28,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-	downloadVoicesAndModel,
 	seekProgressPercent,
 	setVolumeLive,
 	skipChunk,
@@ -69,8 +67,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const modelPhase = useTtsStore((s) => s.modelPhase);
 	const modelError = useTtsStore((s) => s.modelError);
 	const playbackError = useTtsStore((s) => s.playbackError);
-	const voiceDownloadPhase = useTtsStore((s) => s.voiceDownloadPhase);
-	const voiceDownloadProgress = useTtsStore((s) => s.voiceDownloadProgress);
 
 	const speedLabel = useMemo(() => {
 		let best: (typeof SPEEDS)[number] = "1x";
@@ -129,7 +125,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const displayProgress =
 		isDraggingProgress ? progress[0]! : Math.round(progressPct);
 
-	const busyDownloading = voiceDownloadPhase === "running";
 	const canPlay = chunks.length > 0 && modelPhase !== "error";
 	const isModelLoading = playback === "loading_model";
 	const isSynthesizingChunk = playback === "buffering";
@@ -304,33 +299,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 						</DropdownMenu>
 
 						<SleepTimerControl />
-
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<span className="inline-flex">
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										aria-label="Download Kokoro model and all voice weights"
-										className="text-muted-foreground hover:text-foreground"
-										disabled={busyDownloading}
-										onClick={() => void downloadVoicesAndModel()}
-									>
-										{busyDownloading ? (
-											<Loader2 className="size-5 animate-spin" />
-										) : (
-											<Download className="size-5" />
-										)}
-									</Button>
-								</span>
-							</TooltipTrigger>
-							<TooltipContent side="top" className="max-w-xs">
-								{voiceDownloadProgress
-									? `Voices ${voiceDownloadProgress.loaded} / ${voiceDownloadProgress.total}`
-									: "Download the ONNX model (first play also fetches it) and prefetch every voice .bin into the browser cache."}
-							</TooltipContent>
-						</Tooltip>
 					</div>
 
 					<div className="flex shrink-0 flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-end">

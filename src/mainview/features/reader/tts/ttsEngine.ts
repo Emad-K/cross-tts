@@ -1,6 +1,10 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
+import {
+	isGpuPreferenceEnabled,
+	useAppSettingsStore,
+} from "../settings/appSettingsStore";
 import { setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
@@ -54,27 +58,38 @@ type KokoroFromPretrainedDtype = NonNullable<
 	Parameters<typeof KokoroTTS.from_pretrained>[1]
 >["dtype"];
 
+/** Probe whether a usable WebGPU adapter exists, and record it for the UI. */
+async function detectWebgpu(): Promise<boolean> {
+	let available = false;
+	try {
+		if (typeof navigator !== "undefined" && navigator.gpu) {
+			const adapter = await navigator.gpu.requestAdapter();
+			available = !!adapter;
+		}
+	} catch {
+		available = false;
+	}
+	useAppSettingsStore.getState().setWebgpuAvailable(available);
+	return available;
+}
+
 /**
  * Kokoro-js `device: "webgpu"` uses the renderer's standard WebGPU API
  * (`navigator.gpu` + ONNX Runtime WebGPU EP), available in the Electron
  * (Chromium) renderer process.
  *
- * Official kokoro-js note: with `device: "webgpu"`, use `dtype: "fp32"` — q8 on
- * WebGPU can give bad / garbage-sounding output.
+ * The CPU and GPU paths load *different* model weights: WebGPU needs full
+ * precision (`dtype: "fp32"` — q8 on WebGPU gives garbage audio), while the CPU
+ * (wasm) path uses the smaller quantized `q8` weights. We only attempt the GPU
+ * when the user enabled it in Settings AND a WebGPU adapter is present.
  */
 async function resolveKokoroLoadOptions(): Promise<{
 	device: "webgpu" | "wasm";
 	dtype: KokoroFromPretrainedDtype;
 }> {
-	let device: "webgpu" | "wasm" = "wasm";
-	try {
-		if (typeof navigator !== "undefined" && navigator.gpu) {
-			const adapter = await navigator.gpu.requestAdapter();
-			if (adapter) device = "webgpu";
-		}
-	} catch {
-		device = "wasm";
-	}
+	const wantGpu = isGpuPreferenceEnabled();
+	const hasGpu = await detectWebgpu();
+	const device: "webgpu" | "wasm" = wantGpu && hasGpu ? "webgpu" : "wasm";
 	const dtype: KokoroFromPretrainedDtype =
 		device === "webgpu" ? "fp32" : "q8";
 	return { device, dtype };
@@ -214,6 +229,20 @@ export async function ensureKokoroLoaded(): Promise<KokoroTTS> {
 			});
 	}
 	return loadPromise;
+}
+
+/**
+ * Drop the loaded model so the next playback reloads with current options
+ * (e.g. after the GPU/CPU preference changed — they use different weights).
+ * Stops any active playback first.
+ */
+export function resetKokoroEngine(): void {
+	stopPlaybackUi();
+	ttsInstance = null;
+	loadPromise = null;
+	const { setModelPhase, setModelProgress } = useTtsStore.getState();
+	setModelPhase("idle");
+	setModelProgress(null);
 }
 
 export async function downloadVoicesAndModel(): Promise<void> {

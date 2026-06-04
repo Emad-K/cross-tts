@@ -7,6 +7,7 @@ export { TtsSettingSync } from "./TtsSettingSync";
 export {
 	downloadVoicesAndModel,
 	ensureKokoroLoaded,
+	resetKokoroEngine,
 	pausePlayback,
 	resumePlayback,
 	seekProgressPercent,

@@ -1,7 +1,14 @@
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
+import {
+	appConfigInfo,
+	dataDir,
+	resetDataDir,
+	setDataDir,
+	setGpuEnabled,
+} from "./appConfigStore";
 import {
 	loadAppSessionFile,
 	pickInitialWindowFrame,
@@ -55,6 +62,33 @@ function registerRpcHandlers(): void {
 			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
 		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
 	);
+	ipcMain.handle("getAppConfig", () => appConfigInfo());
+	ipcMain.handle("setGpuEnabled", (_event, { enabled }: { enabled: boolean }) => {
+		setGpuEnabled(enabled);
+		return appConfigInfo();
+	});
+	ipcMain.handle("chooseDataDirectory", async () => {
+		if (!mainWindow) return null;
+		const result = await dialog.showOpenDialog(mainWindow, {
+			title: "Choose where Cross TTS stores models and data",
+			defaultPath: dataDir(),
+			properties: ["openDirectory", "createDirectory"],
+		});
+		if (result.canceled || result.filePaths.length === 0) return null;
+		setDataDir(result.filePaths[0]!);
+		return appConfigInfo();
+	});
+	ipcMain.handle("resetDataDirectory", () => {
+		resetDataDir();
+		return appConfigInfo();
+	});
+	ipcMain.handle("revealDataDirectory", () => {
+		void shell.openPath(dataDir());
+	});
+	ipcMain.handle("relaunchApp", () => {
+		app.relaunch();
+		app.exit(0);
+	});
 }
 
 function createWindow(): void {
