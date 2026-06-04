@@ -9,8 +9,10 @@ import {
 	getEpubChapterContent,
 	isDesktopApp,
 	pickDocument,
+	subscribeToMainProcessLogs,
 } from "@/lib/desktopBridge";
 import { ReaderShell } from "./ReaderShell";
+import { LogPanel, useLogStore } from "./logging";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
@@ -78,6 +80,7 @@ export function ReaderApp() {
 	const [documentLoading, setDocumentLoading] = useState(false);
 	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [logsOpen, setLogsOpen] = useState(false);
 
 	function isPlaybackActive(
 		playback: ReturnType<typeof useTtsStore.getState>["playback"],
@@ -121,6 +124,12 @@ export function ReaderApp() {
 
 	useEffect(() => {
 		void useAppSettingsStore.getState().hydrate();
+	}, []);
+
+	useEffect(() => {
+		return subscribeToMainProcessLogs((entry) => {
+			useLogStore.getState().add(entry);
+		});
 	}, []);
 
 	useEffect(() => {
@@ -333,6 +342,7 @@ export function ReaderApp() {
 				onActiveChapterChange={setActiveChapterId}
 				onOpenFile={openFilePicker}
 				onOpenSettings={() => setSettingsOpen(true)}
+				onOpenLogs={() => setLogsOpen(true)}
 				onLoadSample={() => {
 					pendingChunkIndexRef.current = null;
 					setInitialChapterId(null);
@@ -341,6 +351,7 @@ export function ReaderApp() {
 				}}
 			/>
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+			<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />
 		</div>
 	);
 }

@@ -1,4 +1,5 @@
 import type { AppConfigInfo } from "./appConfig";
+import type { ForwardedLogEntry } from "./logEntry";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
 	EpubChapterContentResult,
@@ -83,4 +84,6 @@ export type AppApi = {
 				: [AppRequests[K]["params"]]
 		) => Promise<AppRequests[K]["response"]>;
 	};
+	/** Subscribe to log entries forwarded from the main process. Returns an unsubscribe fn. */
+	onLog: (listener: (entry: ForwardedLogEntry) => void) => () => void;
 };

@@ -1,5 +1,6 @@
 import type { AppApi } from "@shared/appRpc";
 import type { AppConfigInfo } from "@shared/appConfig";
+import type { ForwardedLogEntry } from "@shared/logEntry";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -108,4 +109,13 @@ export async function relaunchApp(): Promise<void> {
 	const b = bridge();
 	if (!b) return;
 	await b.request.relaunchApp();
+}
+
+/** Subscribe to main-process log entries. No-op (returns noop unsubscribe) on web. */
+export function subscribeToMainProcessLogs(
+	listener: (entry: ForwardedLogEntry) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onLog) return () => {};
+	return b.onLog(listener);
 }

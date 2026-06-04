@@ -20,6 +20,7 @@ export type ReaderShellProps = {
 	onActiveChapterChange?: (chapterId: string | null) => void;
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
+	onOpenLogs?: () => void;
 	onLoadSample?: () => void;
 	className?: string;
 };
@@ -36,6 +37,7 @@ export function ReaderShell({
 	onActiveChapterChange,
 	onOpenFile,
 	onOpenSettings,
+	onOpenLogs,
 	onLoadSample,
 	className,
 }: ReaderShellProps) {
@@ -64,6 +66,7 @@ export function ReaderShell({
 					fileName={hasDoc ? document.fileName : null}
 					onOpenFile={onOpenFile}
 					onOpenSettings={onOpenSettings}
+					onOpenLogs={onOpenLogs}
 					showChapterToggle={hasDoc}
 					chapterSidebarOpen={chapterSidebarOpen}
 					onToggleChapterSidebar={() =>

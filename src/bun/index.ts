@@ -14,6 +14,7 @@ import {
 	pickInitialWindowFrame,
 	saveAppSessionFile,
 } from "./appSessionStore";
+import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getEpubChapterContent,
 	pickDocument,
@@ -75,7 +76,24 @@ function registerRpcHandlers(): void {
 			properties: ["openDirectory", "createDirectory"],
 		});
 		if (result.canceled || result.filePaths.length === 0) return null;
-		setDataDir(result.filePaths[0]!);
+		const chosen = result.filePaths[0]!;
+		try {
+			setDataDir(chosen);
+		} catch (e) {
+			mainLog({
+				level: "error",
+				source: "storage",
+				message: "Couldn't use the selected folder for app data.",
+				detail: `${chosen}: ${e instanceof Error ? e.message : String(e)}`,
+			});
+			return null;
+		}
+		mainLog({
+			level: "info",
+			source: "storage",
+			message: "Data folder changed. Restart to apply.",
+			detail: chosen,
+		});
 		return appConfigInfo();
 	});
 	ipcMain.handle("resetDataDirectory", () => {
@@ -117,7 +135,9 @@ function createWindow(): void {
 		void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
 	}
 
+	setLogTarget(mainWindow);
 	mainWindow.on("closed", () => {
+		setLogTarget(null);
 		mainWindow = null;
 	});
 }
@@ -127,15 +147,20 @@ app.whenReady().then(() => {
 	// has no menu commands; keyboard accelerators are handled in the renderer.
 	Menu.setApplicationMenu(null);
 
+	registerRpcHandlers();
+	createWindow();
+
 	try {
 		kokoroHubBaseUrl = startKokoroHubServer();
 		console.log(`Kokoro hub URL (for webview): ${kokoroHubBaseUrl}`);
 	} catch (e) {
-		console.warn("Kokoro hub server failed to start; using remote HF:", e);
+		mainLog({
+			level: "warn",
+			source: "models",
+			message: "Local model cache server failed to start; using remote HuggingFace.",
+			detail: e instanceof Error ? e.message : String(e),
+		});
 	}
-
-	registerRpcHandlers();
-	createWindow();
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();

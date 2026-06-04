@@ -4,6 +4,7 @@ import {
 	getAppConfig,
 	setGpuEnabled as setGpuEnabledRpc,
 } from "@/lib/desktopBridge";
+import { logError } from "../logging";
 
 type AppSettingsState = {
 	/** Null until hydrated from the main process (or when running outside Electron). */
@@ -35,11 +36,19 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 	},
 
 	setGpuEnabled: async (enabled) => {
-		// Optimistic update so the switch feels instant.
+		// Optimistic update so the switch feels instant; revert if the RPC fails.
 		const prev = get().config;
 		if (prev) set({ config: { ...prev, gpuEnabled: enabled } });
-		const config = await setGpuEnabledRpc(enabled);
-		if (config) set({ config });
+		try {
+			const config = await setGpuEnabledRpc(enabled);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the GPU setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
 	},
 
 	setConfig: (config) => set({ config }),

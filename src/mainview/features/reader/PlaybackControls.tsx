@@ -65,8 +65,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const speedNum = useTtsStore((s) => s.speed);
 	const chunks = useTtsStore((s) => s.chunks);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
-	const modelError = useTtsStore((s) => s.modelError);
-	const playbackError = useTtsStore((s) => s.playbackError);
 
 	const speedLabel = useMemo(() => {
 		let best: (typeof SPEEDS)[number] = "1x";
@@ -138,11 +136,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 			)}
 		>
 			<div className="mx-auto max-w-6xl min-w-0 px-4 py-3 sm:py-4">
-				{(modelError || playbackError) && (
-					<p className="mb-2 text-xs text-destructive">
-						{playbackError ?? modelError}
-					</p>
-				)}
 				<div className="mb-3 flex items-end justify-between text-[11px] tabular-nums text-muted-foreground sm:text-xs">
 					<span id={`${progressId}-elapsed`}>{elapsedLabel}</span>
 					<span id={`${progressId}-total`}>{totalLabel}</span>

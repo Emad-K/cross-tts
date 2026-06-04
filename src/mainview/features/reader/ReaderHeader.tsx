@@ -1,13 +1,21 @@
-import { FolderOpen, PanelLeft, PanelLeftClose, Settings } from "lucide-react";
+import {
+	Bell,
+	FolderOpen,
+	PanelLeft,
+	PanelLeftClose,
+	Settings,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLogStore } from "./logging";
 
 export type ReaderHeaderProps = {
 	/** When omitted, the filename badge is hidden (no document yet). */
 	fileName?: string | null;
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
+	onOpenLogs?: () => void;
 	showChapterToggle?: boolean;
 	chapterSidebarOpen?: boolean;
 	onToggleChapterSidebar?: () => void;
@@ -18,11 +26,13 @@ export function ReaderHeader({
 	fileName,
 	onOpenFile,
 	onOpenSettings,
+	onOpenLogs,
 	showChapterToggle = false,
 	chapterSidebarOpen = false,
 	onToggleChapterSidebar,
 	className,
 }: ReaderHeaderProps) {
+	const unreadIssues = useLogStore((s) => s.unreadIssues);
 	return (
 		<header
 			className={cn(
@@ -72,6 +82,28 @@ export function ReaderHeader({
 					>
 						<FolderOpen className="size-4" aria-hidden />
 						Open file
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon"
+						className="relative border-border bg-transparent text-foreground hover:bg-accent"
+						onClick={onOpenLogs}
+						aria-label={
+							unreadIssues > 0
+								? `Activity & logs (${unreadIssues} new)`
+								: "Activity & logs"
+						}
+					>
+						<Bell className="size-4" aria-hidden />
+						{unreadIssues > 0 ? (
+							<span
+								className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground"
+								aria-hidden
+							>
+								{unreadIssues > 9 ? "9+" : unreadIssues}
+							</span>
+						) : null}
 					</Button>
 					<Button
 						type="button"

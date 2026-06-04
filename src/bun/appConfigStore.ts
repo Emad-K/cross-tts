@@ -6,7 +6,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { app } from "electron";
 import {
 	APP_CONFIG_VERSION,
@@ -31,7 +31,7 @@ function configPath(): string {
 let cached: AppConfigFileV1 | null = null;
 
 function isAbsoluteUsableDir(dir: unknown): dir is string {
-	return typeof dir === "string" && dir.trim().length > 0;
+	return typeof dir === "string" && dir.trim().length > 0 && isAbsolute(dir);
 }
 
 export function loadAppConfig(): AppConfigFileV1 {

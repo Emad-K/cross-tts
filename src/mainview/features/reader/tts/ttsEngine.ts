@@ -1,6 +1,7 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
+import { logError, logInfo } from "../logging";
 import {
 	isGpuPreferenceEnabled,
 	useAppSettingsStore,
@@ -80,15 +81,18 @@ async function detectWebgpu(): Promise<boolean> {
  *
  * The CPU and GPU paths load *different* model weights: WebGPU needs full
  * precision (`dtype: "fp32"` — q8 on WebGPU gives garbage audio), while the CPU
- * (wasm) path uses the smaller quantized `q8` weights. We only attempt the GPU
- * when the user enabled it in Settings AND a WebGPU adapter is present.
+ * (wasm) path uses the smaller quantized `q8` weights. The GPU is never used
+ * unless the user opted in via Settings; only then do we probe for an adapter,
+ * and we fall back to CPU when none is present.
  */
 async function resolveKokoroLoadOptions(): Promise<{
 	device: "webgpu" | "wasm";
 	dtype: KokoroFromPretrainedDtype;
 }> {
 	const wantGpu = isGpuPreferenceEnabled();
-	const hasGpu = await detectWebgpu();
+	// Only probe WebGPU when the user enabled GPU — otherwise stay on CPU and
+	// don't touch navigator.gpu at all.
+	const hasGpu = wantGpu ? await detectWebgpu() : false;
 	const device: "webgpu" | "wasm" = wantGpu && hasGpu ? "webgpu" : "wasm";
 	const dtype: KokoroFromPretrainedDtype =
 		device === "webgpu" ? "fp32" : "q8";
@@ -201,30 +205,44 @@ export async function ensureKokoroLoaded(): Promise<KokoroTTS> {
 			useTtsStore.getState();
 		setModelPhase("loading");
 		setModelProgress(0);
+		let resolvedDevice: "webgpu" | "wasm" = "wasm";
 		loadPromise = ensureKokoroHubEnv()
 			.then(() => resolveKokoroLoadOptions())
-			.then(({ device, dtype }) =>
-			KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-				dtype,
-				device,
-				progress_callback: (info) => {
-					if (info.status === "progress") {
-						setModelProgress(info.progress / 100);
-					}
-				},
-			}),
-		)
+			.then(({ device, dtype }) => {
+				resolvedDevice = device;
+				logInfo(
+					`Loading voice model (${device === "webgpu" ? "GPU" : "CPU"})…`,
+					{ source: "models" },
+				);
+				return KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+					dtype,
+					device,
+					progress_callback: (info) => {
+						if (info.status === "progress") {
+							setModelProgress(info.progress / 100);
+						}
+					},
+				});
+			})
 			.then((tts) => {
 				ttsInstance = tts;
 				setVoiceOptions(voiceOptionsFromTts(tts));
 				setModelPhase("ready");
 				setModelProgress(1);
+				logInfo(
+					`Voice model ready (${resolvedDevice === "webgpu" ? "GPU" : "CPU"}).`,
+					{ source: "models" },
+				);
 				return tts;
 			})
 			.catch((e: unknown) => {
 				loadPromise = null;
 				const msg = e instanceof Error ? e.message : String(e);
 				setModelPhase("error", msg);
+				logError("Couldn't load the voice model.", {
+					source: "models",
+					detail: msg,
+				});
 				throw e;
 			});
 	}
@@ -263,10 +281,15 @@ export async function downloadVoicesAndModel(): Promise<void> {
 		setVoiceDownload("done", {
 			voiceDownloadProgress: null,
 		});
+		logInfo("Voices and model downloaded.", { source: "models" });
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
 		setVoiceDownload("error", {
 			voiceDownloadError: msg,
+		});
+		logError("Couldn't download voices and model.", {
+			source: "models",
+			detail: msg,
 		});
 		throw e;
 	}
@@ -373,6 +396,10 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			} catch (e) {
 				const msg = e instanceof Error ? e.message : String(e);
 				useTtsStore.setState({ playback: "idle", playbackError: msg });
+				logError("Playback stopped: couldn't synthesize audio.", {
+					source: "tts",
+					detail: msg,
+				});
 				return;
 			}
 		}
