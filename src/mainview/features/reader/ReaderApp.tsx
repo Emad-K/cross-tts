@@ -14,6 +14,8 @@ import {
 } from "@/lib/desktopBridge";
 import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
+import { AudiobookExportDialog } from "./audiobook/AudiobookExportDialog";
+import { isExportActive } from "./audiobook/exportEngine";
 import { LogPanel, useLogStore } from "./logging";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { useAppSettingsStore } from "./settings/appSettingsStore";
@@ -89,6 +91,7 @@ export function ReaderApp() {
 	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
+	const [audiobookOpen, setAudiobookOpen] = useState(false);
 	useAppearanceSync();
 
 	function isPlaybackActive(
@@ -145,6 +148,8 @@ export function ReaderApp() {
 	// the playback engine.
 	useEffect(() => {
 		return subscribeToShortcuts((action) => {
+			// Ignore playback shortcuts while an audiobook export is running.
+			if (isExportActive()) return;
 			switch (action) {
 				case "playPause":
 					void togglePlayPause();
@@ -396,6 +401,7 @@ export function ReaderApp() {
 				onOpenFile={openFilePicker}
 				onOpenSettings={() => setSettingsOpen(true)}
 				onOpenLogs={() => setLogsOpen(true)}
+				onOpenAudiobook={() => setAudiobookOpen(true)}
 				onLoadSample={() => {
 					pendingChunkIndexRef.current = null;
 					setInitialChapterId(null);
@@ -405,6 +411,14 @@ export function ReaderApp() {
 			/>
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />
+			{document?.format === "epub" ? (
+				<AudiobookExportDialog
+					open={audiobookOpen}
+					onOpenChange={setAudiobookOpen}
+					filePath={document.filePath}
+					chapters={document.chapters}
+				/>
+			) : null}
 		</div>
 	);
 }

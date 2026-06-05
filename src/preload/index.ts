@@ -33,6 +33,9 @@ const api: AppApi = {
 		setShortcutBinding: (params) =>
 			ipcRenderer.invoke("setShortcutBinding", params),
 		setAppearance: (params) => ipcRenderer.invoke("setAppearance", params),
+		chooseExportFolder: () => ipcRenderer.invoke("chooseExportFolder"),
+		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
+		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),

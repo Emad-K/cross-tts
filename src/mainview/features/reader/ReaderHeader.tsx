@@ -1,4 +1,5 @@
 import {
+	AudioLines,
 	Bell,
 	FolderOpen,
 	PanelLeft,
@@ -16,6 +17,8 @@ export type ReaderHeaderProps = {
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
 	onOpenLogs?: () => void;
+	onOpenAudiobook?: () => void;
+	showAudiobook?: boolean;
 	showChapterToggle?: boolean;
 	chapterSidebarOpen?: boolean;
 	onToggleChapterSidebar?: () => void;
@@ -27,6 +30,8 @@ export function ReaderHeader({
 	onOpenFile,
 	onOpenSettings,
 	onOpenLogs,
+	onOpenAudiobook,
+	showAudiobook = false,
 	showChapterToggle = false,
 	chapterSidebarOpen = false,
 	onToggleChapterSidebar,
@@ -83,6 +88,19 @@ export function ReaderHeader({
 						<FolderOpen className="size-4" aria-hidden />
 						Open file
 					</Button>
+					{showAudiobook ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
+							onClick={onOpenAudiobook}
+							title="Create audiobook"
+						>
+							<AudioLines className="size-4" aria-hidden />
+							Audiobook
+						</Button>
+					) : null}
 					<Button
 						type="button"
 						variant="outline"

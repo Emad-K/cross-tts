@@ -19,6 +19,7 @@ export {
 	skipChunk,
 	startOrResumePlayback,
 	stopPlaybackUi,
+	synthesizeChunkPcm,
 	toggleMute,
 	togglePlayPause,
 } from "./ttsEngine";

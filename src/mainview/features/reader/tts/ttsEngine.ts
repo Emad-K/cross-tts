@@ -294,6 +294,19 @@ async function synthesizeChunkBuffer(
 	});
 }
 
+/** Synthesize one chunk to raw PCM (for audiobook export). Null = nothing to speak. */
+export async function synthesizeChunkPcm(
+	chunkText: string,
+	voice: KokoroVoiceId,
+	speed: number,
+): Promise<{ audio: Float32Array; sampleRate: number } | null> {
+	if (!isSpeakableChunkText(chunkText)) return null;
+	const result = await requestGenerate(chunkText, voice, speed);
+	if (result.kind === "error") throw new Error(result.message);
+	if (result.kind === "empty") return null;
+	return { audio: result.audio, sampleRate: result.samplingRate };
+}
+
 function playBuffer(
 	ctx: AudioContext,
 	gain: GainNode,

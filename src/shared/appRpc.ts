@@ -94,6 +94,21 @@ export type AppRpcSchema = {
 			params: Partial<Appearance>;
 			response: AppConfigInfo;
 		};
+		/** Pick a destination folder for audiobook export. */
+		chooseExportFolder: {
+			params: void;
+			response: string | null;
+		};
+		/** Write one audiobook file into a folder. */
+		writeAudioFile: {
+			params: { dir: string; fileName: string; data: Uint8Array };
+			response: { ok: boolean; path: string | null; error?: string };
+		};
+		/** Reveal an arbitrary path in the OS file manager. */
+		revealPath: {
+			params: { path: string };
+			response: void;
+		};
 		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
 		chooseDataDirectory: {
 			params: void;
