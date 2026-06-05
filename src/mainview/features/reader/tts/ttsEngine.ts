@@ -150,6 +150,8 @@ function teardownWorker(): void {
 function initWorker(device: KokoroDevice, dtype: KokoroDtype): Promise<void> {
 	const base = getKokoroHubBaseUrlSync();
 	const numThreads = device === "wasm" ? cpuThreadCount() : 1;
+	const gpuPower =
+		useAppSettingsStore.getState().config?.gpuPower ?? "auto";
 	loggedFirstSynth = false;
 	worker = spawnWorker();
 	const ready = new Promise<void>((resolve, reject) => {
@@ -162,6 +164,7 @@ function initWorker(device: KokoroDevice, dtype: KokoroDtype): Promise<void> {
 		device,
 		dtype,
 		numThreads,
+		gpuPower,
 	});
 	return ready;
 }

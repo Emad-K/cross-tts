@@ -9,6 +9,7 @@ import {
 	setCpuThreads,
 	setDataDir,
 	setGpuEnabled,
+	setGpuPower,
 	setShortcutBinding,
 	setShortcutsEnabled,
 } from "./appConfigStore";
@@ -17,6 +18,7 @@ import {
 	setShortcutTarget,
 	unregisterGlobalShortcuts,
 } from "./globalShortcuts";
+import type { GpuPowerPreference } from "../shared/appConfig";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -90,6 +92,13 @@ function registerRpcHandlers(): void {
 		setGpuEnabled(enabled);
 		return appConfigInfo();
 	});
+	ipcMain.handle(
+		"setGpuPower",
+		(_event, { power }: { power: GpuPowerPreference }) => {
+			setGpuPower(power);
+			return appConfigInfo();
+		},
+	);
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
 		return appConfigInfo();

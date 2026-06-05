@@ -1,5 +1,5 @@
 import type { AppApi } from "@shared/appRpc";
-import type { AppConfigInfo } from "@shared/appConfig";
+import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
 import type { ForwardedLogEntry } from "@shared/logEntry";
 import type { ShortcutAction } from "@shared/shortcuts";
 import type {
@@ -86,6 +86,14 @@ export async function setGpuEnabled(
 	const b = bridge();
 	if (!b) return null;
 	return b.request.setGpuEnabled({ enabled });
+}
+
+export async function setGpuPower(
+	power: GpuPowerPreference,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setGpuPower({ power });
 }
 
 export async function setCpuThreads(

@@ -22,6 +22,7 @@ const api: AppApi = {
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
 		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
+		setGpuPower: (params) => ipcRenderer.invoke("setGpuPower", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),

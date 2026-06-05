@@ -12,6 +12,7 @@ import {
 	APP_CONFIG_VERSION,
 	type AppConfigFileV1,
 	type AppConfigInfo,
+	type GpuPowerPreference,
 	defaultAppConfig,
 } from "../shared/appConfig";
 import {
@@ -62,6 +63,13 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (storedVersion >= APP_CONFIG_VERSION && typeof o.gpuEnabled === "boolean") {
 			next.gpuEnabled = o.gpuEnabled;
 		}
+		if (
+			o.gpuPower === "auto" ||
+			o.gpuPower === "high-performance" ||
+			o.gpuPower === "low-power"
+		) {
+			next.gpuPower = o.gpuPower;
+		}
 		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
@@ -102,6 +110,10 @@ export function gpuEnabled(): boolean {
 
 export function setGpuEnabled(value: boolean): void {
 	persist({ ...loadAppConfig(), gpuEnabled: value });
+}
+
+export function setGpuPower(value: GpuPowerPreference): void {
+	persist({ ...loadAppConfig(), gpuPower: value });
 }
 
 export function setCpuThreads(value: number): void {
@@ -173,6 +185,7 @@ export function appConfigInfo(): AppConfigInfo {
 		defaultDataDir: def,
 		isDefaultDataDir: resolved === def,
 		gpuEnabled: config.gpuEnabled,
+		gpuPower: config.gpuPower,
 		cpuThreads: config.cpuThreads,
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,

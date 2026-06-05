@@ -13,12 +13,21 @@ import {
 // otherwise). Configs written by v1 are migrated to adopt this new default.
 export const APP_CONFIG_VERSION = 2;
 
+/**
+ * Which GPU WebGPU should prefer. WebGPU can't pick a specific adapter by name;
+ * it only exposes a power hint, which on multi-GPU machines selects the
+ * dedicated ("high-performance") vs integrated ("low-power") GPU.
+ */
+export type GpuPowerPreference = "auto" | "high-performance" | "low-power";
+
 export type AppConfigFileV1 = {
 	version: number;
 	/** Absolute directory holding TTS models and the session file. Empty = OS default. */
 	dataDir: string;
 	/** Use the GPU (WebGPU) for TTS when available; false forces CPU (wasm). */
 	gpuEnabled: boolean;
+	/** Which GPU to prefer when more than one is present. */
+	gpuPower: GpuPowerPreference;
 	/**
 	 * Number of CPU (wasm) inference threads. 0 = auto (the renderer picks a
 	 * value based on the machine). The renderer clamps any value to
@@ -43,6 +52,7 @@ export type AppConfigInfo = {
 	/** True when `dataDir` is the OS default (user hasn't picked a custom folder). */
 	isDefaultDataDir: boolean;
 	gpuEnabled: boolean;
+	gpuPower: GpuPowerPreference;
 	/** CPU inference threads; 0 = auto. */
 	cpuThreads: number;
 	shortcutsEnabled: boolean;
@@ -57,6 +67,7 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	version: APP_CONFIG_VERSION,
 	dataDir: defaultDataDir,
 	gpuEnabled: true,
+	gpuPower: "auto",
 	cpuThreads: 0,
 	shortcutsEnabled: false,
 	shortcuts: defaultShortcutBindings(),
