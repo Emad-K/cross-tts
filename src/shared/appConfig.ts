@@ -14,6 +14,12 @@ export type AppConfigFileV1 = {
 	dataDir: string;
 	/** Use the GPU (WebGPU) for TTS when available; false forces CPU (wasm). */
 	gpuEnabled: boolean;
+	/**
+	 * Number of CPU (wasm) inference threads. 0 = auto (the renderer picks a
+	 * value based on the machine). The renderer clamps any value to
+	 * `logicalCores - 1`.
+	 */
+	cpuThreads: number;
 };
 
 /**
@@ -26,6 +32,8 @@ export type AppConfigInfo = {
 	/** True when `dataDir` is the OS default (user hasn't picked a custom folder). */
 	isDefaultDataDir: boolean;
 	gpuEnabled: boolean;
+	/** CPU inference threads; 0 = auto. */
+	cpuThreads: number;
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */
@@ -36,4 +44,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	version: APP_CONFIG_VERSION,
 	dataDir: defaultDataDir,
 	gpuEnabled: true,
+	cpuThreads: 0,
 });

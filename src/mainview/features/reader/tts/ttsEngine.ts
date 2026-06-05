@@ -1,6 +1,7 @@
 import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
 import { logError, logInfo, logWarn } from "../logging";
 import {
+	effectiveCpuThreads,
 	isGpuPreferenceEnabled,
 	useAppSettingsStore,
 } from "../settings/appSettingsStore";
@@ -44,9 +45,7 @@ function ensureKokoroHubEnv(): Promise<void> {
  * process via the Chromium "SharedArrayBuffer" feature).
  */
 function cpuThreadCount(): number {
-	const cores =
-		typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
-	const threads = Math.max(1, Math.min(cores || 4, 8));
+	const threads = effectiveCpuThreads();
 	const hasSab = typeof SharedArrayBuffer !== "undefined";
 	logInfo(
 		`CPU synthesis: ${threads} thread(s) requested, worker on ` +
@@ -76,6 +75,14 @@ let onWorkerInitError: ((err: Error) => void) | null = null;
 let lastLoadMs = 0;
 /** Log the first synthesis duration after each (re)load to explain warm-up. */
 let loggedFirstSynth = false;
+/** Device of the currently loaded model, or null when nothing is loaded. */
+let activeDevice: KokoroDevice | null = null;
+
+/** Device of the loaded model (null if not loaded). Lets the UI avoid an
+ * unnecessary GPU reload when only a CPU-only setting changed. */
+export function getActiveDevice(): KokoroDevice | null {
+	return activeDevice;
+}
 
 function spawnWorker(): Worker {
 	const w = new Worker(new URL("./ttsWorker.ts", import.meta.url), {
@@ -130,6 +137,7 @@ function teardownWorker(): void {
 	worker?.terminate();
 	worker = null;
 	workerReady = null;
+	activeDevice = null;
 	onWorkerReady = null;
 	onWorkerInitError = null;
 	for (const resolve of pending.values()) {
@@ -357,6 +365,7 @@ export async function ensureKokoroLoaded(): Promise<void> {
 					throw e;
 				}
 			}
+			activeDevice = device;
 			setModelPhase("ready");
 			setModelProgress(1);
 			logInfo(
