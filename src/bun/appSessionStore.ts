@@ -99,7 +99,13 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 			if (isSaneFrame(cand)) window = cand;
 		}
 		const web = coerceWeb(root.web);
-		return { version: APP_SESSION_VERSION, window, web };
+		return {
+			version: APP_SESSION_VERSION,
+			window,
+			maximized: root.maximized === true,
+			fullScreen: root.fullScreen === true,
+			web,
+		};
 	} catch {
 		return null;
 	}

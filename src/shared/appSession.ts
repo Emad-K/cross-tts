@@ -26,7 +26,12 @@ export type WebPersistedSlice = {
 
 export type AppSessionFileV1 = {
 	version: typeof APP_SESSION_VERSION;
+	/** Normal (un-maximized) bounds, so a maximized window restores correctly. */
 	window: StoredWindowFrame | null;
+	/** Window was maximized when last saved. */
+	maximized: boolean;
+	/** Window was in fullscreen when last saved. */
+	fullScreen: boolean;
 	web: WebPersistedSlice;
 };
 

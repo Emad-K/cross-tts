@@ -355,6 +355,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [section, setSection] = useState<SectionId>("storage");
 	const hydrate = useAppSettingsStore((s) => s.hydrate);
 	const refresh = useAppSettingsStore((s) => s.refresh);
+	const appVersion = useAppSettingsStore((s) => s.config?.appVersion);
 
 	useEffect(() => {
 		if (!open) return;
@@ -398,6 +399,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 							);
 						})}
 					</ul>
+					<p className="mt-auto px-2 pt-3 text-[11px] text-muted-foreground">
+						Cross TTS{appVersion ? ` v${appVersion}` : ""}
+					</p>
 				</nav>
 
 				{/* Right content pane. */}

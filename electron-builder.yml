@@ -19,6 +19,9 @@ artifactName: ${name}-${version}-${arch}.${ext}
 
 win:
   icon: assets/windows/icon_256x256.png
+  # Name shown in Task Manager / file properties (else it falls back to the
+  # package.json description).
+  fileDescription: Cross TTS
   target:
     - target: nsis
       arch:
