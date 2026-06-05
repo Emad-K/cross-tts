@@ -21,6 +21,7 @@ const api: AppApi = {
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
 		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
+		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),

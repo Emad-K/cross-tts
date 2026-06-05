@@ -6,6 +6,7 @@ import {
 	appConfigInfo,
 	dataDir,
 	resetDataDir,
+	setCpuThreads,
 	setDataDir,
 	setGpuEnabled,
 } from "./appConfigStore";
@@ -75,6 +76,10 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("getAppConfig", () => appConfigInfo());
 	ipcMain.handle("setGpuEnabled", (_event, { enabled }: { enabled: boolean }) => {
 		setGpuEnabled(enabled);
+		return appConfigInfo();
+	});
+	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
+		setCpuThreads(threads);
 		return appConfigInfo();
 	});
 	ipcMain.handle("chooseDataDirectory", async () => {

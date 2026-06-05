@@ -47,6 +47,11 @@ export type AppRpcSchema = {
 			params: { enabled: boolean };
 			response: AppConfigInfo;
 		};
+		/** Set CPU (wasm) inference threads; 0 = auto. */
+		setCpuThreads: {
+			params: { threads: number };
+			response: AppConfigInfo;
+		};
 		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
 		chooseDataDirectory: {
 			params: void;

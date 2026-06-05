@@ -58,6 +58,9 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (storedVersion >= APP_CONFIG_VERSION && typeof o.gpuEnabled === "boolean") {
 			next.gpuEnabled = o.gpuEnabled;
 		}
+		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
+			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
+		}
 		cached = next;
 		return cached;
 	} catch {
@@ -91,6 +94,11 @@ export function gpuEnabled(): boolean {
 
 export function setGpuEnabled(value: boolean): void {
 	persist({ ...loadAppConfig(), gpuEnabled: value });
+}
+
+export function setCpuThreads(value: number): void {
+	const clean = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+	persist({ ...loadAppConfig(), cpuThreads: clean });
 }
 
 /** Persist a new data directory. Caller is responsible for relaunching to apply. */
@@ -136,6 +144,7 @@ export function appConfigInfo(): AppConfigInfo {
 		defaultDataDir: def,
 		isDefaultDataDir: resolved === def,
 		gpuEnabled: config.gpuEnabled,
+		cpuThreads: config.cpuThreads,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
 	};

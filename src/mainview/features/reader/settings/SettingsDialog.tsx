@@ -17,6 +17,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
 	chooseDataDirectory,
@@ -25,8 +26,13 @@ import {
 	revealDataDirectory,
 } from "@/lib/desktopBridge";
 import { cn } from "@/lib/utils";
-import { downloadVoicesAndModel, resetKokoroEngine, useTtsStore } from "../tts";
-import { useAppSettingsStore } from "./appSettingsStore";
+import {
+	downloadVoicesAndModel,
+	getActiveDevice,
+	resetKokoroEngine,
+	useTtsStore,
+} from "../tts";
+import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 
 type SectionId = "storage" | "performance" | "rules";
@@ -224,6 +230,58 @@ function StoragePanel() {
 	);
 }
 
+function CpuThreadsControl() {
+	const config = useAppSettingsStore((s) => s.config);
+	const setCpuThreads = useAppSettingsStore((s) => s.setCpuThreads);
+	const max = maxCpuThreads();
+	const stored = config?.cpuThreads ?? 0;
+	// `null` while not dragging → show the stored value; a number while dragging.
+	const [draft, setDraft] = useState<number | null>(null);
+	const shown = draft ?? stored;
+
+	const commit = (value: number) => {
+		setDraft(null);
+		void setCpuThreads(value);
+		// New thread count only applies on a fresh CPU load. If a CPU model is
+		// loaded, drop it so the next play picks up the change; leave a GPU model
+		// alone (the thread count doesn't affect it).
+		if (getActiveDevice() !== "webgpu") resetKokoroEngine();
+	};
+
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<div className="flex items-center justify-between gap-4">
+				<span className="flex items-center gap-2 text-sm font-medium">
+					<Cpu className="size-4 text-muted-foreground" aria-hidden />
+					CPU threads
+				</span>
+				<span className="text-xs font-medium tabular-nums text-muted-foreground">
+					{shown === 0 ? `Auto (${max})` : shown}
+				</span>
+			</div>
+			<Slider
+				className="mt-4"
+				aria-label="CPU threads"
+				min={0}
+				max={max}
+				step={1}
+				value={[Math.min(shown, max)]}
+				onValueChange={(v) => setDraft(v[0] ?? 0)}
+				onValueCommit={(v) => commit(v[0] ?? 0)}
+			/>
+			<div className="mt-2 flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+				<span>Auto</span>
+				<span>{max} (max)</span>
+			</div>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Threads used for CPU synthesis. Max is one less than your{" "}
+				{max + 1} logical cores. Auto uses {max}. Only applies when running on
+				the CPU.
+			</p>
+		</div>
+	);
+}
+
 function PerformancePanel() {
 	const gpuSwitchId = useId();
 	const config = useAppSettingsStore((s) => s.config);
@@ -288,6 +346,7 @@ function PerformancePanel() {
 							: "Switch on to synthesize with the GPU when a compatible one is available."}
 				</p>
 			</div>
+			<CpuThreadsControl />
 		</SectionPane>
 	);
 }

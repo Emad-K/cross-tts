@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { AppConfigInfo } from "@shared/appConfig";
 import {
 	getAppConfig,
+	setCpuThreads as setCpuThreadsRpc,
 	setGpuEnabled as setGpuEnabledRpc,
 } from "@/lib/desktopBridge";
 import { logError } from "../logging";
@@ -15,6 +16,7 @@ type AppSettingsState = {
 	hydrate: () => Promise<void>;
 	refresh: () => Promise<void>;
 	setGpuEnabled: (enabled: boolean) => Promise<void>;
+	setCpuThreads: (threads: number) => Promise<void>;
 	setConfig: (config: AppConfigInfo) => void;
 	setWebgpuAvailable: (available: boolean) => void;
 };
@@ -51,6 +53,21 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		}
 	},
 
+	setCpuThreads: async (threads) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, cpuThreads: threads } });
+		try {
+			const config = await setCpuThreadsRpc(threads);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the CPU threads setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
 	setConfig: (config) => set({ config }),
 	setWebgpuAvailable: (available) => set({ webgpuAvailable: available }),
 }));
@@ -58,4 +75,22 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 /** True when TTS should attempt the GPU (WebGPU). Defaults to false until hydrated. */
 export function isGpuPreferenceEnabled(): boolean {
 	return useAppSettingsStore.getState().config?.gpuEnabled ?? false;
+}
+
+/** Largest selectable CPU thread count: logical cores − 1 (min 1). */
+export function maxCpuThreads(): number {
+	const cores =
+		typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
+	return Math.max(1, (cores || 2) - 1);
+}
+
+/**
+ * Effective CPU (wasm) thread count. 0/undefined preference = auto (cores − 1,
+ * matching the slider max). Any explicit value is clamped to that max.
+ */
+export function effectiveCpuThreads(): number {
+	const max = maxCpuThreads();
+	const pref = useAppSettingsStore.getState().config?.cpuThreads ?? 0;
+	if (pref && pref > 0) return Math.min(pref, max);
+	return max;
 }

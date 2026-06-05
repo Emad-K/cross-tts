@@ -87,6 +87,14 @@ export async function setGpuEnabled(
 	return b.request.setGpuEnabled({ enabled });
 }
 
+export async function setCpuThreads(
+	threads: number,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setCpuThreads({ threads });
+}
+
 export async function chooseDataDirectory(): Promise<AppConfigInfo | null> {
 	const b = bridge();
 	if (!b) return null;
