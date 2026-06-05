@@ -4,10 +4,12 @@
  * data directory (models + session) actually lives. Keep in shared so Bun (main)
  * and the webview agree on the shape.
  */
-export const APP_CONFIG_VERSION = 1;
+// v2: GPU is enabled by default (used when a WebGPU adapter is present, CPU
+// otherwise). Configs written by v1 are migrated to adopt this new default.
+export const APP_CONFIG_VERSION = 2;
 
 export type AppConfigFileV1 = {
-	version: typeof APP_CONFIG_VERSION;
+	version: number;
 	/** Absolute directory holding TTS models and the session file. Empty = OS default. */
 	dataDir: string;
 	/** Use the GPU (WebGPU) for TTS when available; false forces CPU (wasm). */
@@ -33,5 +35,5 @@ export type AppConfigInfo = {
 export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	version: APP_CONFIG_VERSION,
 	dataDir: defaultDataDir,
-	gpuEnabled: false,
+	gpuEnabled: true,
 });
