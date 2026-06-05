@@ -1,6 +1,10 @@
 appId: dev.cross-tts.app
 productName: Cross TTS
 copyright: Cross TTS
+# Overrides the package.json description for build metadata, including the
+# Windows exe FileDescription (the name shown in Task Manager).
+extraMetadata:
+  description: Cross TTS
 
 directories:
   output: release
@@ -19,9 +23,6 @@ artifactName: ${name}-${version}-${arch}.${ext}
 
 win:
   icon: assets/windows/icon_256x256.png
-  # Name shown in Task Manager / file properties (else it falls back to the
-  # package.json description).
-  fileDescription: Cross TTS
   target:
     - target: nsis
       arch:
