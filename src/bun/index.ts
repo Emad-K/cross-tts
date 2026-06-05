@@ -18,7 +18,9 @@ import {
 	setShortcutTarget,
 	unregisterGlobalShortcuts,
 } from "./globalShortcuts";
+import { downloadModel, modelStatus } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
+import type { ModelKind } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -137,6 +139,34 @@ function registerRpcHandlers(): void {
 		},
 	);
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
+	ipcMain.handle("getModelStatus", () => modelStatus());
+	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {
+		const send = (loaded: number, total: number, done: boolean, error?: string) => {
+			const wc = mainWindow?.webContents;
+			if (wc && !wc.isDestroyed()) {
+				wc.send("app:model-progress", { kind, loaded, total, done, error });
+			}
+		};
+		try {
+			await downloadModel(kind, (loaded, total) => send(loaded, total, false));
+			send(1, 1, true);
+			mainLog({
+				level: "info",
+				source: "models",
+				message: `${kind === "gpu" ? "GPU" : "CPU"} model downloaded.`,
+			});
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			send(0, 0, true, msg);
+			mainLog({
+				level: "error",
+				source: "models",
+				message: `Couldn't download the ${kind === "gpu" ? "GPU" : "CPU"} model.`,
+				detail: msg,
+			});
+		}
+		return modelStatus();
+	});
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
 		return appConfigInfo();
