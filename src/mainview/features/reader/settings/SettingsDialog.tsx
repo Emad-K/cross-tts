@@ -23,6 +23,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
 	chooseDataDirectory,
+	getGpuInfo,
 	relaunchApp,
 	resetDataDirectory,
 	revealDataDirectory,
@@ -286,54 +287,63 @@ function CpuThreadsControl() {
 	);
 }
 
-const GPU_POWER_OPTIONS: { id: GpuPowerPreference; label: string }[] = [
-	{ id: "auto", label: "Auto" },
-	{ id: "high-performance", label: "Performance" },
-	{ id: "low-power", label: "Power-saving" },
-];
+function capitalize(s: string): string {
+	return s ? s[0]!.toUpperCase() + s.slice(1) : s;
+}
 
 function adapterName(info: GPUAdapterInfo | undefined): string | undefined {
 	if (!info) return undefined;
-	const parts = [info.description, info.vendor, info.architecture].filter(
-		(s): s is string => typeof s === "string" && s.length > 0,
-	);
-	return parts[0];
+	if (info.description) return info.description;
+	const vendor = info.vendor ? capitalize(info.vendor) : "";
+	const arch = info.architecture ?? "";
+	const label = [vendor, arch].filter(Boolean).join(" ");
+	return label || undefined;
 }
 
 function GpuPreferenceControl() {
 	const config = useAppSettingsStore((s) => s.config);
 	const setGpuPower = useAppSettingsStore((s) => s.setGpuPower);
 	const power = config?.gpuPower ?? "auto";
-	const [names, setNames] = useState<{
+	const [probe, setProbe] = useState<{
 		high?: string;
 		low?: string;
 		distinct: boolean;
 	}>({ distinct: false });
+	const [detected, setDetected] = useState<{
+		activeRenderer: string;
+		gpus: string[];
+	}>({ activeRenderer: "", gpus: [] });
 
 	useEffect(() => {
-		if (typeof navigator === "undefined" || !navigator.gpu) return;
 		let cancelled = false;
-		void (async () => {
-			const probe = async (p: GPUPowerPreference) => {
-				try {
-					const a = await navigator.gpu?.requestAdapter({ powerPreference: p });
-					return adapterName(a?.info);
-				} catch {
-					return undefined;
+		void getGpuInfo().then((info) => {
+			if (!cancelled) setDetected(info);
+		});
+		if (typeof navigator !== "undefined" && navigator.gpu) {
+			void (async () => {
+				const one = async (p: GPUPowerPreference) => {
+					try {
+						const a = await navigator.gpu?.requestAdapter({
+							powerPreference: p,
+						});
+						return adapterName(a?.info);
+					} catch {
+						return undefined;
+					}
+				};
+				const [high, low] = await Promise.all([
+					one("high-performance"),
+					one("low-power"),
+				]);
+				if (!cancelled) {
+					setProbe({
+						high,
+						low,
+						distinct: Boolean(high && low && high !== low),
+					});
 				}
-			};
-			const [high, low] = await Promise.all([
-				probe("high-performance"),
-				probe("low-power"),
-			]);
-			if (!cancelled) {
-				setNames({
-					high,
-					low,
-					distinct: Boolean(high && low && high !== low),
-				});
-			}
-		})();
+			})();
+		}
 		return () => {
 			cancelled = true;
 		};
@@ -345,17 +355,28 @@ function GpuPreferenceControl() {
 		if (getActiveDevice() === "webgpu") resetKokoroEngine();
 	};
 
+	// Label the two non-auto options with real GPU names where we have them.
+	const options: { id: GpuPowerPreference; label: string }[] = [
+		{ id: "auto", label: "Auto" },
+		{
+			id: "high-performance",
+			label: probe.high ?? detected.gpus[0] ?? "Performance",
+		},
+		{ id: "low-power", label: probe.low ?? "Power-saving" },
+	];
+
 	return (
 		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
 			<div className="mb-3 text-sm font-medium">Preferred GPU</div>
 			<div className="grid grid-cols-3 gap-1 rounded-md border border-border p-1">
-				{GPU_POWER_OPTIONS.map((opt) => (
+				{options.map((opt) => (
 					<button
 						key={opt.id}
 						type="button"
+						title={opt.label}
 						onClick={() => onChange(opt.id)}
 						className={cn(
-							"rounded px-2 py-1.5 text-xs font-medium transition-colors",
+							"truncate rounded px-2 py-1.5 text-xs font-medium transition-colors",
 							power === opt.id
 								? "bg-foreground text-background"
 								: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -365,12 +386,15 @@ function GpuPreferenceControl() {
 					</button>
 				))}
 			</div>
-			<p className="mt-3 text-xs text-muted-foreground">
-				{names.distinct
-					? `Performance → ${names.high}. Power-saving → ${names.low}.`
-					: names.high
-						? `Detected GPU: ${names.high}. Multiple GPUs weren't reported, so the choice may have no effect.`
-						: "WebGPU only distinguishes a high-performance (dedicated) vs low-power (integrated) GPU — it can't pick a specific one by name."}
+			{detected.gpus.length > 0 ? (
+				<p className="mt-3 break-words text-xs text-muted-foreground">
+					Detected: {detected.gpus.join(", ")}
+				</p>
+			) : null}
+			<p className="mt-1.5 text-xs text-muted-foreground">
+				WebGPU can only target the high-performance (dedicated) or low-power
+				(integrated) GPU — it can't pick a specific one by name, so on machines
+				with 3+ GPUs the extra cards aren't individually selectable.
 			</p>
 		</div>
 	);

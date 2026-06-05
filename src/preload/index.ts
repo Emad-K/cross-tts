@@ -23,6 +23,7 @@ const api: AppApi = {
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
 		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
 		setGpuPower: (params) => ipcRenderer.invoke("setGpuPower", params),
+		getGpuInfo: () => ipcRenderer.invoke("getGpuInfo"),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
