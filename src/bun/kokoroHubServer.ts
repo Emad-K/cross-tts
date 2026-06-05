@@ -12,6 +12,7 @@ import { join, normalize, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { modelCacheDir } from "./appConfigStore";
+import { mainLog } from "./logBridge";
 
 const HF_ORIGIN = "https://huggingface.co";
 
@@ -63,6 +64,13 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	const task = (async () => {
 		mkdirSync(join(dest, ".."), { recursive: true });
 		const url = `${HF_ORIGIN}${hfPath}`;
+		// This branch only runs on a cache miss — a genuine download from HF.
+		const name = hfPath.split("/").pop() || hfPath;
+		mainLog({
+			level: "info",
+			source: "models",
+			message: `Downloading ${name} from HuggingFace (not cached yet)…`,
+		});
 		const res = await fetch(url, { redirect: "follow" });
 		if (!res.ok || !res.body) {
 			throw new Error(`Kokoro hub fetch failed ${res.status}: ${url}`);
@@ -73,6 +81,12 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 			createWriteStream(tmp),
 		);
 		renameSync(tmp, dest);
+		const bytes = existsSync(dest) ? statSync(dest).size : 0;
+		mainLog({
+			level: "info",
+			source: "models",
+			message: `Cached ${name} (${(bytes / 1_048_576).toFixed(1)} MB).`,
+		});
 	})();
 
 	inFlight.set(dest, task);
