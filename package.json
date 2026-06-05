@@ -1,7 +1,7 @@
 {
 	"name": "cross-tts",
-	"version": "1.6.8",
-	"description": "Cross-platform TTS reader (Electron + React + Vite)",
+	"version": "1.6.9",
+	"description": "Listen to your books and documents with offline, natural text-to-speech.",
 	"author": {
 		"name": "Emad Kazemi",
 		"email": "emadkazemi310@gmail.com"
