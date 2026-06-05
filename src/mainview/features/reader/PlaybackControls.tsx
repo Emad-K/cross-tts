@@ -20,6 +20,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import {
 	Tooltip,
@@ -327,16 +328,20 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							</DropdownMenuTrigger>
 							<DropdownMenuContent
 								align="end"
-								className="max-h-72 min-w-[12rem] overflow-y-auto"
+								className="min-w-[12rem] overflow-hidden p-0"
 							>
-								{menuVoices.map((o) => (
-									<DropdownMenuItem
-										key={o.id}
-										onClick={() => setVoice(o.id)}
-									>
-										{o.label}
-									</DropdownMenuItem>
-								))}
+								<ScrollArea className="h-72">
+									<div className="p-1">
+										{menuVoices.map((o) => (
+											<DropdownMenuItem
+												key={o.id}
+												onClick={() => setVoice(o.id)}
+											>
+												{o.label}
+											</DropdownMenuItem>
+										))}
+									</div>
+								</ScrollArea>
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>
