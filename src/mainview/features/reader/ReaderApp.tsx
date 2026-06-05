@@ -10,7 +10,9 @@ import {
 	isDesktopApp,
 	pickDocument,
 	subscribeToMainProcessLogs,
+	subscribeToShortcuts,
 } from "@/lib/desktopBridge";
+import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
 import { LogPanel, useLogStore } from "./logging";
 import { SettingsDialog } from "./settings/SettingsDialog";
@@ -25,10 +27,14 @@ import {
 } from "./sessionPersistence";
 import type { LoadedDocument } from "./types";
 import {
+	adjustVolume,
 	ensureKokoroLoaded,
 	setChapterPlaybackFinishedHandler,
+	skipChunk,
 	startOrResumePlayback,
 	stopPlaybackUi,
+	toggleMute,
+	togglePlayPause,
 	useTtsStore,
 } from "./tts";
 
@@ -130,6 +136,33 @@ export function ReaderApp() {
 	useEffect(() => {
 		return subscribeToMainProcessLogs((entry) => {
 			useLogStore.getState().add(entry);
+		});
+	}, []);
+
+	// Dispatch OS-global shortcut triggers (forwarded from the main process) to
+	// the playback engine.
+	useEffect(() => {
+		return subscribeToShortcuts((action) => {
+			switch (action) {
+				case "playPause":
+					void togglePlayPause();
+					break;
+				case "nextChunk":
+					skipChunk(1);
+					break;
+				case "prevChunk":
+					skipChunk(-1);
+					break;
+				case "volumeUp":
+					adjustVolume(SHORTCUT_VOLUME_STEP);
+					break;
+				case "volumeDown":
+					adjustVolume(-SHORTCUT_VOLUME_STEP);
+					break;
+				case "mute":
+					toggleMute();
+					break;
+			}
 		});
 	}, []);
 

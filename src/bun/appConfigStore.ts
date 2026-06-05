@@ -14,6 +14,10 @@ import {
 	type AppConfigInfo,
 	defaultAppConfig,
 } from "../shared/appConfig";
+import {
+	type ShortcutAction,
+	coerceShortcutBindings,
+} from "../shared/shortcuts";
 
 const CONFIG_NAME = "app-config.json";
 const MODEL_SUBDIR = "kokoro-hf-hub";
@@ -61,6 +65,10 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
+		if (typeof o.shortcutsEnabled === "boolean") {
+			next.shortcutsEnabled = o.shortcutsEnabled;
+		}
+		next.shortcuts = coerceShortcutBindings(o.shortcuts);
 		cached = next;
 		return cached;
 	} catch {
@@ -99,6 +107,26 @@ export function setGpuEnabled(value: boolean): void {
 export function setCpuThreads(value: number): void {
 	const clean = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 	persist({ ...loadAppConfig(), cpuThreads: clean });
+}
+
+export function shortcutsEnabled(): boolean {
+	return loadAppConfig().shortcutsEnabled;
+}
+
+export function shortcutBindings() {
+	return loadAppConfig().shortcuts;
+}
+
+export function setShortcutsEnabled(value: boolean): void {
+	persist({ ...loadAppConfig(), shortcutsEnabled: value });
+}
+
+export function setShortcutBinding(action: ShortcutAction, accel: string): void {
+	const config = loadAppConfig();
+	persist({
+		...config,
+		shortcuts: { ...config.shortcuts, [action]: accel },
+	});
 }
 
 /** Persist a new data directory. Caller is responsible for relaunching to apply. */
@@ -146,6 +174,8 @@ export function appConfigInfo(): AppConfigInfo {
 		isDefaultDataDir: resolved === def,
 		gpuEnabled: config.gpuEnabled,
 		cpuThreads: config.cpuThreads,
+		shortcutsEnabled: config.shortcutsEnabled,
+		shortcuts: config.shortcuts,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
 	};

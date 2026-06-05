@@ -3,6 +3,7 @@ import {
 	Download,
 	FolderCog,
 	FolderOpen,
+	Keyboard,
 	Loader2,
 	RotateCcw,
 	Wand2,
@@ -33,13 +34,15 @@ import {
 	useTtsStore,
 } from "../tts";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
+import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 
-type SectionId = "storage" | "performance" | "rules";
+type SectionId = "storage" | "performance" | "shortcuts" | "rules";
 
 const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
 	{ id: "storage", label: "Storage", icon: FolderCog },
 	{ id: "performance", label: "Performance", icon: Zap },
+	{ id: "shortcuts", label: "Shortcuts", icon: Keyboard },
 	{ id: "rules", label: "Text & speech", icon: Wand2 },
 ];
 
@@ -408,6 +411,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 				<div className="min-h-0 min-w-0 flex-1">
 					{section === "storage" ? <StoragePanel /> : null}
 					{section === "performance" ? <PerformancePanel /> : null}
+					{section === "shortcuts" ? <ShortcutsPanel /> : null}
 					{section === "rules" ? (
 						<TtsRulesPanel active={section === "rules"} />
 					) : null}

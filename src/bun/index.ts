@@ -9,7 +9,15 @@ import {
 	setCpuThreads,
 	setDataDir,
 	setGpuEnabled,
+	setShortcutBinding,
+	setShortcutsEnabled,
 } from "./appConfigStore";
+import {
+	applyGlobalShortcuts,
+	setShortcutTarget,
+	unregisterGlobalShortcuts,
+} from "./globalShortcuts";
+import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
 	pickInitialWindowFrame,
@@ -86,6 +94,25 @@ function registerRpcHandlers(): void {
 		setCpuThreads(threads);
 		return appConfigInfo();
 	});
+	ipcMain.handle(
+		"setShortcutsEnabled",
+		(_event, { enabled }: { enabled: boolean }) => {
+			setShortcutsEnabled(enabled);
+			applyGlobalShortcuts();
+			return appConfigInfo();
+		},
+	);
+	ipcMain.handle(
+		"setShortcutBinding",
+		(
+			_event,
+			{ action, accelerator }: { action: ShortcutAction; accelerator: string },
+		) => {
+			setShortcutBinding(action, accelerator);
+			applyGlobalShortcuts();
+			return appConfigInfo();
+		},
+	);
 	ipcMain.handle("chooseDataDirectory", async () => {
 		if (!mainWindow) return null;
 		const result = await dialog.showOpenDialog(mainWindow, {
@@ -161,8 +188,11 @@ function createWindow(): void {
 	}
 
 	setLogTarget(mainWindow);
+	setShortcutTarget(mainWindow);
+	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
+		setShortcutTarget(null);
 		mainWindow = null;
 	});
 }
@@ -201,6 +231,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
 	stopKokoroHubServer();
+	unregisterGlobalShortcuts();
 });
 
 app.on("window-all-closed", () => {

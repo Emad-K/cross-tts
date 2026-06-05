@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AppApi } from "../shared/appRpc";
 import type { ForwardedLogEntry } from "../shared/logEntry";
+import type { ShortcutAction } from "../shared/shortcuts";
 
 /**
  * Typed RPC bridge between the renderer and the Electron main process.
@@ -22,6 +23,10 @@ const api: AppApi = {
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
 		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
+		setShortcutsEnabled: (params) =>
+			ipcRenderer.invoke("setShortcutsEnabled", params),
+		setShortcutBinding: (params) =>
+			ipcRenderer.invoke("setShortcutBinding", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
@@ -33,6 +38,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:log", handler);
 		return () => {
 			ipcRenderer.removeListener("app:log", handler);
+		};
+	},
+	onShortcut: (listener: (action: ShortcutAction) => void) => {
+		const handler = (_event: unknown, action: ShortcutAction) =>
+			listener(action);
+		ipcRenderer.on("app:shortcut", handler);
+		return () => {
+			ipcRenderer.removeListener("app:shortcut", handler);
 		};
 	},
 };

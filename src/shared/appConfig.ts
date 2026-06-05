@@ -1,3 +1,8 @@
+import {
+	type ShortcutBindings,
+	defaultShortcutBindings,
+} from "./shortcuts";
+
 /**
  * Bootstrap app config (v1). Stored at the OS default app-data directory so it
  * can be read *before* anything else — it tells the app where the relocatable
@@ -20,6 +25,10 @@ export type AppConfigFileV1 = {
 	 * `logicalCores - 1`.
 	 */
 	cpuThreads: number;
+	/** Global media shortcuts enabled (work when the app isn't focused). */
+	shortcutsEnabled: boolean;
+	/** Accelerator per action (Electron syntax). */
+	shortcuts: ShortcutBindings;
 };
 
 /**
@@ -36,6 +45,8 @@ export type AppConfigInfo = {
 	gpuEnabled: boolean;
 	/** CPU inference threads; 0 = auto. */
 	cpuThreads: number;
+	shortcutsEnabled: boolean;
+	shortcuts: ShortcutBindings;
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */
@@ -47,4 +58,6 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	dataDir: defaultDataDir,
 	gpuEnabled: true,
 	cpuThreads: 0,
+	shortcutsEnabled: false,
+	shortcuts: defaultShortcutBindings(),
 });

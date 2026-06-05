@@ -457,6 +457,26 @@ export function setVolumeLive(pct: number): void {
 	applyVolumeFromStore();
 }
 
+/** Nudge volume by `delta` percentage points, clamped to 0–100. */
+export function adjustVolume(delta: number): void {
+	const current = useTtsStore.getState().volumePct;
+	setVolumeLive(Math.max(0, Math.min(100, current + delta)));
+}
+
+let preMuteVolume: number | null = null;
+
+/** Toggle mute: drop to 0 (remembering the level), or restore it. */
+export function toggleMute(): void {
+	const current = useTtsStore.getState().volumePct;
+	if (current > 0) {
+		preMuteVolume = current;
+		setVolumeLive(0);
+	} else {
+		setVolumeLive(preMuteVolume && preMuteVolume > 0 ? preMuteVolume : 80);
+		preMuteVolume = null;
+	}
+}
+
 async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	if (useTtsStore.getState().chunks.length === 0) return;
 
