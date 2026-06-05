@@ -19,6 +19,13 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -355,37 +362,34 @@ function GpuPreferenceControl() {
 		if (getActiveDevice() === "webgpu") resetKokoroEngine();
 	};
 
-	// Label the two non-auto options with real GPU names where we have them.
+	// Label the two WebGPU-addressable adapters with their real names.
 	const options: { id: GpuPowerPreference; label: string }[] = [
-		{ id: "auto", label: "Auto" },
+		{ id: "auto", label: "Auto (recommended)" },
 		{
 			id: "high-performance",
-			label: probe.high ?? detected.gpus[0] ?? "Performance",
+			label: probe.high ?? detected.gpus[0] ?? "High-performance GPU",
 		},
-		{ id: "low-power", label: probe.low ?? "Power-saving" },
+		{ id: "low-power", label: probe.low ?? "Power-saving GPU" },
 	];
 
 	return (
 		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
 			<div className="mb-3 text-sm font-medium">Preferred GPU</div>
-			<div className="grid grid-cols-3 gap-1 rounded-md border border-border p-1">
-				{options.map((opt) => (
-					<button
-						key={opt.id}
-						type="button"
-						title={opt.label}
-						onClick={() => onChange(opt.id)}
-						className={cn(
-							"truncate rounded px-2 py-1.5 text-xs font-medium transition-colors",
-							power === opt.id
-								? "bg-foreground text-background"
-								: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-						)}
-					>
-						{opt.label}
-					</button>
-				))}
-			</div>
+			<Select
+				value={power}
+				onValueChange={(v) => onChange(v as GpuPowerPreference)}
+			>
+				<SelectTrigger className="w-full">
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					{options.map((opt) => (
+						<SelectItem key={opt.id} value={opt.id}>
+							{opt.label}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
 			{detected.gpus.length > 0 ? (
 				<p className="mt-3 break-words text-xs text-muted-foreground">
 					Detected: {detected.gpus.join(", ")}
