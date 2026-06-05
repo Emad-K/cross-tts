@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AppApi } from "../shared/appRpc";
 import type { ForwardedLogEntry } from "../shared/logEntry";
+import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 
 /**
@@ -24,6 +25,8 @@ const api: AppApi = {
 		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
 		setGpuPower: (params) => ipcRenderer.invoke("setGpuPower", params),
 		getGpuInfo: () => ipcRenderer.invoke("getGpuInfo"),
+		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
+		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
@@ -48,6 +51,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:shortcut", handler);
 		return () => {
 			ipcRenderer.removeListener("app:shortcut", handler);
+		};
+	},
+	onModelProgress: (listener: (progress: ModelProgress) => void) => {
+		const handler = (_event: unknown, progress: ModelProgress) =>
+			listener(progress);
+		ipcRenderer.on("app:model-progress", handler);
+		return () => {
+			ipcRenderer.removeListener("app:model-progress", handler);
 		};
 	},
 };

@@ -1,5 +1,10 @@
 import type { AppConfigInfo, GpuPowerPreference } from "./appConfig";
 import type { ForwardedLogEntry } from "./logEntry";
+import type {
+	ModelKind,
+	ModelProgress,
+	ModelStatusMap,
+} from "./modelAssets";
 import type { ShortcutAction } from "./shortcuts";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
@@ -58,6 +63,16 @@ export type AppRpcSchema = {
 			params: void;
 			response: { activeRenderer: string; gpus: string[] };
 		};
+		/** Per-kind on-disk model status (present + bytes). */
+		getModelStatus: {
+			params: void;
+			response: ModelStatusMap;
+		};
+		/** Download a model's weights; progress arrives via onModelProgress. */
+		downloadModel: {
+			params: { kind: ModelKind };
+			response: ModelStatusMap;
+		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {
 			params: { threads: number };
@@ -114,4 +129,6 @@ export type AppApi = {
 	onLog: (listener: (entry: ForwardedLogEntry) => void) => () => void;
 	/** Subscribe to global-shortcut triggers from the main process. */
 	onShortcut: (listener: (action: ShortcutAction) => void) => () => void;
+	/** Subscribe to model-download progress from the main process. */
+	onModelProgress: (listener: (progress: ModelProgress) => void) => () => void;
 };

@@ -1,6 +1,7 @@
 import { Keyboard, RotateCcw } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
 	SHORTCUT_ACTIONS,
@@ -128,7 +129,8 @@ export function ShortcutsPanel() {
 					Global media keys that work even when Cross TTS isn't focused.
 				</p>
 			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+			<ScrollArea className="min-h-0 w-full flex-1">
+				<div className="px-6 py-5">
 				<div className="rounded-lg border border-border bg-muted/20 p-4">
 					<label
 						htmlFor={enabledSwitchId}
@@ -174,7 +176,8 @@ export function ShortcutsPanel() {
 						modifier). Press Esc to cancel.
 					</p>
 				</div>
-			</div>
+				</div>
+			</ScrollArea>
 		</div>
 	);
 }

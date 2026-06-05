@@ -1,6 +1,11 @@
 import type { AppApi } from "@shared/appRpc";
 import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
 import type { ForwardedLogEntry } from "@shared/logEntry";
+import type {
+	ModelKind,
+	ModelProgress,
+	ModelStatusMap,
+} from "@shared/modelAssets";
 import type { ShortcutAction } from "@shared/shortcuts";
 import type {
 	EpubChapterContentResult,
@@ -103,6 +108,29 @@ export async function getGpuInfo(): Promise<{
 	const b = bridge();
 	if (!b) return { activeRenderer: "", gpus: [] };
 	return b.request.getGpuInfo();
+}
+
+export async function getModelStatus(): Promise<ModelStatusMap | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getModelStatus();
+}
+
+export async function downloadModel(
+	kind: ModelKind,
+): Promise<ModelStatusMap | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.downloadModel({ kind });
+}
+
+/** Subscribe to model-download progress. No-op (noop unsubscribe) on web. */
+export function subscribeToModelProgress(
+	listener: (progress: ModelProgress) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onModelProgress) return () => {};
+	return b.onModelProgress(listener);
 }
 
 export async function setCpuThreads(

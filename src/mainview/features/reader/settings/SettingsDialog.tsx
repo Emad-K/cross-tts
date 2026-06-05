@@ -1,4 +1,5 @@
 import {
+	CheckCircle2,
 	Cpu,
 	Download,
 	FolderCog,
@@ -11,6 +12,12 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { GpuPowerPreference } from "@shared/appConfig";
+import {
+	MODEL_KINDS,
+	MODEL_LABEL,
+	type ModelKind,
+	type ModelStatusMap,
+} from "@shared/modelAssets";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +25,7 @@ import {
 	DialogContent,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Select,
@@ -30,18 +38,16 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
 	chooseDataDirectory,
+	downloadModel,
 	getGpuInfo,
+	getModelStatus,
 	relaunchApp,
 	resetDataDirectory,
 	revealDataDirectory,
+	subscribeToModelProgress,
 } from "@/lib/desktopBridge";
 import { cn } from "@/lib/utils";
-import {
-	downloadVoicesAndModel,
-	getActiveDevice,
-	resetKokoroEngine,
-	useTtsStore,
-} from "../tts";
+import { getActiveDevice, resetKokoroEngine } from "../tts";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
@@ -91,16 +97,154 @@ function SectionPane({
 	);
 }
 
+function ModelRow({
+	kind,
+	present,
+	downloading,
+	pct,
+	bytes,
+	onDownload,
+}: {
+	kind: ModelKind;
+	present: boolean;
+	downloading: boolean;
+	pct: number;
+	bytes: number;
+	onDownload: () => void;
+}) {
+	const Icon = kind === "gpu" ? Zap : Cpu;
+	return (
+		<div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-3">
+			<Icon
+				className={cn(
+					"size-4 shrink-0",
+					kind === "gpu" ? "text-amber-400" : "text-muted-foreground",
+				)}
+				aria-hidden
+			/>
+			<div className="min-w-0 flex-1">
+				<div className="flex items-center justify-between gap-2">
+					<span className="text-sm font-medium">{MODEL_LABEL[kind]}</span>
+					<span className="text-[11px] tabular-nums text-muted-foreground">
+						{present
+							? formatBytes(bytes)
+							: downloading
+								? `${pct}%`
+								: "Not downloaded"}
+					</span>
+				</div>
+				<Progress value={pct} className="mt-2 h-1.5" />
+			</div>
+			{present ? (
+				<CheckCircle2
+					className="size-5 shrink-0 text-emerald-500"
+					aria-label="Downloaded"
+				/>
+			) : downloading ? (
+				<Loader2
+					className="size-5 shrink-0 animate-spin text-muted-foreground"
+					aria-hidden
+				/>
+			) : (
+				<Button
+					type="button"
+					variant="outline"
+					size="icon"
+					className="size-8 shrink-0 border-border bg-transparent"
+					aria-label={`Download ${MODEL_LABEL[kind]}`}
+					onClick={onDownload}
+				>
+					<Download className="size-4" aria-hidden />
+				</Button>
+			)}
+		</div>
+	);
+}
+
+function ModelsSection() {
+	const [status, setStatus] = useState<ModelStatusMap | null>(null);
+	const [progress, setProgress] = useState<
+		Partial<Record<ModelKind, { loaded: number; total: number }>>
+	>({});
+	const [busy, setBusy] = useState<Partial<Record<ModelKind, boolean>>>({});
+
+	useEffect(() => {
+		let cancelled = false;
+		void getModelStatus().then((s) => {
+			if (!cancelled && s) setStatus(s);
+		});
+		const unsub = subscribeToModelProgress((p) => {
+			if (p.done) {
+				setProgress((prev) => {
+					const next = { ...prev };
+					delete next[p.kind];
+					return next;
+				});
+				void getModelStatus().then((s) => {
+					if (s) setStatus(s);
+				});
+				return;
+			}
+			setProgress((prev) => ({
+				...prev,
+				[p.kind]: { loaded: p.loaded, total: p.total },
+			}));
+		});
+		return () => {
+			cancelled = true;
+			unsub();
+		};
+	}, []);
+
+	const onDownload = (kind: ModelKind) => {
+		setBusy((b) => ({ ...b, [kind]: true }));
+		void downloadModel(kind)
+			.then((s) => {
+				if (s) setStatus(s);
+			})
+			.finally(() => setBusy((b) => ({ ...b, [kind]: false })));
+	};
+
+	return (
+		<div className="space-y-2">
+			<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+				Voice models
+			</p>
+			{MODEL_KINDS.map((kind) => {
+				const present = status?.[kind].present ?? false;
+				const prog = progress[kind];
+				const downloading = (busy[kind] ?? false) || Boolean(prog);
+				const pct = present
+					? 100
+					: prog && prog.total > 0
+						? Math.min(100, Math.round((prog.loaded / prog.total) * 100))
+						: prog
+							? 5
+							: 0;
+				return (
+					<ModelRow
+						key={kind}
+						kind={kind}
+						present={present}
+						downloading={downloading}
+						pct={pct}
+						bytes={status?.[kind].bytes ?? 0}
+						onDownload={() => onDownload(kind)}
+					/>
+				);
+			})}
+			<p className="text-[11px] text-muted-foreground">
+				Models download automatically on first playback; download here to use
+				them offline. CPU and GPU use different weights.
+			</p>
+		</div>
+	);
+}
+
 function StoragePanel() {
 	const config = useAppSettingsStore((s) => s.config);
-	const refresh = useAppSettingsStore((s) => s.refresh);
-	const voiceDownloadPhase = useTtsStore((s) => s.voiceDownloadPhase);
-	const voiceDownloadProgress = useTtsStore((s) => s.voiceDownloadProgress);
-	const voiceDownloadError = useTtsStore((s) => s.voiceDownloadError);
 	const [pendingRestart, setPendingRestart] = useState(false);
 	const [working, setWorking] = useState(false);
-
-	const downloading = voiceDownloadPhase === "running";
 
 	const onChangeFolder = async () => {
 		setWorking(true);
@@ -191,37 +335,9 @@ function StoragePanel() {
 				) : null}
 			</div>
 
-			<div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-4">
-				<p className="text-xs text-muted-foreground">
-					{config?.modelsDownloaded
-						? `Models downloaded · ${formatBytes(config.modelBytes)}`
-						: "Models download automatically on first playback."}
-				</p>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="shrink-0 gap-2 border-border bg-transparent"
-					disabled={downloading}
-					onClick={() =>
-						void downloadVoicesAndModel().finally(() => void refresh())
-					}
-				>
-					{downloading ? (
-						<Loader2 className="size-4 animate-spin" aria-hidden />
-					) : (
-						<Download className="size-4" aria-hidden />
-					)}
-					{downloading
-						? voiceDownloadProgress
-							? `Voices ${voiceDownloadProgress.loaded}/${voiceDownloadProgress.total}`
-							: "Downloading…"
-						: "Download now"}
-				</Button>
+			<div className="mt-4 border-t border-border/60 pt-4">
+				<ModelsSection />
 			</div>
-			{voiceDownloadError ? (
-				<p className="mt-2 text-xs text-destructive">{voiceDownloadError}</p>
-			) : null}
 
 			{pendingRestart ? (
 				<div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
