@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import type { AppConfigInfo } from "@shared/appConfig";
+import type { GpuPowerPreference } from "@shared/appConfig";
 import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
 	setCpuThreads as setCpuThreadsRpc,
 	setGpuEnabled as setGpuEnabledRpc,
+	setGpuPower as setGpuPowerRpc,
 	setShortcutBinding as setShortcutBindingRpc,
 	setShortcutsEnabled as setShortcutsEnabledRpc,
 } from "@/lib/desktopBridge";
@@ -19,6 +21,7 @@ type AppSettingsState = {
 	hydrate: () => Promise<void>;
 	refresh: () => Promise<void>;
 	setGpuEnabled: (enabled: boolean) => Promise<void>;
+	setGpuPower: (power: GpuPowerPreference) => Promise<void>;
 	setCpuThreads: (threads: number) => Promise<void>;
 	setShortcutsEnabled: (enabled: boolean) => Promise<void>;
 	setShortcutBinding: (
@@ -55,6 +58,21 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		} catch (e) {
 			if (prev) set({ config: prev });
 			logError("Couldn't change the GPU setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setGpuPower: async (power) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, gpuPower: power } });
+		try {
+			const config = await setGpuPowerRpc(power);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the GPU preference.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});

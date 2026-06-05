@@ -17,12 +17,15 @@ type KokoroDtype = NonNullable<
 	Parameters<typeof KokoroTTS.from_pretrained>[1]
 >["dtype"];
 
+type GpuPower = "auto" | "high-performance" | "low-power";
+
 type InitMessage = {
 	type: "init";
 	hubBaseUrl: string | null;
 	device: KokoroDevice;
 	dtype: KokoroDtype;
 	numThreads: number;
+	gpuPower: GpuPower;
 };
 
 type GenerateMessage = {
@@ -41,6 +44,28 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 let tts: KokoroTTS | null = null;
 let loadPromise: Promise<KokoroTTS> | null = null;
 
+async function selectGpuAdapter(power: GpuPower): Promise<void> {
+	// WebGPU can't pick a GPU by name — only a power hint, which on multi-GPU
+	// machines selects the dedicated (high-performance) vs integrated (low-power)
+	// adapter. Request it ourselves and hand it to ORT (the non-deprecated path).
+	if (power === "auto") return;
+	try {
+		if (typeof navigator === "undefined" || !navigator.gpu) return;
+		const adapter = await navigator.gpu.requestAdapter({
+			powerPreference: power,
+		});
+		const webgpu = env.backends?.onnx?.webgpu as
+			| { adapter?: unknown; powerPreference?: string }
+			| undefined;
+		if (webgpu) {
+			if (adapter) webgpu.adapter = adapter;
+			webgpu.powerPreference = power;
+		}
+	} catch {
+		// Fall back to ORT's default adapter selection.
+	}
+}
+
 function load(init: InitMessage): Promise<KokoroTTS> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
@@ -52,15 +77,22 @@ function load(init: InitMessage): Promise<KokoroTTS> {
 		if (wasm && init.device === "wasm") {
 			wasm.numThreads = init.numThreads;
 		}
-		loadPromise = KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-			dtype: init.dtype,
-			device: init.device,
-			progress_callback: (info) => {
-				if (info.status === "progress") {
-					ctx.postMessage({ type: "progress", value: info.progress / 100 });
-				}
-			},
-		})
+		loadPromise = (
+			init.device === "webgpu"
+				? selectGpuAdapter(init.gpuPower)
+				: Promise.resolve()
+		)
+			.then(() =>
+				KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+					dtype: init.dtype,
+					device: init.device,
+					progress_callback: (info) => {
+						if (info.status === "progress") {
+							ctx.postMessage({ type: "progress", value: info.progress / 100 });
+						}
+					},
+				}),
+			)
 			.then((model) => {
 				tts = model;
 				return model;

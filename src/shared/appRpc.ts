@@ -1,4 +1,4 @@
-import type { AppConfigInfo } from "./appConfig";
+import type { AppConfigInfo, GpuPowerPreference } from "./appConfig";
 import type { ForwardedLogEntry } from "./logEntry";
 import type { ShortcutAction } from "./shortcuts";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
@@ -46,6 +46,11 @@ export type AppRpcSchema = {
 		};
 		setGpuEnabled: {
 			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** Choose which GPU to prefer (multi-GPU machines). */
+		setGpuPower: {
+			params: { power: GpuPowerPreference };
 			response: AppConfigInfo;
 		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
