@@ -25,6 +25,7 @@ import {
 } from "./sessionPersistence";
 import type { LoadedDocument } from "./types";
 import {
+	ensureKokoroLoaded,
 	setChapterPlaybackFinishedHandler,
 	startOrResumePlayback,
 	stopPlaybackUi,
@@ -131,6 +132,23 @@ export function ReaderApp() {
 			useLogStore.getState().add(entry);
 		});
 	}, []);
+
+	// Warm up the TTS model in the background once a document is open, so the
+	// (one-time, ~17s on GPU) model load happens while the user reads instead of
+	// on their first press of play. Waits for the GPU/CPU preference to hydrate
+	// first so it loads the right weights. Idempotent; errors are already logged.
+	useEffect(() => {
+		if (!sessionReady || !document) return;
+		let cancelled = false;
+		void (async () => {
+			await useAppSettingsStore.getState().hydrate();
+			if (cancelled) return;
+			await ensureKokoroLoaded().catch(() => {});
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [document, sessionReady]);
 
 	useEffect(() => {
 		setChapterPlaybackFinishedHandler(() => {
