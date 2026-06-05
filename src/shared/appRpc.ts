@@ -53,6 +53,11 @@ export type AppRpcSchema = {
 			params: { power: GpuPowerPreference };
 			response: AppConfigInfo;
 		};
+		/** Names of GPUs Chromium detected (best-effort), for display. */
+		getGpuInfo: {
+			params: void;
+			response: { activeRenderer: string; gpus: string[] };
+		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {
 			params: { threads: number };

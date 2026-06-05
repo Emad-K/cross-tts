@@ -45,6 +45,43 @@ app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
+const GPU_VENDORS: Record<number, string> = {
+	0x10de: "NVIDIA",
+	0x8086: "Intel",
+	0x1002: "AMD",
+	0x106b: "Apple",
+	0x5143: "Qualcomm",
+	0x13b5: "ARM",
+};
+
+/** Best-effort GPU names from Chromium. WebGPU itself can't name-select. */
+async function getGpuInfo(): Promise<{ activeRenderer: string; gpus: string[] }> {
+	try {
+		const info = (await app.getGPUInfo("complete")) as {
+			auxAttributes?: { glRenderer?: string };
+			gpuDevice?: { vendorId?: number; deviceId?: number; active?: boolean }[];
+		};
+		const activeRenderer = info.auxAttributes?.glRenderer ?? "";
+		const gpus: string[] = [];
+		for (const d of info.gpuDevice ?? []) {
+			if (d.active && activeRenderer) {
+				gpus.push(activeRenderer);
+			} else {
+				const vendor =
+					(d.vendorId !== undefined && GPU_VENDORS[d.vendorId]) || "GPU";
+				gpus.push(
+					d.deviceId !== undefined
+						? `${vendor} (0x${d.deviceId.toString(16)})`
+						: vendor,
+				);
+			}
+		}
+		return { activeRenderer, gpus: [...new Set(gpus)] };
+	} catch {
+		return { activeRenderer: "", gpus: [] };
+	}
+}
+
 /** Resolves once the hub finished binding (or failed → null). */
 let kokoroHubReady: Promise<string | null> = Promise.resolve(null);
 let mainWindow: BrowserWindow | null = null;
@@ -99,6 +136,7 @@ function registerRpcHandlers(): void {
 			return appConfigInfo();
 		},
 	);
+	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
 		return appConfigInfo();

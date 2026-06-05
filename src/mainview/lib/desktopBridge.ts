@@ -96,6 +96,15 @@ export async function setGpuPower(
 	return b.request.setGpuPower({ power });
 }
 
+export async function getGpuInfo(): Promise<{
+	activeRenderer: string;
+	gpus: string[];
+}> {
+	const b = bridge();
+	if (!b) return { activeRenderer: "", gpus: [] };
+	return b.request.getGpuInfo();
+}
+
 export async function setCpuThreads(
 	threads: number,
 ): Promise<AppConfigInfo | null> {
