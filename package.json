@@ -1,6 +1,6 @@
 {
 	"name": "cross-tts",
-	"version": "1.6.16",
+	"version": "1.7.0",
 	"description": "Listen to your books and documents with offline, natural text-to-speech.",
 	"author": {
 		"name": "Emad Kazemi",
@@ -30,6 +30,7 @@
 		"dist:linux": "pnpm run build:check && electron-builder --linux"
 	},
 	"dependencies": {
+		"@breezystack/lamejs": "^1.2.7",
 		"@fontsource/atkinson-hyperlegible": "^5.2.8",
 		"@fontsource/inter": "^5.2.8",
 		"@fontsource/literata": "^5.2.8",
