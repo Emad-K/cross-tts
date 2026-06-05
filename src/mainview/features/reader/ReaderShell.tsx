@@ -21,6 +21,7 @@ export type ReaderShellProps = {
 	onOpenFile: () => void;
 	onOpenSettings?: () => void;
 	onOpenLogs?: () => void;
+	onOpenAudiobook?: () => void;
 	onLoadSample?: () => void;
 	className?: string;
 };
@@ -38,6 +39,7 @@ export function ReaderShell({
 	onOpenFile,
 	onOpenSettings,
 	onOpenLogs,
+	onOpenAudiobook,
 	onLoadSample,
 	className,
 }: ReaderShellProps) {
@@ -67,6 +69,8 @@ export function ReaderShell({
 					onOpenFile={onOpenFile}
 					onOpenSettings={onOpenSettings}
 					onOpenLogs={onOpenLogs}
+					onOpenAudiobook={onOpenAudiobook}
+					showAudiobook={document?.format === "epub"}
 					showChapterToggle={hasDoc}
 					chapterSidebarOpen={chapterSidebarOpen}
 					onToggleChapterSidebar={() =>

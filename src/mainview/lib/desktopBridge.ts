@@ -110,6 +110,28 @@ export async function setAppearance(
 	return b.request.setAppearance(patch);
 }
 
+export async function chooseExportFolder(): Promise<string | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.chooseExportFolder();
+}
+
+export async function writeAudioFile(
+	dir: string,
+	fileName: string,
+	data: Uint8Array,
+): Promise<{ ok: boolean; path: string | null; error?: string }> {
+	const b = bridge();
+	if (!b) return { ok: false, path: null, error: "Not in desktop app" };
+	return b.request.writeAudioFile({ dir, fileName, data });
+}
+
+export async function revealPath(path: string): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.revealPath({ path });
+}
+
 export async function getGpuInfo(): Promise<{
 	activeRenderer: string;
 	gpus: string[];

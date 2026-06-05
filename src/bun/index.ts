@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
@@ -143,6 +144,38 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("setAppearance", (_event, patch: Partial<Appearance>) => {
 		setAppearance(patch);
 		return appConfigInfo();
+	});
+	ipcMain.handle("chooseExportFolder", async () => {
+		if (!mainWindow) return null;
+		const result = await dialog.showOpenDialog(mainWindow, {
+			title: "Choose where to save the audiobook",
+			properties: ["openDirectory", "createDirectory"],
+		});
+		if (result.canceled || result.filePaths.length === 0) return null;
+		return result.filePaths[0]!;
+	});
+	ipcMain.handle(
+		"writeAudioFile",
+		(
+			_event,
+			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
+		) => {
+			try {
+				mkdirSync(dir, { recursive: true });
+				const path = join(dir, fileName);
+				writeFileSync(path, Buffer.from(data));
+				return { ok: true, path };
+			} catch (e) {
+				return {
+					ok: false,
+					path: null,
+					error: e instanceof Error ? e.message : String(e),
+				};
+			}
+		},
+	);
+	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
+		void shell.openPath(path);
 	});
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
