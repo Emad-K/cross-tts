@@ -26,6 +26,12 @@ import {
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
 
+// Re-enable SharedArrayBuffer without requiring cross-origin isolation. ONNX
+// Runtime's multi-threaded wasm backend needs SAB; without this it silently
+// runs single-threaded and CPU synthesis is painfully slow. Must be set before
+// the app is ready.
+app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
 /** Resolves once the hub finished binding (or failed → null). */

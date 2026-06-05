@@ -1,7 +1,7 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
-import { logError, logInfo } from "../logging";
+import { logError, logInfo, logWarn } from "../logging";
 import {
 	isGpuPreferenceEnabled,
 	useAppSettingsStore,
@@ -35,6 +35,47 @@ async function configureKokoroHubEnv(): Promise<void> {
 function ensureKokoroHubEnv(): Promise<void> {
 	if (!hubEnvPromise) hubEnvPromise = configureKokoroHubEnv();
 	return hubEnvPromise;
+}
+
+/**
+ * Configure the ONNX Runtime wasm backend for CPU synthesis. Without
+ * `numThreads` ORT runs single-threaded and is very slow (which also makes the
+ * synchronous wasm call block the UI for a long time). Threading needs
+ * `SharedArrayBuffer`; the main process enables it via the "SharedArrayBuffer"
+ * Chromium feature. If it's still missing ORT falls back to one thread, so we
+ * surface that in the log.
+ */
+function configureWasmBackend(): void {
+	try {
+		const wasm = env.backends?.onnx?.wasm;
+		if (!wasm) return;
+		const cores =
+			typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
+		const threads = Math.max(1, Math.min(cores || 4, 8));
+		wasm.numThreads = threads;
+
+		const hasSab = typeof SharedArrayBuffer !== "undefined";
+		const isolated =
+			typeof crossOriginIsolated !== "undefined"
+				? crossOriginIsolated
+				: "unknown";
+		logInfo(
+			`CPU synthesis: ${threads} thread(s) requested ` +
+				`(SharedArrayBuffer=${hasSab}, crossOriginIsolated=${isolated}).`,
+			{ source: "models" },
+		);
+		if (!hasSab) {
+			logWarn(
+				"No SharedArrayBuffer — CPU synthesis is stuck on a single thread, which is slow. Enable GPU in Settings if you have a compatible GPU.",
+				{ source: "models" },
+			);
+		}
+	} catch (e) {
+		logError("Couldn't configure the CPU inference backend.", {
+			source: "models",
+			error: e,
+		});
+	}
 }
 
 let audioContext: AudioContext | null = null;
@@ -210,6 +251,7 @@ export async function ensureKokoroLoaded(): Promise<KokoroTTS> {
 			.then(() => resolveKokoroLoadOptions())
 			.then(({ device, dtype }) => {
 				resolvedDevice = device;
+				if (device === "wasm") configureWasmBackend();
 				logInfo(
 					`Loading voice model (${device === "webgpu" ? "GPU" : "CPU"})…`,
 					{ source: "models" },
