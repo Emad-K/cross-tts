@@ -49,9 +49,15 @@ export function loadAppConfig(): AppConfigFileV1 {
 			return cached;
 		}
 		const o = parsed as Record<string, unknown>;
+		const storedVersion = typeof o.version === "number" ? o.version : 1;
 		const next = { ...fallback };
 		if (isAbsoluteUsableDir(o.dataDir)) next.dataDir = o.dataDir;
-		if (typeof o.gpuEnabled === "boolean") next.gpuEnabled = o.gpuEnabled;
+		// Only honor a stored GPU choice from the current schema. Older configs
+		// (v1, GPU-off default) are migrated to the new GPU-on default; the user's
+		// choice sticks again once they toggle it (which persists v2).
+		if (storedVersion >= APP_CONFIG_VERSION && typeof o.gpuEnabled === "boolean") {
+			next.gpuEnabled = o.gpuEnabled;
+		}
 		cached = next;
 		return cached;
 	} catch {
