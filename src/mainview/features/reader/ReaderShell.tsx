@@ -58,7 +58,7 @@ export function ReaderShell({
 			<SleepTimerEffect />
 			<div
 				className={cn(
-					"dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground",
+					"flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground",
 					className,
 				)}
 			>

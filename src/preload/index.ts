@@ -32,6 +32,7 @@ const api: AppApi = {
 			ipcRenderer.invoke("setShortcutsEnabled", params),
 		setShortcutBinding: (params) =>
 			ipcRenderer.invoke("setShortcutBinding", params),
+		setAppearance: (params) => ipcRenderer.invoke("setAppearance", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),

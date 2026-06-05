@@ -6,6 +6,7 @@ import {
 	FolderOpen,
 	Keyboard,
 	Loader2,
+	Palette,
 	RotateCcw,
 	Wand2,
 	Zap,
@@ -48,13 +49,20 @@ import {
 } from "@/lib/desktopBridge";
 import { cn } from "@/lib/utils";
 import { getActiveDevice, resetKokoroEngine } from "../tts";
+import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 
-type SectionId = "storage" | "performance" | "shortcuts" | "rules";
+type SectionId =
+	| "appearance"
+	| "storage"
+	| "performance"
+	| "shortcuts"
+	| "rules";
 
 const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
+	{ id: "appearance", label: "Appearance", icon: Palette },
 	{ id: "storage", label: "Storage", icon: FolderCog },
 	{ id: "performance", label: "Performance", icon: Zap },
 	{ id: "shortcuts", label: "Shortcuts", icon: Keyboard },
@@ -591,7 +599,7 @@ function PerformancePanel() {
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-	const [section, setSection] = useState<SectionId>("storage");
+	const [section, setSection] = useState<SectionId>("appearance");
 	const hydrate = useAppSettingsStore((s) => s.hydrate);
 	const refresh = useAppSettingsStore((s) => s.refresh);
 	const appVersion = useAppSettingsStore((s) => s.config?.appVersion);
@@ -645,6 +653,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 				{/* Right content pane. */}
 				<div className="min-h-0 min-w-0 flex-1">
+					{section === "appearance" ? <AppearancePanel /> : null}
 					{section === "storage" ? <StoragePanel /> : null}
 					{section === "performance" ? <PerformancePanel /> : null}
 					{section === "shortcuts" ? <ShortcutsPanel /> : null}

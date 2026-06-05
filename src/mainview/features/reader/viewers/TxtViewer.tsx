@@ -205,8 +205,8 @@ export function TxtViewer({
 	return (
 		<div
 			className={cn(
-				"mx-auto w-full min-w-0 max-w-prose px-4 py-8 sm:px-8 sm:py-10 md:py-14",
-				"font-serif text-[1.05rem] leading-[1.75] text-foreground/95 sm:text-lg sm:leading-8",
+				"reader-surface mx-auto w-full min-w-0 max-w-prose px-4 py-8 sm:px-8 sm:py-10 md:py-14",
+				"leading-[1.75] text-foreground/95 sm:leading-8",
 			)}
 		>
 			{chunkBody ? (

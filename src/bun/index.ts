@@ -6,6 +6,7 @@ import {
 	appConfigInfo,
 	dataDir,
 	resetDataDir,
+	setAppearance,
 	setCpuThreads,
 	setDataDir,
 	setGpuEnabled,
@@ -20,6 +21,7 @@ import {
 } from "./globalShortcuts";
 import { downloadModel, modelStatus } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
+import type { Appearance } from "../shared/appearance";
 import type { ModelKind } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
@@ -138,6 +140,10 @@ function registerRpcHandlers(): void {
 			return appConfigInfo();
 		},
 	);
+	ipcMain.handle("setAppearance", (_event, patch: Partial<Appearance>) => {
+		setAppearance(patch);
+		return appConfigInfo();
+	});
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
 	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {

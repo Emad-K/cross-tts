@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import type { AppConfigInfo } from "@shared/appConfig";
 import type { GpuPowerPreference } from "@shared/appConfig";
+import type { Appearance } from "@shared/appearance";
 import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
+	setAppearance as setAppearanceRpc,
 	setCpuThreads as setCpuThreadsRpc,
 	setGpuEnabled as setGpuEnabledRpc,
 	setGpuPower as setGpuPowerRpc,
@@ -28,6 +30,7 @@ type AppSettingsState = {
 		action: ShortcutAction,
 		accelerator: string,
 	) => Promise<void>;
+	setAppearance: (patch: Partial<Appearance>) => Promise<void>;
 	setConfig: (config: AppConfigInfo) => void;
 	setWebgpuAvailable: (available: boolean) => void;
 };
@@ -125,6 +128,23 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		} catch (e) {
 			if (prev) set({ config: prev });
 			logError("Couldn't change the shortcut.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setAppearance: async (patch) => {
+		const prev = get().config;
+		if (prev) {
+			set({ config: { ...prev, appearance: { ...prev.appearance, ...patch } } });
+		}
+		try {
+			const config = await setAppearanceRpc(patch);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the appearance.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});

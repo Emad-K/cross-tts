@@ -1,3 +1,4 @@
+import { type Appearance, defaultAppearance } from "./appearance";
 import {
 	type ShortcutBindings,
 	defaultShortcutBindings,
@@ -38,6 +39,8 @@ export type AppConfigFileV1 = {
 	shortcutsEnabled: boolean;
 	/** Accelerator per action (Electron syntax). */
 	shortcuts: ShortcutBindings;
+	/** Theme, color mode, and reading font. */
+	appearance: Appearance;
 };
 
 /**
@@ -57,6 +60,7 @@ export type AppConfigInfo = {
 	cpuThreads: number;
 	shortcutsEnabled: boolean;
 	shortcuts: ShortcutBindings;
+	appearance: Appearance;
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */
@@ -71,4 +75,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	cpuThreads: 0,
 	shortcutsEnabled: false,
 	shortcuts: defaultShortcutBindings(),
+	appearance: defaultAppearance(),
 });

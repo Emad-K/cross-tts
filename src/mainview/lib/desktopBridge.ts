@@ -1,5 +1,6 @@
 import type { AppApi } from "@shared/appRpc";
 import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
+import type { Appearance } from "@shared/appearance";
 import type { ForwardedLogEntry } from "@shared/logEntry";
 import type {
 	ModelKind,
@@ -99,6 +100,14 @@ export async function setGpuPower(
 	const b = bridge();
 	if (!b) return null;
 	return b.request.setGpuPower({ power });
+}
+
+export async function setAppearance(
+	patch: Partial<Appearance>,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setAppearance(patch);
 }
 
 export async function getGpuInfo(): Promise<{
