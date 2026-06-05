@@ -1,6 +1,7 @@
 import type { AppApi } from "@shared/appRpc";
 import type { AppConfigInfo } from "@shared/appConfig";
 import type { ForwardedLogEntry } from "@shared/logEntry";
+import type { ShortcutAction } from "@shared/shortcuts";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -93,6 +94,32 @@ export async function setCpuThreads(
 	const b = bridge();
 	if (!b) return null;
 	return b.request.setCpuThreads({ threads });
+}
+
+export async function setShortcutsEnabled(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setShortcutsEnabled({ enabled });
+}
+
+export async function setShortcutBinding(
+	action: ShortcutAction,
+	accelerator: string,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setShortcutBinding({ action, accelerator });
+}
+
+/** Subscribe to global-shortcut triggers. No-op (noop unsubscribe) on web. */
+export function subscribeToShortcuts(
+	listener: (action: ShortcutAction) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onShortcut) return () => {};
+	return b.onShortcut(listener);
 }
 
 export async function chooseDataDirectory(): Promise<AppConfigInfo | null> {

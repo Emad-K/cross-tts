@@ -5,6 +5,7 @@ export type { KokoroVoiceId } from "./kokoroVoices";
 export { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
 export { TtsSettingSync } from "./TtsSettingSync";
 export {
+	adjustVolume,
 	downloadVoicesAndModel,
 	ensureKokoroLoaded,
 	getActiveDevice,
@@ -18,6 +19,7 @@ export {
 	skipChunk,
 	startOrResumePlayback,
 	stopPlaybackUi,
+	toggleMute,
 	togglePlayPause,
 } from "./ttsEngine";
 export { useTtsStore } from "./ttsStore";

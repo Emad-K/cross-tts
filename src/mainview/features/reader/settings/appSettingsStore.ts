@@ -1,9 +1,12 @@
 import { create } from "zustand";
 import type { AppConfigInfo } from "@shared/appConfig";
+import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
 	setCpuThreads as setCpuThreadsRpc,
 	setGpuEnabled as setGpuEnabledRpc,
+	setShortcutBinding as setShortcutBindingRpc,
+	setShortcutsEnabled as setShortcutsEnabledRpc,
 } from "@/lib/desktopBridge";
 import { logError } from "../logging";
 
@@ -17,6 +20,11 @@ type AppSettingsState = {
 	refresh: () => Promise<void>;
 	setGpuEnabled: (enabled: boolean) => Promise<void>;
 	setCpuThreads: (threads: number) => Promise<void>;
+	setShortcutsEnabled: (enabled: boolean) => Promise<void>;
+	setShortcutBinding: (
+		action: ShortcutAction,
+		accelerator: string,
+	) => Promise<void>;
 	setConfig: (config: AppConfigInfo) => void;
 	setWebgpuAvailable: (available: boolean) => void;
 };
@@ -62,6 +70,43 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		} catch (e) {
 			if (prev) set({ config: prev });
 			logError("Couldn't change the CPU threads setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setShortcutsEnabled: async (enabled) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, shortcutsEnabled: enabled } });
+		try {
+			const config = await setShortcutsEnabledRpc(enabled);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the shortcuts setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setShortcutBinding: async (action, accelerator) => {
+		const prev = get().config;
+		if (prev) {
+			set({
+				config: {
+					...prev,
+					shortcuts: { ...prev.shortcuts, [action]: accelerator },
+				},
+			});
+		}
+		try {
+			const config = await setShortcutBindingRpc(action, accelerator);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the shortcut.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});

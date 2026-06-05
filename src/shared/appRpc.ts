@@ -1,5 +1,6 @@
 import type { AppConfigInfo } from "./appConfig";
 import type { ForwardedLogEntry } from "./logEntry";
+import type { ShortcutAction } from "./shortcuts";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
 	EpubChapterContentResult,
@@ -52,6 +53,16 @@ export type AppRpcSchema = {
 			params: { threads: number };
 			response: AppConfigInfo;
 		};
+		/** Enable/disable OS-global media shortcuts. */
+		setShortcutsEnabled: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** Rebind one global shortcut action (Electron accelerator string). */
+		setShortcutBinding: {
+			params: { action: ShortcutAction; accelerator: string };
+			response: AppConfigInfo;
+		};
 		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
 		chooseDataDirectory: {
 			params: void;
@@ -91,4 +102,6 @@ export type AppApi = {
 	};
 	/** Subscribe to log entries forwarded from the main process. Returns an unsubscribe fn. */
 	onLog: (listener: (entry: ForwardedLogEntry) => void) => () => void;
+	/** Subscribe to global-shortcut triggers from the main process. */
+	onShortcut: (listener: (action: ShortcutAction) => void) => () => void;
 };
