@@ -72,6 +72,10 @@ let reqSeq = 0;
 const pending = new Map<number, (result: GenerateResult) => void>();
 let onWorkerReady: (() => void) | null = null;
 let onWorkerInitError: ((err: Error) => void) | null = null;
+/** Model load time reported by the worker (ms), for the "ready" log line. */
+let lastLoadMs = 0;
+/** Log the first synthesis duration after each (re)load to explain warm-up. */
+let loggedFirstSynth = false;
 
 function spawnWorker(): Worker {
 	const w = new Worker(new URL("./ttsWorker.ts", import.meta.url), {
@@ -84,6 +88,7 @@ function spawnWorker(): Worker {
 				useTtsStore.getState().setModelProgress(msg.value);
 				break;
 			case "ready":
+				lastLoadMs = typeof msg.loadMs === "number" ? msg.loadMs : 0;
 				useTtsStore.getState().setVoiceOptions(msg.voices);
 				onWorkerReady?.();
 				break;
@@ -96,12 +101,21 @@ function spawnWorker(): Worker {
 				pending.delete(msg.id);
 				if (msg.error) resolve({ kind: "error", message: msg.error });
 				else if (msg.empty) resolve({ kind: "empty" });
-				else
+				else {
+					if (!loggedFirstSynth && typeof msg.synthMs === "number") {
+						loggedFirstSynth = true;
+						logInfo(
+							`First sentence synthesized in ${(msg.synthMs / 1000).toFixed(1)}s ` +
+								"(later sentences are prefetched while one plays).",
+							{ source: "tts" },
+						);
+					}
 					resolve({
 						kind: "audio",
 						audio: msg.audio,
 						samplingRate: msg.samplingRate,
 					});
+				}
 				break;
 			}
 		}
@@ -128,6 +142,7 @@ function teardownWorker(): void {
 function initWorker(device: KokoroDevice, dtype: KokoroDtype): Promise<void> {
 	const base = getKokoroHubBaseUrlSync();
 	const numThreads = device === "wasm" ? cpuThreadCount() : 1;
+	loggedFirstSynth = false;
 	worker = spawnWorker();
 	const ready = new Promise<void>((resolve, reject) => {
 		onWorkerReady = resolve;
@@ -345,7 +360,8 @@ export async function ensureKokoroLoaded(): Promise<void> {
 			setModelPhase("ready");
 			setModelProgress(1);
 			logInfo(
-				`Voice model ready (${device === "webgpu" ? "GPU" : "CPU"}).`,
+				`Voice model ready (${device === "webgpu" ? "GPU" : "CPU"}) — ` +
+					`loaded in ${(lastLoadMs / 1000).toFixed(1)}s.`,
 				{ source: "models" },
 			);
 		})().catch((e: unknown) => {

@@ -91,9 +91,14 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 	const msg = event.data;
 
 	if (msg.type === "init") {
+		const startedAt = performance.now();
 		void load(msg)
 			.then((model) => {
-				ctx.postMessage({ type: "ready", voices: voiceOptions(model) });
+				ctx.postMessage({
+					type: "ready",
+					voices: voiceOptions(model),
+					loadMs: Math.round(performance.now() - startedAt),
+				});
 			})
 			.catch((e: unknown) => {
 				ctx.postMessage({
@@ -106,6 +111,7 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 
 	if (msg.type === "generate") {
 		void (async () => {
+			const startedAt = performance.now();
 			try {
 				if (!tts) {
 					ctx.postMessage({
@@ -141,6 +147,7 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 						id: msg.id,
 						audio: new Float32Array(buffer),
 						samplingRate: raw.sampling_rate,
+						synthMs: Math.round(performance.now() - startedAt),
 					},
 					[buffer],
 				);
