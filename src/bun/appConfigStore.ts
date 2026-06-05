@@ -140,6 +140,7 @@ export function appConfigInfo(): AppConfigInfo {
 	const def = defaultDataDir();
 	const modelBytes = dirSizeBytes(modelCacheDir());
 	return {
+		appVersion: app.getVersion(),
 		dataDir: resolved,
 		defaultDataDir: def,
 		isDefaultDataDir: resolved === def,

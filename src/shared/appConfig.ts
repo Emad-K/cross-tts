@@ -27,6 +27,8 @@ export type AppConfigFileV1 = {
  * OS-appropriate location used when the user hasn't chosen a custom one.
  */
 export type AppConfigInfo = {
+	/** App version (from package.json), e.g. "1.6.9". */
+	appVersion: string;
 	dataDir: string;
 	defaultDataDir: string;
 	/** True when `dataDir` is the OS default (user hasn't picked a custom folder). */

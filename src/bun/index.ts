@@ -46,10 +46,14 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
 	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
 		if (!mainWindow) return;
-		const f = mainWindow.getBounds();
+		// Store the *normal* (restored) bounds — getBounds() on a maximized window
+		// returns the maximized rect, which restores a few px off-screen.
+		const f = mainWindow.getNormalBounds();
 		saveAppSessionFile({
 			version: APP_SESSION_VERSION,
 			window: { x: f.x, y: f.y, width: f.width, height: f.height },
+			maximized: mainWindow.isMaximized(),
+			fullScreen: mainWindow.isFullScreen(),
 			web,
 		});
 	});
@@ -147,6 +151,13 @@ function createWindow(): void {
 		void mainWindow.loadURL(devUrl);
 	} else {
 		void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+	}
+
+	// Restore maximized / fullscreen state on top of the normal bounds.
+	if (savedSession?.fullScreen) {
+		mainWindow.setFullScreen(true);
+	} else if (savedSession?.maximized) {
+		mainWindow.maximize();
 	}
 
 	setLogTarget(mainWindow);
