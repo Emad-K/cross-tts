@@ -17,6 +17,7 @@ import { ReaderShell } from "./ReaderShell";
 import { LogPanel, useLogStore } from "./logging";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { useAppSettingsStore } from "./settings/appSettingsStore";
+import { useAppearanceSync } from "./settings/applyAppearance";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
 	hydratePersistedSession,
@@ -88,6 +89,7 @@ export function ReaderApp() {
 	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
+	useAppearanceSync();
 
 	function isPlaybackActive(
 		playback: ReturnType<typeof useTtsStore.getState>["playback"],

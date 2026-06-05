@@ -15,6 +15,7 @@ import {
 	type GpuPowerPreference,
 	defaultAppConfig,
 } from "../shared/appConfig";
+import { type Appearance, coerceAppearance } from "../shared/appearance";
 import {
 	type ShortcutAction,
 	coerceShortcutBindings,
@@ -77,6 +78,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 			next.shortcutsEnabled = o.shortcutsEnabled;
 		}
 		next.shortcuts = coerceShortcutBindings(o.shortcuts);
+		next.appearance = coerceAppearance(o.appearance);
 		cached = next;
 		return cached;
 	} catch {
@@ -141,6 +143,14 @@ export function setShortcutBinding(action: ShortcutAction, accel: string): void 
 	});
 }
 
+export function setAppearance(patch: Partial<Appearance>): void {
+	const config = loadAppConfig();
+	persist({
+		...config,
+		appearance: coerceAppearance({ ...config.appearance, ...patch }),
+	});
+}
+
 /** Persist a new data directory. Caller is responsible for relaunching to apply. */
 export function setDataDir(dir: string): void {
 	const next = isAbsoluteUsableDir(dir) ? dir : defaultDataDir();
@@ -189,6 +199,7 @@ export function appConfigInfo(): AppConfigInfo {
 		cpuThreads: config.cpuThreads,
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
+		appearance: config.appearance,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
 	};

@@ -1,4 +1,5 @@
 import type { AppConfigInfo, GpuPowerPreference } from "./appConfig";
+import type { Appearance } from "./appearance";
 import type { ForwardedLogEntry } from "./logEntry";
 import type {
 	ModelKind,
@@ -86,6 +87,11 @@ export type AppRpcSchema = {
 		/** Rebind one global shortcut action (Electron accelerator string). */
 		setShortcutBinding: {
 			params: { action: ShortcutAction; accelerator: string };
+			response: AppConfigInfo;
+		};
+		/** Update theme / mode / font (partial patch). */
+		setAppearance: {
+			params: Partial<Appearance>;
 			response: AppConfigInfo;
 		};
 		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
