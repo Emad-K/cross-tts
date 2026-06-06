@@ -44,10 +44,9 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** `src/mainview/features/reader/tts/ttsAudioCache.ts` — a bounded (64) LRU with in-flight de-duplication, keyed by `voice/speed/rules-signature/text`. `synthesizeChunkBuffer` is now cache-aside; cleared on engine teardown (audio differs by device/reload).
 - **See the effect:** seek back/forward or re-read a chunk → instant (no re-inference). The playback loop catching up to its own prefetch never double-synthesizes.
 
-### 4. Library / recent books + per-book resume
-- **Problem:** session persists a single `documentPath` (`src/shared/appSession.ts`, `src/bun/appSessionStore.ts`). No history.
-- **Touch:** extend session schema to a `books[]` map (path → {chapterId, chunkIndex, lastOpened}); add a library view under `src/mainview/features/reader/`. RPC in `src/shared/appRpc.ts`.
-- **See the effect:** reopening the app lists recent books; each resumes at its own position.
+### 4. Library / recent books + per-book resume — ✅ done (v1.8.0)
+- **What:** session gained an optional `books` map (path → {title, chapterId, chunkIndex, updatedAt}) in `src/shared/appSession.ts`, coerced in `src/bun/appSessionStore.ts` (back-compat: old sessions get `{}`). Pure helpers + tests in `src/shared/recentBooks.ts`. A "Recent" dropdown in `ReaderHeader` lists books; clicking reopens and resumes via `openRecentBook` (a `forceResume` flag makes the saved position survive the document-change reset).
+- **See the effect:** open a few books, switch between them — each reopens from the **Recent** menu at its own saved chapter/chunk.
 
 ### 5. Word-level (karaoke) highlight
 - **Problem:** highlight is chunk-granular (`activeChunkIndex`). `highlightRange` already exists but is only used when `chunks` is empty.

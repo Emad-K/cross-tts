@@ -7,6 +7,7 @@ import {
 	type WebPersistedSlice,
 	defaultWebPersistedSlice,
 } from "../shared/appSession";
+import { coerceRecentBooks } from "../shared/recentBooks";
 import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 import { dataDir } from "./appConfigStore";
 
@@ -56,6 +57,7 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	if (o.ttsTextRules !== undefined) {
 		d.ttsTextRules = coerceTtsTextRulesState(o.ttsTextRules);
 	}
+	d.books = coerceRecentBooks(o.books);
 	return d;
 }
 
@@ -75,6 +77,7 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 				: null,
 		currentChunkIndex: web.currentChunkIndex,
 		ttsTextRules: web.ttsTextRules,
+		books: web.books ?? {},
 	};
 }
 

@@ -1,14 +1,20 @@
 import type { WebPersistedSlice } from "@shared/appSession";
 import type { ReadDocumentResult } from "@shared/documentRpc";
+import { upsertRecentBook } from "@shared/recentBooks";
 import {
 	loadAppSession as loadAppSessionRpc,
 	readDocumentAtPath,
 	saveAppSession as saveAppSessionRpc,
 } from "@/lib/desktopBridge";
+import { useLibraryStore } from "./library/libraryStore";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";
 import type { LoadedDocument } from "./types";
+
+function documentTitle(doc: LoadedDocument): string {
+	return doc.format === "epub" ? doc.title : doc.fileName;
+}
 
 const DEBOUNCE_MS = 500;
 
@@ -30,18 +36,35 @@ export function buildWebSlice(
 ): WebPersistedSlice {
 	const t = useTtsStore.getState();
 	const rules = useTtsRulesStore.getState();
+	const chapterId = doc?.format === "epub" ? activeChapterId : null;
+
+	// Record the current book's position into the recent-books library so it can
+	// be reopened and resumed later. Keyed by path; in-memory titles only.
+	let books = useLibraryStore.getState().books;
+	if (doc?.filePath) {
+		books = upsertRecentBook(books, {
+			path: doc.filePath,
+			title: documentTitle(doc),
+			format: doc.format,
+			chapterId,
+			chunkIndex: t.currentChunkIndex,
+			updatedAt: Date.now(),
+		});
+		useLibraryStore.getState().setBooks(books);
+	}
+
 	return {
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
 		documentPath: doc?.filePath ?? null,
-		activeChapterId:
-			doc?.format === "epub" ? activeChapterId : null,
+		activeChapterId: chapterId,
 		currentChunkIndex: t.currentChunkIndex,
 		ttsTextRules: {
 			regexRules: rules.regexRules,
 			pronunciationRules: rules.pronunciationRules,
 		},
+		books,
 	};
 }
 
@@ -86,6 +109,9 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 	useTtsStore.getState().setSpeed(web.speed);
 	if (web.ttsTextRules) {
 		useTtsRulesStore.getState().hydrate(web.ttsTextRules);
+	}
+	if (web.books) {
+		useLibraryStore.getState().setBooks(web.books);
 	}
 
 	const documentPath =

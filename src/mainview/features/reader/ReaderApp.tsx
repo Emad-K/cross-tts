@@ -1,10 +1,12 @@
 import {
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 	type ChangeEvent,
 } from "react";
+import { recentBooksList } from "@shared/recentBooks";
 import {
 	getEpubChapterContent,
 	isDesktopApp,
@@ -28,6 +30,7 @@ import {
 	toLoadedDocument,
 	touchSessionSave,
 } from "./sessionPersistence";
+import { getBookResume, useLibraryStore } from "./library/libraryStore";
 import type { LoadedDocument } from "./types";
 import {
 	adjustVolume,
@@ -79,6 +82,9 @@ export function ReaderApp() {
 	activeChapterIdRef.current = activeChapterId;
 
 	const pendingChunkIndexRef = useRef<number | null>(null);
+	/** Set when opening a recent book so its saved position survives the
+	 * document-change reset (which otherwise starts a new document at chunk 0). */
+	const forceResumeRef = useRef(false);
 	const prevDocumentKeyRef = useRef<string | null>(null);
 	const documentLoadContextRef = useRef({
 		isDocumentChange: false,
@@ -229,7 +235,8 @@ export function ReaderApp() {
 			isPlaybackActive(useTtsStore.getState().playback);
 
 		if (isDocumentChange) {
-			pendingChunkIndexRef.current = null;
+			// Keep the pending index when explicitly resuming a recent book.
+			if (!forceResumeRef.current) pendingChunkIndexRef.current = null;
 			if (wasPlaying) stopPlaybackUi();
 		}
 
@@ -243,10 +250,12 @@ export function ReaderApp() {
 
 		const { isDocumentChange, wasPlaying } =
 			documentLoadContextRef.current;
+		const force = forceResumeRef.current;
+		forceResumeRef.current = false;
 		const pending = pendingChunkIndexRef.current;
 		pendingChunkIndexRef.current = null;
 		const opts =
-			!isDocumentChange && pending !== null && pending !== undefined
+			(force || !isDocumentChange) && pending !== null && pending !== undefined
 				? { chunkIndex: pending }
 				: { chunkIndex: 0 };
 
@@ -293,11 +302,12 @@ export function ReaderApp() {
 
 			const { isDocumentChange, wasPlaying: wasPlayingDoc } =
 				documentLoadContextRef.current;
+			const force = forceResumeRef.current;
+			forceResumeRef.current = false;
 			const pending = pendingChunkIndexRef.current;
 			pendingChunkIndexRef.current = null;
 			const restoreChunk =
-				!isDocumentChange &&
-				!isChapterChange &&
+				(force || (!isDocumentChange && !isChapterChange)) &&
 				pending !== null &&
 				pending !== undefined;
 			const opts = restoreChunk
@@ -362,6 +372,33 @@ export function ReaderApp() {
 		})();
 	}, []);
 
+	const openRecentBook = useCallback((path: string) => {
+		if (!isDesktopApp()) return;
+		void (async () => {
+			const resume = getBookResume(path);
+			setLoadingMessage("Opening book…");
+			setDocumentLoading(true);
+			try {
+				const doc = await loadDocumentFromPath(path);
+				if (!doc) return;
+				forceResumeRef.current = resume?.chunkIndex != null;
+				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
+				setInitialChapterId(resume?.chapterId ?? null);
+				setActiveChapterId(
+					doc.format === "epub"
+						? (resume?.chapterId ?? doc.chapters[0]?.id ?? null)
+						: null,
+				);
+				setDocument(doc);
+			} finally {
+				setDocumentLoading(false);
+			}
+		})();
+	}, []);
+
+	const books = useLibraryStore((s) => s.books);
+	const recentBooks = useMemo(() => recentBooksList(books), [books]);
+
 	const onFileChange = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		e.target.value = "";
@@ -399,6 +436,8 @@ export function ReaderApp() {
 				initialChapterId={initialChapterId}
 				onActiveChapterChange={setActiveChapterId}
 				onOpenFile={openFilePicker}
+				recentBooks={recentBooks}
+				onOpenRecent={openRecentBook}
 				onOpenSettings={() => setSettingsOpen(true)}
 				onOpenLogs={() => setLogsOpen(true)}
 				onOpenAudiobook={() => setAudiobookOpen(true)}
