@@ -13,3 +13,6 @@ yarn.lock
 
 # Local Claude Code session/config
 .claude/
+
+# Playwright MCP scratch output
+.playwright-mcp/
