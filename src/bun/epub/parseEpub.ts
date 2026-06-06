@@ -25,6 +25,8 @@ type EpubArchive = {
 	manifest: Map<string, ManifestItem>;
 	spineIds: string[];
 	hrefToId: Map<string, string>;
+	/** Manifest id of the cover image from `<meta name="cover">` (EPUB 2). */
+	coverId?: string;
 };
 
 type ParsedEpub = EpubArchive & {
@@ -139,8 +141,16 @@ function parseOpf(
 		if (idref) spineIds.push(idref);
 	}
 
+	let coverId: string | undefined;
+	for (const m of asRecordArray(metadata.meta)) {
+		if (String(m["@_name"] ?? "").toLowerCase() === "cover") {
+			coverId = String(m["@_content"] ?? "") || undefined;
+			break;
+		}
+	}
+
 	const hrefToId = buildManifestHrefLookup(manifest, opfDir);
-	return { opfDir, title, manifest, spineIds, hrefToId };
+	return { opfDir, title, manifest, spineIds, hrefToId, coverId };
 }
 
 function chaptersFromNavOl(
@@ -352,6 +362,55 @@ export async function readEpubChapterContent(
 	if (!raw) return null;
 	const html = sanitizeEpubHtml(raw);
 	return { html, text: htmlToPlainText(html) };
+}
+
+function guessImageMime(href: string): string {
+	const ext = href.toLowerCase().split(".").pop() ?? "";
+	if (ext === "png") return "image/png";
+	if (ext === "gif") return "image/gif";
+	if (ext === "webp") return "image/webp";
+	if (ext === "svg") return "image/svg+xml";
+	return "image/jpeg";
+}
+
+/** Best guess at the cover image manifest item (EPUB 3 props, EPUB 2 meta, then heuristic). */
+function pickCoverItem(parsed: ParsedEpub): ManifestItem | null {
+	for (const item of parsed.manifest.values()) {
+		if (item.properties?.split(/\s+/).includes("cover-image")) return item;
+	}
+	if (parsed.coverId) {
+		const item = parsed.manifest.get(parsed.coverId);
+		if (item && (item.mediaType.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(item.href))) {
+			return item;
+		}
+	}
+	for (const item of parsed.manifest.values()) {
+		const isImage =
+			item.mediaType.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(item.href);
+		if (isImage && /cover/i.test(`${item.id} ${item.href}`)) return item;
+	}
+	return null;
+}
+
+/** Cover image as a data URL, or null if the EPUB has none we can find. */
+export async function readEpubCover(filePath: string): Promise<string | null> {
+	const parsed = await loadParsedEpub(filePath);
+	if (!parsed) return null;
+	const item = pickCoverItem(parsed);
+	if (!item) return null;
+	const entry = parsed.zip.file(
+		resolveHref(parsed.opfDir, item.href).replace(/^\//, ""),
+	);
+	if (!entry) return null;
+	try {
+		const base64 = await entry.async("base64");
+		const mime = item.mediaType.startsWith("image/")
+			? item.mediaType
+			: guessImageMime(item.href);
+		return `data:${mime};base64,${base64}`;
+	} catch {
+		return null;
+	}
 }
 
 export function clearEpubCache(filePath?: string): void {

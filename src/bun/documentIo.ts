@@ -4,8 +4,18 @@ import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
 } from "../shared/documentRpc";
-import { readEpubChapterContent, readEpubManifest } from "./epub/parseEpub";
+import {
+	readEpubChapterContent,
+	readEpubCover,
+	readEpubManifest,
+} from "./epub/parseEpub";
 import { readTextDocumentAtPath } from "./textDocumentIo";
+
+/** Cover image (data URL) for an EPUB path, or null for non-EPUB / no cover. */
+export async function getBookCover(filePath: string): Promise<string | null> {
+	if (!isEpubPath(filePath)) return null;
+	return readEpubCover(filePath);
+}
 
 function isEpubPath(path: string): boolean {
 	return path.toLowerCase().endsWith(".epub");
