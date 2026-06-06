@@ -7,6 +7,7 @@ import {
 	type WebPersistedSlice,
 	defaultWebPersistedSlice,
 } from "../shared/appSession";
+import { coerceBookmarksByPath } from "../shared/bookmarks";
 import { coerceRecentBooks } from "../shared/recentBooks";
 import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 import { dataDir } from "./appConfigStore";
@@ -58,6 +59,7 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 		d.ttsTextRules = coerceTtsTextRulesState(o.ttsTextRules);
 	}
 	d.books = coerceRecentBooks(o.books);
+	d.bookmarks = coerceBookmarksByPath(o.bookmarks);
 	return d;
 }
 
@@ -78,6 +80,7 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 		currentChunkIndex: web.currentChunkIndex,
 		ttsTextRules: web.ttsTextRules,
 		books: web.books ?? {},
+		bookmarks: web.bookmarks ?? {},
 	};
 }
 

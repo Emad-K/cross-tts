@@ -31,9 +31,14 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume, useLibraryStore } from "./library/libraryStore";
+import {
+	setBookmarkNavHandler,
+	useBookmarksStore,
+} from "./bookmarks/bookmarksStore";
 import type { LoadedDocument } from "./types";
 import {
 	adjustVolume,
+	seekToChunkAndMaybePlay,
 	ensureKokoroLoaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
@@ -343,6 +348,28 @@ export function ReaderApp() {
 		if (!sessionReady) return;
 		touchSessionSave();
 	}, [document, activeChapterId, sessionReady]);
+
+	// Tell the bookmarks store where we are, so the toggle button knows what to
+	// save and the jump handler can resolve cross-chapter bookmarks.
+	useEffect(() => {
+		useBookmarksStore
+			.getState()
+			.setLocation(document?.filePath ?? null, activeChapterId);
+	}, [document, activeChapterId]);
+
+	useEffect(() => {
+		setBookmarkNavHandler((bm) => {
+			if (bm.chapterId && bm.chapterId !== activeChapterIdRef.current) {
+				forceResumeRef.current = true;
+				pendingChunkIndexRef.current = bm.chunkIndex;
+				setInitialChapterId(bm.chapterId);
+				setActiveChapterId(bm.chapterId);
+			} else {
+				seekToChunkAndMaybePlay(bm.chunkIndex);
+			}
+		});
+		return () => setBookmarkNavHandler(null);
+	}, []);
 
 	const openFilePicker = useCallback(() => {
 		if (!isDesktopApp()) {

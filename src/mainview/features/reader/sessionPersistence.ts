@@ -6,6 +6,7 @@ import {
 	readDocumentAtPath,
 	saveAppSession as saveAppSessionRpc,
 } from "@/lib/desktopBridge";
+import { useBookmarksStore } from "./bookmarks/bookmarksStore";
 import { useLibraryStore } from "./library/libraryStore";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
@@ -65,6 +66,7 @@ export function buildWebSlice(
 			pronunciationRules: rules.pronunciationRules,
 		},
 		books,
+		bookmarks: useBookmarksStore.getState().byPath,
 	};
 }
 
@@ -112,6 +114,9 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 	}
 	if (web.books) {
 		useLibraryStore.getState().setBooks(web.books);
+	}
+	if (web.bookmarks) {
+		useBookmarksStore.getState().setAll(web.bookmarks);
 	}
 
 	const documentPath =
@@ -198,6 +203,7 @@ export function subscribeDebouncedSessionSave(
 
 	const unsubStore = useTtsStore.subscribe(schedule);
 	const unsubRules = useTtsRulesStore.subscribe(schedule);
+	const unsubBookmarks = useBookmarksStore.subscribe(schedule);
 	document.addEventListener("visibilitychange", onVisibility);
 	scheduleSave = schedule;
 	schedule();
@@ -206,6 +212,7 @@ export function subscribeDebouncedSessionSave(
 		document.removeEventListener("visibilitychange", onVisibility);
 		unsubStore();
 		unsubRules();
+		unsubBookmarks();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
 		void saveAppSessionRpc(

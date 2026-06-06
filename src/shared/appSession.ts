@@ -1,3 +1,4 @@
+import type { Bookmark } from "./bookmarks";
 import type { BookProgress } from "./recentBooks";
 import type { TtsTextRulesState } from "./ttsTextRules";
 import { defaultTtsTextRulesState } from "./ttsTextRules";
@@ -25,6 +26,8 @@ export type WebPersistedSlice = {
 	ttsTextRules: TtsTextRulesState;
 	/** Recently-opened books keyed by path, for the library + per-book resume. */
 	books: Record<string, BookProgress>;
+	/** Saved spots keyed by document path. */
+	bookmarks: Record<string, Bookmark[]>;
 };
 
 export type AppSessionFileV1 = {
@@ -47,4 +50,5 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	currentChunkIndex: 0,
 	ttsTextRules: defaultTtsTextRulesState(),
 	books: {},
+	bookmarks: {},
 });

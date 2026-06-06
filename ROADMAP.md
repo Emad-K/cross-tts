@@ -53,9 +53,9 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** a transient `sweepStore` (separate from `useTtsStore` so 60fps updates don't starve the session-save debounce) is driven by `playBuffer` via `requestAnimationFrame` off the audio clock (`ctx.currentTime`, so pause freezes it for free). Viewers bind it to a `--sweep` CSS var on the active chunk element (imperative — no per-frame React re-render); the active chunk carries a gradient class (`SWEEP_CLASS`).
 - **See the effect:** play any book — the active sentence fills left→right as its audio plays, in both the EPUB and TXT viewers.
 
-### 6. Bookmarks / notes
-- **Touch:** session schema + a sidebar panel; anchor by `(chapterId, chunkIndex)`.
-- **See the effect:** jump-list of saved spots per book.
+### 6. Bookmarks — ✅ done (v1.8.5)
+- **What:** session gained an optional `bookmarks` map (path → `Bookmark[]`, anchored by `chapterId`+`chunkIndex`). Pure helpers + tests in `src/shared/bookmarks.ts`. A bookmark button in the transport bar toggles the current spot and opens a menu of saved spots; selecting one jumps there (cross-chapter jumps reuse the `forceResume` path). Back-compat: old sessions get `{}`.
+- **See the effect:** play to a spot, click the bookmark icon → "Bookmark this spot"; reopen the menu to jump between saved spots (and they persist across launches).
 
 ### 7. Audiobook export checkpointing — ✅ done (v1.8.2)
 - **What:** the per-chapter output files are the checkpoint. `startExport` now checks `audioFileExists(dir, trackName)` (new RPC) before each chapter and skips re-synthesizing ones already written; their segments still count toward progress. The dialog shows "Resumed — skipped N already-exported chapters."
