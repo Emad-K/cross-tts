@@ -646,8 +646,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			<ScrollArea className="min-h-0 w-full flex-1">
 				<div className="px-6 py-4 pr-4">
 					<Accordion
-						type="multiple"
-						defaultValue={["regex", "pronunciation"]}
+						type="single"
+						collapsible
+						defaultValue="regex"
 						className="w-full"
 					>
 						<RulesAccordionSection
