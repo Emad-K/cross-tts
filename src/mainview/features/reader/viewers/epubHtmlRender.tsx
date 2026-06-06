@@ -23,6 +23,7 @@ import {
 	isEpubVoidNoTextTag,
 } from "@shared/epubHtmlPolicy";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
+import { SWEEP_CLASS } from "@/features/reader/tts/sweepStore";
 import { cn } from "@/lib/utils";
 
 export type EpubReadAlongProps = {
@@ -115,6 +116,7 @@ function renderTextWithChunks(
 					"cursor-pointer rounded-sm transition-colors",
 					active &&
 						"bg-highlight text-highlight-foreground ring-1 ring-highlight",
+					active && SWEEP_CLASS,
 					!active && "hover:bg-muted/40",
 				)}
 				onClick={() => ctx.onChunkClick?.(chunk.index)}

@@ -1,5 +1,6 @@
 import {
 	Fragment,
+	useEffect,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -7,6 +8,7 @@ import {
 } from "react";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { normalizedReaderText } from "@/features/reader/tts/chunkText";
+import { SWEEP_CLASS, bindSweep } from "@/features/reader/tts/sweepStore";
 import { cn } from "@/lib/utils";
 
 const SCROLL_EDGE_PADDING_PX = 12;
@@ -130,6 +132,13 @@ export function TxtViewer({
 		scrollElementFullyVisible(el);
 	}, [activeChunkIndex, chunks, normalized]);
 
+	// Animate the in-sentence progress sweep on the active chunk element.
+	useEffect(() => {
+		const el = activeChunkRef.current;
+		if (!el) return;
+		return bindSweep(el);
+	}, [activeChunkIndex, normalized]);
+
 	const chunkBody = useMemo(() => {
 		if (!chunks?.length) return null;
 		const parts: ReactNode[] = [];
@@ -151,6 +160,7 @@ export function TxtViewer({
 						"cursor-pointer rounded-sm transition-colors",
 						active &&
 							"bg-highlight text-highlight-foreground ring-1 ring-highlight",
+						active && SWEEP_CLASS,
 						!active && "hover:bg-muted/40",
 					)}
 					onClick={() => onChunkClick?.(c.index)}

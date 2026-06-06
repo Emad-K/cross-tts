@@ -48,10 +48,10 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** session gained an optional `books` map (path → {title, chapterId, chunkIndex, updatedAt}) in `src/shared/appSession.ts`, coerced in `src/bun/appSessionStore.ts` (back-compat: old sessions get `{}`). Pure helpers + tests in `src/shared/recentBooks.ts`. A "Recent" dropdown in `ReaderHeader` lists books; clicking reopens and resumes via `openRecentBook` (a `forceResume` flag makes the saved position survive the document-change reset).
 - **See the effect:** open a few books, switch between them — each reopens from the **Recent** menu at its own saved chapter/chunk.
 
-### 5. Word-level (karaoke) highlight
-- **Problem:** highlight is chunk-granular (`activeChunkIndex`). `highlightRange` already exists but is only used when `chunks` is empty.
-- **Touch:** `src/mainview/features/reader/viewers/epubHtmlRender.tsx` (`renderTextWithChunks`) — sub-highlight the active word inside the active chunk using Kokoro per-token timestamps if available, else a time-proportional estimate. `ttsWorker.ts` would need to surface token timings.
-- **See the effect:** the spoken word lights up within the sentence during playback.
+### 5. In-sentence progress sweep — ✅ done (v1.8.1)
+- **Finding:** kokoro-js `generate_from_ids` returns only `{audio, sampling_rate}` — no per-token timestamps. True word-level karaoke is therefore impossible; only a duration-proportional estimate. Rather than mark a word that can drift off the audio, we sweep a subtle left-to-right fill across the active sentence (reads as intentional progress, not a mis-placed word).
+- **What:** a transient `sweepStore` (separate from `useTtsStore` so 60fps updates don't starve the session-save debounce) is driven by `playBuffer` via `requestAnimationFrame` off the audio clock (`ctx.currentTime`, so pause freezes it for free). Viewers bind it to a `--sweep` CSS var on the active chunk element (imperative — no per-frame React re-render); the active chunk carries a gradient class (`SWEEP_CLASS`).
+- **See the effect:** play any book — the active sentence fills left→right as its audio plays, in both the EPUB and TXT viewers.
 
 ### 6. Bookmarks / notes
 - **Touch:** session schema + a sidebar panel; anchor by `(chapterId, chunkIndex)`.

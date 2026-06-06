@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getEpubChapterContent } from "@/lib/desktopBridge";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { cn } from "@/lib/utils";
+import { bindSweep } from "@/features/reader/tts/sweepStore";
 import {
 	parseEpubReadAlong,
 	plainTextFromHtmlDom,
@@ -63,6 +64,14 @@ export function EpubViewer({
 		if (!el) return;
 		scrollElementFullyVisible(el);
 	}, [activeChunkIndex, chunks, html]);
+
+	// Animate the in-sentence progress sweep on the active chunk element. Rebinds
+	// when the active chunk (or the rendered chapter) changes.
+	useEffect(() => {
+		const el = activeChunkRef.current;
+		if (!el) return;
+		return bindSweep(el);
+	}, [activeChunkIndex, html]);
 
 	// DOM parse + offset map depend only on the chapter HTML; memoize them so
 	// they don't rerun on every chunk advance (the O(n²) map was the hot path).
