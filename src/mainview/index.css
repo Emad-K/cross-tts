@@ -21,8 +21,8 @@
 		--accent-foreground: 240 5.9% 10%;
 		--destructive: 0 84.2% 60.2%;
 		--destructive-foreground: 0 0% 98%;
-		--highlight: 38 92% 50%;
-		--highlight-foreground: 32 95% 44%;
+		--highlight: 38 92% 50% / 0.25;
+		--highlight-foreground: 25 85% 28%;
 		--radius: 0.5rem;
 		/* Reading surface: font + size multiplier, driven by appearance settings. */
 		--reader-scale: 1;
@@ -164,8 +164,8 @@
 		--secondary-foreground: 30 25% 18%;
 		--accent: 36 40% 80%;
 		--accent-foreground: 28 50% 28%;
-		--highlight: 38 92% 50%;
-		--highlight-foreground: 28 80% 32%;
+		--highlight: 38 92% 50% / 0.3;
+		--highlight-foreground: 28 85% 26%;
 	}
 	[data-theme="sepia"].dark {
 		--background: 28 14% 9%;
