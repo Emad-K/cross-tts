@@ -37,14 +37,12 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **Touch:** `src/shared/htmlPlainText.ts` (`htmlToPlainText` generic `<[^>]+>`→space) and `src/shared/domPlainTextPre.ts` (`buildDomPlainTextPre` `pre += " "`). Only emit the space for **block** boundaries, not inline tags, when adjacent to word chars.
 - **RISK:** changes offsets — both paths must stay byte-identical. **Verify in real Chromium** (Playwright: serve chapter, walk `document.body`, diff vs `htmlToPlainText`), plus a happy-dom alignment test with a drop-cap fixture.
 
-### 2. Chunk pre-synthesis pipelining (biggest felt UX)
-- **Problem:** chunks synthesize on demand → audible gap between chunks.
-- **Touch:** `src/mainview/features/reader/tts/ttsEngine.ts` (playback loop) + `ttsWorker.ts`. Synthesize chunk N+1 (and N+2) while N plays; keep a small ready-queue.
-- **See the effect:** continuous playback with no inter-chunk silence; measure gap between `onended` and next `start`.
+### 2. Chunk pre-synthesis pipelining — ✅ done (N+1 pre-existed; N+2 added in v1.7.8)
+- Single-chunk lookahead already existed in `runPlaybackLoop`. v1.7.8 deepens it to `PREFETCH_AHEAD = 2` so short chunks don't gap, and routes prefetch through the audio cache below.
 
-### 3. Synthesized-audio cache
-- **Touch:** cache PCM keyed by `(chunkText, voice, speed)` in `ttsEngine.ts`; LRU bounded. Pairs with #2.
-- **See the effect:** scrubbing back/forward and re-reads are instant (no re-inference). Pre-pass in `audiobook/exportEngine.ts` can reuse it.
+### 3. Synthesized-audio cache — ✅ done (v1.7.8)
+- **What:** `src/mainview/features/reader/tts/ttsAudioCache.ts` — a bounded (64) LRU with in-flight de-duplication, keyed by `voice/speed/rules-signature/text`. `synthesizeChunkBuffer` is now cache-aside; cleared on engine teardown (audio differs by device/reload).
+- **See the effect:** seek back/forward or re-read a chunk → instant (no re-inference). The playback loop catching up to its own prefetch never double-synthesizes.
 
 ### 4. Library / recent books + per-book resume
 - **Problem:** session persists a single `documentPath` (`src/shared/appSession.ts`, `src/bun/appSessionStore.ts`). No history.
