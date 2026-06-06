@@ -43,9 +43,10 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** `src/mainview/features/reader/tts/ttsAudioCache.ts` — a bounded (64) LRU with in-flight de-duplication, keyed by `voice/speed/rules-signature/text`. `synthesizeChunkBuffer` is now cache-aside; cleared on engine teardown (audio differs by device/reload).
 - **See the effect:** seek back/forward or re-read a chunk → instant (no re-inference). The playback loop catching up to its own prefetch never double-synthesizes.
 
-### 4. Library / recent books + per-book resume — ✅ done (v1.8.0)
-- **What:** session gained an optional `books` map (path → {title, chapterId, chunkIndex, updatedAt}) in `src/shared/appSession.ts`, coerced in `src/bun/appSessionStore.ts` (back-compat: old sessions get `{}`). Pure helpers + tests in `src/shared/recentBooks.ts`. A "Recent" dropdown in `ReaderHeader` lists books; clicking reopens and resumes via `openRecentBook` (a `forceResume` flag makes the saved position survive the document-change reset).
-- **See the effect:** open a few books, switch between them — each reopens from the **Recent** menu at its own saved chapter/chunk.
+### 4. Library / recent books + per-book resume — ✅ done (v1.8.0, UI reworked v1.8.7)
+- **What:** session gained an optional `books` map (path → {title, chapterId, chunkIndex, updatedAt}) in `src/shared/appSession.ts`, coerced in `src/bun/appSessionStore.ts` (back-compat: old sessions get `{}`). Pure helpers + tests in `src/shared/recentBooks.ts`. Reopening a book resumes via `openRecentBook` (a `forceResume` flag makes the saved position survive the document-change reset).
+- **UI (v1.8.7):** an always-visible **Library** button in the header opens a `LibraryDialog` listing every opened book (current one marked "Reading"); selecting one reopens + resumes. Replaced the original "Recent" dropdown, which was hidden whenever the only book in history was the one being read — so a single-book user saw no entry point.
+- **See the effect:** the **Library** button (top-right, next to Open file) — open it any time, while reading or on the start screen.
 
 ### 5. In-sentence progress sweep — ✅ done (v1.8.1)
 - **Finding:** kokoro-js `generate_from_ids` returns only `{audio, sampling_rate}` — no per-token timestamps. True word-level karaoke is therefore impossible; only a duration-proportional estimate. Rather than mark a word that can drift off the audio, we sweep a subtle left-to-right fill across the active sentence (reads as intentional progress, not a mis-placed word).
