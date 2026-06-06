@@ -121,7 +121,7 @@ export function EpubViewer({
 				"reader-surface epub-chapter mx-auto w-full min-w-0 max-w-prose px-4 py-8 sm:px-8 sm:py-10 md:py-14",
 				"leading-[1.75] text-foreground/95 sm:leading-8",
 				"[&_img]:max-w-full [&_img]:h-auto",
-				"[&_a]:text-amber-400 [&_a]:underline-offset-2 hover:[&_a]:underline",
+				"[&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline",
 				"[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold",
 				"[&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold",
 				"[&_p]:mb-4",

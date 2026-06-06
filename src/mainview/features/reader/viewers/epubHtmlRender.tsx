@@ -71,7 +71,7 @@ function renderTextWithChunks(
 				<mark
 					className={cn(
 						"rounded-sm px-0.5",
-						"bg-amber-500/25 text-amber-400 [text-decoration:none]",
+						"bg-highlight text-highlight-foreground [text-decoration:none]",
 					)}
 				>
 					{text.slice(ls, le)}
@@ -114,7 +114,7 @@ function renderTextWithChunks(
 				className={cn(
 					"cursor-pointer rounded-sm transition-colors",
 					active &&
-						"bg-amber-500/25 text-amber-400 ring-1 ring-amber-500/40",
+						"bg-highlight text-highlight-foreground ring-1 ring-highlight",
 					!active && "hover:bg-muted/40",
 				)}
 				onClick={() => ctx.onChunkClick?.(chunk.index)}
