@@ -67,21 +67,28 @@ async function getGpuInfo(): Promise<{ activeRenderer: string; gpus: string[] }>
 			gpuDevice?: { vendorId?: number; deviceId?: number; active?: boolean }[];
 		};
 		const activeRenderer = info.auxAttributes?.glRenderer ?? "";
-		const gpus: string[] = [];
+		// Dedup by physical card (vendorId:deviceId). WSL2/Chromium can report the
+		// same GPU as two gpuDevice entries (one active, one not) under D3D12/Vulkan
+		// passthrough; a name-only Set keeps both because their labels differ.
+		const byCard = new Map<string, string>();
+		let unkeyed = 0;
 		for (const d of info.gpuDevice ?? []) {
-			if (d.active && activeRenderer) {
-				gpus.push(activeRenderer);
-			} else {
-				const vendor =
-					(d.vendorId !== undefined && GPU_VENDORS[d.vendorId]) || "GPU";
-				gpus.push(
-					d.deviceId !== undefined
+			const vendor = (d.vendorId !== undefined && GPU_VENDORS[d.vendorId]) || "GPU";
+			const name =
+				d.active && activeRenderer
+					? activeRenderer
+					: d.deviceId !== undefined
 						? `${vendor} (0x${d.deviceId.toString(16)})`
-						: vendor,
-				);
-			}
+						: vendor;
+			const key =
+				d.vendorId !== undefined && d.deviceId !== undefined
+					? `${d.vendorId}:${d.deviceId}`
+					: `unkeyed:${unkeyed++}`;
+			// Active entry carries the real glRenderer name; let it win over the
+			// generic "NVIDIA (0x...)" fallback for the same card.
+			if (!byCard.has(key) || (d.active && activeRenderer)) byCard.set(key, name);
 		}
-		return { activeRenderer, gpus: [...new Set(gpus)] };
+		return { activeRenderer, gpus: [...byCard.values()] };
 	} catch {
 		return { activeRenderer: "", gpus: [] };
 	}
