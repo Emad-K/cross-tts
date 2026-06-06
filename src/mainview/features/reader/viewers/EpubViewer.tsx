@@ -118,7 +118,7 @@ export function EpubViewer({
 	return (
 		<div
 			className={cn(
-				"reader-surface epub-chapter mx-auto w-full min-w-0 max-w-prose px-4 py-8 sm:px-8 sm:py-10 md:py-14",
+				"reader-surface epub-chapter mx-auto w-full min-w-0 max-w-prose",
 				"leading-[1.75] text-foreground/95 sm:leading-8",
 				"[&_img]:max-w-full [&_img]:h-auto",
 				"[&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline",

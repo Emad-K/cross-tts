@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getMaxChunkChars } from "../settings/appSettingsStore";
 import { buildTtsChunks, normalizedReaderText } from "./chunkText";
 import type { TtsChunk } from "./chunkText";
 import type { KokoroVoiceId } from "./kokoroVoices";
@@ -35,6 +36,8 @@ type TtsState = {
 	totalSec: number | null;
 	progressPct: number;
 	setSourceText: (raw: string, opts?: { chunkIndex?: number }) => void;
+	/** Rebuild chunks from the current text (e.g. after max-chunk-size changed). */
+	rechunk: () => void;
 	setVoiceOptions: (opts: VoiceOption[]) => void;
 	setVoice: (id: KokoroVoiceId) => void;
 	setVolumePct: (v: number) => void;
@@ -89,7 +92,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 
 	setSourceText: (raw, opts) => {
 		const normalized = normalizedReaderText(raw);
-		const chunks = buildTtsChunks(raw);
+		const chunks = buildTtsChunks(raw, getMaxChunkChars());
 		let idx = 0;
 		if (
 			opts?.chunkIndex !== undefined &&
@@ -111,6 +114,22 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 			elapsedSec: 0,
 			totalSec: null,
 			progressPct,
+			playback: "idle",
+			playbackError: null,
+		});
+	},
+
+	rechunk: () => {
+		const { sourceText } = get();
+		const chunks = buildTtsChunks(sourceText, getMaxChunkChars());
+		const ch = chunks[0];
+		set({
+			chunks,
+			currentChunkIndex: 0,
+			highlightRange: ch ? { start: ch.start, end: ch.end } : null,
+			elapsedSec: 0,
+			totalSec: null,
+			progressPct: chunks.length <= 1 ? 100 : 0,
 			playback: "idle",
 			playbackError: null,
 		});

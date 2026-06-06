@@ -14,12 +14,18 @@ export type FontId =
 	| "lora"
 	| "opendyslexic";
 
+export type ReaderPadding = "comfortable" | "compact" | "tight";
+
 export type Appearance = {
 	mode: ColorMode;
 	theme: ThemeId;
 	fontFamily: FontId;
 	/** Reading font-size multiplier (1 = default). */
 	fontScale: number;
+	/** Padding around the reading text. */
+	readerPadding: ReaderPadding;
+	/** Max characters per TTS chunk. */
+	maxChunkChars: number;
 };
 
 export const THEMES: { id: ThemeId; label: string }[] = [
@@ -60,11 +66,34 @@ export const FONT_SCALE_MIN = 0.8;
 export const FONT_SCALE_MAX = 1.6;
 export const FONT_SCALE_STEP = 0.1;
 
+export const READER_PADDINGS: { id: ReaderPadding; label: string }[] = [
+	{ id: "comfortable", label: "Comfortable" },
+	{ id: "compact", label: "Compact" },
+	{ id: "tight", label: "Tight" },
+];
+
+/** Horizontal / vertical padding (rem) for each reader-padding level. */
+export const READER_PADDING_VALUES: Record<
+	ReaderPadding,
+	{ x: number; y: number }
+> = {
+	comfortable: { x: 2, y: 3.5 },
+	compact: { x: 1, y: 2 },
+	tight: { x: 0.5, y: 1 },
+};
+
+export const MAX_CHUNK_CHARS_MIN = 120;
+export const MAX_CHUNK_CHARS_MAX = 600;
+export const MAX_CHUNK_CHARS_STEP = 20;
+export const MAX_CHUNK_CHARS_DEFAULT = 300;
+
 export const defaultAppearance = (): Appearance => ({
 	mode: "system",
 	theme: "default",
 	fontFamily: "serif",
 	fontScale: 1,
+	readerPadding: "comfortable",
+	maxChunkChars: MAX_CHUNK_CHARS_DEFAULT,
 });
 
 export function fontStack(id: FontId): string {
@@ -86,6 +115,19 @@ export function coerceAppearance(raw: unknown): Appearance {
 		d.fontScale = Math.min(
 			FONT_SCALE_MAX,
 			Math.max(FONT_SCALE_MIN, o.fontScale),
+		);
+	}
+	if (
+		o.readerPadding === "comfortable" ||
+		o.readerPadding === "compact" ||
+		o.readerPadding === "tight"
+	) {
+		d.readerPadding = o.readerPadding;
+	}
+	if (typeof o.maxChunkChars === "number" && Number.isFinite(o.maxChunkChars)) {
+		d.maxChunkChars = Math.min(
+			MAX_CHUNK_CHARS_MAX,
+			Math.max(MAX_CHUNK_CHARS_MIN, Math.round(o.maxChunkChars)),
 		);
 	}
 	return d;
