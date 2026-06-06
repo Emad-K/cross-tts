@@ -13,7 +13,18 @@ import {
 	useTtsRulesStore,
 } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
+import { AudioCache, audioCacheKey } from "./ttsAudioCache";
 import { useTtsStore } from "./ttsStore";
+
+/** How many upcoming chunks to synthesize ahead so playback never waits. */
+const PREFETCH_AHEAD = 2;
+
+/** Synthesized chunk audio, keyed by voice/speed/rules/text (see audioCacheKey). */
+const audioBufferCache = new AudioCache<AudioBuffer>(64);
+
+function rulesSignature(): string {
+	return useTtsRulesStore.getState().signature;
+}
 
 type KokoroDevice = "webgpu" | "wasm";
 type KokoroDtype = "fp32" | "q8";
@@ -144,6 +155,9 @@ function teardownWorker(): void {
 		resolve({ kind: "error", message: "TTS engine reset" });
 	}
 	pending.clear();
+	// Audio differs by device (q8 CPU vs fp32 GPU) and reload, so don't keep
+	// buffers across a teardown.
+	audioBufferCache.clear();
 }
 
 /** Start the worker and load the model with the given device, once. */
@@ -277,7 +291,11 @@ function requestGenerate(
 	});
 }
 
-/** Synthesize one chunk; returns null when there is nothing to speak (skip playback). */
+/**
+ * Synthesize one chunk; returns null when there is nothing to speak. Cached and
+ * de-duplicated by {@link audioBufferCache}, so seeks, re-reads, and the loop
+ * catching up to its own prefetch never re-run the model.
+ */
 async function synthesizeChunkBuffer(
 	ctx: AudioContext,
 	chunkText: string,
@@ -285,13 +303,46 @@ async function synthesizeChunkBuffer(
 	speed: number,
 ): Promise<AudioBuffer | null> {
 	if (!isSpeakableChunkText(chunkText)) return null;
-	const result = await requestGenerate(chunkText, voice, speed);
-	if (result.kind === "error") throw new Error(result.message);
-	if (result.kind === "empty") return null;
-	return rawToBuffer(ctx, {
-		audio: result.audio,
-		sampling_rate: result.samplingRate,
+	const key = audioCacheKey(chunkText, voice, speed, rulesSignature());
+	return audioBufferCache.getOrCreate(key, async () => {
+		const result = await requestGenerate(chunkText, voice, speed);
+		if (result.kind === "error") throw new Error(result.message);
+		if (result.kind === "empty") return null;
+		return rawToBuffer(ctx, {
+			audio: result.audio,
+			sampling_rate: result.samplingRate,
+		});
 	});
+}
+
+/** True when this chunk's audio is already synthesized (instant playback). */
+function hasCachedChunkAudio(
+	chunkText: string,
+	voice: KokoroVoiceId,
+	speed: number,
+): boolean {
+	if (!isSpeakableChunkText(chunkText)) return false;
+	return audioBufferCache.has(
+		audioCacheKey(chunkText, voice, speed, rulesSignature()),
+	);
+}
+
+/** Fire-and-forget synthesis of the next `count` chunks into the cache. */
+function prefetchChunks(
+	ctx: AudioContext,
+	chunks: { text: string }[],
+	from: number,
+	count: number,
+	voice: KokoroVoiceId,
+	speed: number,
+	signal: AbortSignal,
+): void {
+	for (let j = from; j < from + count && j < chunks.length; j++) {
+		if (signal.aborted) return;
+		const text = chunks[j]?.text;
+		if (!text || !isSpeakableChunkText(text)) continue;
+		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
+	}
 }
 
 /** Synthesize one chunk to raw PCM (for audiobook export). Null = nothing to speak. */
@@ -515,9 +566,6 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	if (signal.aborted) return;
 
 	let idx = useTtsStore.getState().currentChunkIndex;
-	let nextPrefetchIdx: number | null = null;
-	let nextPrefetchBuffer: AudioBuffer | null = null;
-	let prefetchGeneration = 0;
 
 	while (!signal.aborted) {
 		const snap = useTtsStore.getState();
@@ -529,19 +577,13 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 
 		const total = chunks.length;
 
-		if (nextPrefetchIdx !== null && nextPrefetchIdx !== idx) {
-			prefetchGeneration += 1;
-			nextPrefetchIdx = null;
-			nextPrefetchBuffer = null;
-		}
-
-		const canUsePrefetch =
-			nextPrefetchIdx === idx &&
-			nextPrefetchBuffer !== null &&
-			isSpeakableChunkText(chunk.text);
+		// Already-synthesized chunks (prefetched, or revisited via seek) play
+		// instantly; the audio cache keys on voice/speed/rules/text, so stale
+		// settings simply miss and re-synthesize.
+		const cached = hasCachedChunkAudio(chunk.text, snap.voice, snap.speed);
 
 		useTtsStore.setState({
-			playback: canUsePrefetch ? "playing" : "buffering",
+			playback: cached ? "playing" : "buffering",
 			currentChunkIndex: idx,
 			highlightRange: { start: chunk.start, end: chunk.end },
 			progressPct: chunkProgressPct(idx, total),
@@ -550,29 +592,21 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		});
 
 		let buffer: AudioBuffer | null = null;
-		if (canUsePrefetch && nextPrefetchBuffer) {
-			buffer = nextPrefetchBuffer;
-			nextPrefetchIdx = null;
-			nextPrefetchBuffer = null;
-		} else {
-			nextPrefetchIdx = null;
-			nextPrefetchBuffer = null;
-			try {
-				buffer = await synthesizeChunkBuffer(
-					ctx,
-					chunk.text,
-					snap.voice,
-					snap.speed,
-				);
-			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				useTtsStore.setState({ playback: "idle", playbackError: msg });
-				logError("Playback stopped: couldn't synthesize audio.", {
-					source: "tts",
-					detail: msg,
-				});
-				return;
-			}
+		try {
+			buffer = await synthesizeChunkBuffer(
+				ctx,
+				chunk.text,
+				snap.voice,
+				snap.speed,
+			);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			useTtsStore.setState({ playback: "idle", playbackError: msg });
+			logError("Playback stopped: couldn't synthesize audio.", {
+				source: "tts",
+				detail: msg,
+			});
+			return;
 		}
 
 		if (signal.aborted) break;
@@ -583,40 +617,17 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			continue;
 		}
 
-		// Prefetch the next chunk while current one plays.
-		if (idx + 1 < chunks.length) {
-			const nextIndex: number = idx + 1;
-			const nextCh = chunks[nextIndex]!;
-			const voice = snap.voice;
-			const speed = snap.speed;
-			const rulesSig = useTtsRulesStore.getState().signature;
-			const nextTextSnapshot = nextCh.text;
-
-			if (isSpeakableChunkText(nextTextSnapshot)) {
-				const prefetchGen = ++prefetchGeneration;
-				void synthesizeChunkBuffer(ctx, nextTextSnapshot, voice, speed)
-					.then((buf) => {
-						if (signal.aborted) return;
-						if (prefetchGen !== prefetchGeneration) return;
-						if (!isSpeakableChunkText(nextTextSnapshot)) return;
-						const st = useTtsStore.getState();
-						const ch = st.chunks[nextIndex];
-						if (
-							!ch ||
-							ch.text !== nextTextSnapshot ||
-							st.voice !== voice ||
-							st.speed !== speed ||
-							useTtsRulesStore.getState().signature !== rulesSig
-						) {
-							return;
-						}
-						if (!buf) return;
-						nextPrefetchIdx = nextIndex;
-						nextPrefetchBuffer = buf;
-					})
-					.catch(() => {});
-			}
-		}
+		// Warm the cache for upcoming chunks so playback never waits on
+		// synthesis, even when the current chunk is short.
+		prefetchChunks(
+			ctx,
+			chunks,
+			idx + 1,
+			PREFETCH_AHEAD,
+			snap.voice,
+			snap.speed,
+			signal,
+		);
 
 		if (useTtsStore.getState().playback !== "paused") {
 			useTtsStore.setState({ playback: "playing" });
