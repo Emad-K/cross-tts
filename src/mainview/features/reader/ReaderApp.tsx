@@ -1,12 +1,10 @@
 import {
 	useCallback,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 	type ChangeEvent,
 } from "react";
-import { recentBooksList } from "@shared/recentBooks";
 import {
 	getEpubChapterContent,
 	isDesktopApp,
@@ -30,8 +28,7 @@ import {
 	toLoadedDocument,
 	touchSessionSave,
 } from "./sessionPersistence";
-import { getBookResume, useLibraryStore } from "./library/libraryStore";
-import { LibraryDialog } from "./library/LibraryDialog";
+import { getBookResume } from "./library/libraryStore";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
@@ -104,7 +101,15 @@ export function ReaderApp() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
-	const [libraryOpen, setLibraryOpen] = useState(false);
+
+	/** "Library" = close the current book and return to the My-books home grid. */
+	const goToLibrary = useCallback(() => {
+		stopPlaybackUi();
+		pendingChunkIndexRef.current = null;
+		setInitialChapterId(null);
+		setActiveChapterId(null);
+		setDocument(null);
+	}, []);
 	useAppearanceSync();
 
 	function isPlaybackActive(
@@ -425,9 +430,6 @@ export function ReaderApp() {
 		})();
 	}, []);
 
-	const books = useLibraryStore((s) => s.books);
-	const recentBooks = useMemo(() => recentBooksList(books), [books]);
-
 	const onFileChange = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		e.target.value = "";
@@ -465,7 +467,7 @@ export function ReaderApp() {
 				initialChapterId={initialChapterId}
 				onActiveChapterChange={setActiveChapterId}
 				onOpenFile={openFilePicker}
-				onOpenLibrary={() => setLibraryOpen(true)}
+				onOpenLibrary={document ? goToLibrary : undefined}
 				onOpenBook={openRecentBook}
 				onOpenSettings={() => setSettingsOpen(true)}
 				onOpenLogs={() => setLogsOpen(true)}
@@ -476,13 +478,6 @@ export function ReaderApp() {
 					setActiveChapterId(null);
 					setDocument(SAMPLE_TXT_DOCUMENT);
 				}}
-			/>
-			<LibraryDialog
-				open={libraryOpen}
-				onOpenChange={setLibraryOpen}
-				books={recentBooks}
-				currentPath={document?.filePath ?? null}
-				onOpenBook={openRecentBook}
 			/>
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />

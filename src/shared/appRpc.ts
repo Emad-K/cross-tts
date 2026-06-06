@@ -109,6 +109,11 @@ export type AppRpcSchema = {
 			params: { dir: string; fileName: string };
 			response: boolean;
 		};
+		/** Cover image (data URL) for a book path, or null if none. */
+		getBookCover: {
+			params: { filePath: string };
+			response: string | null;
+		};
 		/** Reveal an arbitrary path in the OS file manager. */
 		revealPath: {
 			params: { path: string };

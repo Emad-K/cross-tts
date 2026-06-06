@@ -37,6 +37,7 @@ const api: AppApi = {
 		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
+		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),

@@ -135,6 +135,12 @@ export async function audioFileExists(
 	return b.request.audioFileExists({ dir, fileName });
 }
 
+export async function getBookCover(filePath: string): Promise<string | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getBookCover({ filePath });
+}
+
 export async function revealPath(path: string): Promise<void> {
 	const b = bridge();
 	if (!b) return;

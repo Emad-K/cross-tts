@@ -32,6 +32,7 @@ import {
 } from "./appSessionStore";
 import { mainLog, setLogTarget } from "./logBridge";
 import {
+	getBookCover,
 	getEpubChapterContent,
 	pickDocument,
 	readDocumentAtPath,
@@ -185,6 +186,10 @@ function registerRpcHandlers(): void {
 		"audioFileExists",
 		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
 			existsSync(join(dir, fileName)),
+	);
+	ipcMain.handle(
+		"getBookCover",
+		(_event, { filePath }: { filePath: string }) => getBookCover(filePath),
 	);
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
 		void shell.openPath(path);

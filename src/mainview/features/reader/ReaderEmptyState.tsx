@@ -1,9 +1,36 @@
 import { BookOpen, FileText, FolderOpen, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
+import { getBookCover } from "@/lib/desktopBridge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useLibraryStore } from "./library/libraryStore";
+
+/** Covers are immutable per file; cache so the grid fetches each one once. */
+const coverCache = new Map<string, string | null>();
+
+function useBookCover(book: BookProgress): string | null {
+	const [url, setUrl] = useState<string | null>(
+		() => coverCache.get(book.path) ?? null,
+	);
+	useEffect(() => {
+		if (book.format !== "epub") return;
+		if (coverCache.has(book.path)) {
+			setUrl(coverCache.get(book.path) ?? null);
+			return;
+		}
+		let alive = true;
+		void getBookCover(book.path).then((u) => {
+			coverCache.set(book.path, u);
+			if (alive) setUrl(u);
+		});
+		return () => {
+			alive = false;
+		};
+	}, [book.path, book.format]);
+	return url;
+}
 
 export type ReaderEmptyStateProps = {
 	onOpenFile: () => void;
@@ -28,6 +55,7 @@ function CoverCard({
 	onOpen: () => void;
 }) {
 	const hue = titleHue(book.title);
+	const cover = useBookCover(book);
 	return (
 		<button
 			type="button"
@@ -37,18 +65,35 @@ function CoverCard({
 		>
 			<div
 				className={cn(
-					"relative flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg border border-border p-3 shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md",
+					"relative flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg border border-border shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md",
+					!cover && "p-3",
 				)}
-				style={{
-					backgroundImage: `linear-gradient(160deg, hsl(${hue} 45% 38%), hsl(${(hue + 40) % 360} 50% 22%))`,
-				}}
+				style={
+					cover
+						? undefined
+						: {
+								backgroundImage: `linear-gradient(160deg, hsl(${hue} 45% 38%), hsl(${(hue + 40) % 360} 50% 22%))`,
+							}
+				}
 			>
-				<span className="line-clamp-4 text-center text-sm font-semibold leading-snug text-white/95">
-					{book.title}
-				</span>
-				<span className="absolute bottom-1.5 right-2 text-[10px] font-medium uppercase tracking-wide text-white/60">
-					{book.format}
-				</span>
+				{cover ? (
+					<img
+						src={cover}
+						alt={book.title}
+						className="size-full object-cover"
+						loading="lazy"
+						decoding="async"
+					/>
+				) : (
+					<>
+						<span className="line-clamp-4 text-center text-sm font-semibold leading-snug text-white/95">
+							{book.title}
+						</span>
+						<span className="absolute bottom-1.5 right-2 text-[10px] font-medium uppercase tracking-wide text-white/60">
+							{book.format}
+						</span>
+					</>
+				)}
 			</div>
 			<span
 				className="truncate text-sm font-medium text-foreground"
