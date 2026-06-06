@@ -66,6 +66,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const speedNum = useTtsStore((s) => s.speed);
 	const chunks = useTtsStore((s) => s.chunks);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
+	const modelProgress = useTtsStore((s) => s.modelProgress);
 
 	const speedLabel = useMemo(() => {
 		let best: (typeof SPEEDS)[number] = "1x";
@@ -129,6 +130,16 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const isSynthesizingChunk = playback === "buffering";
 	const isAudioPlaying = playback === "playing";
 
+	// First-play warm-up: the model loads, then the first sentence synthesizes —
+	// both can take a few seconds, so explain the wait instead of a bare spinner.
+	const statusLabel = isModelLoading
+		? modelProgress != null && modelProgress > 0 && modelProgress < 1
+			? `Warming up voice model… ${Math.round(modelProgress * 100)}%`
+			: "Warming up voice model…"
+		: isSynthesizingChunk
+			? "Preparing audio…"
+			: null;
+
 	return (
 		<footer
 			className={cn(
@@ -137,8 +148,17 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 			)}
 		>
 			<div className="mx-auto max-w-6xl min-w-0 px-4 py-3 sm:py-4">
-				<div className="mb-3 flex items-end justify-between text-[11px] tabular-nums text-muted-foreground sm:text-xs">
+				<div className="mb-3 flex items-end justify-between gap-2 text-[11px] tabular-nums text-muted-foreground sm:text-xs">
 					<span id={`${progressId}-elapsed`}>{elapsedLabel}</span>
+					{statusLabel ? (
+						<span
+							className="inline-flex items-center gap-1.5 truncate text-foreground/80"
+							aria-live="polite"
+						>
+							<Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+							{statusLabel}
+						</span>
+					) : null}
 					<span id={`${progressId}-total`}>{totalLabel}</span>
 				</div>
 				<div className="mb-4 sm:mb-5">
