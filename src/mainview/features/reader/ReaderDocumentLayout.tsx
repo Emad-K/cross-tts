@@ -7,13 +7,17 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
+import { BookmarkSidebar } from "./bookmarkSidebar/BookmarkSidebar";
 import { ChapterSidebar } from "./chapterSidebar";
 import { deriveTxtChapters } from "./lib/deriveTxtChapters";
 import type { LoadedDocument, ReaderChapter } from "./types";
 import { DocumentViewer } from "./viewers/DocumentViewer";
 
+type PanelHandle = NonNullable<ReturnType<typeof usePanelRef>["current"]>;
+
 const CHAPTER_PANEL_ID = "chapters";
 const DOCUMENT_PANEL_ID = "document";
+const BOOKMARK_PANEL_ID = "bookmarks";
 const LAYOUT_STORAGE_ID = "cross-tts-chapter-sidebar";
 const SIDEBAR_ANIMATION_MS = 200;
 
@@ -24,6 +28,7 @@ function easeOutCubic(t: number): number {
 export type ReaderDocumentLayoutProps = {
 	document: LoadedDocument;
 	chapterSidebarOpen: boolean;
+	bookmarkSidebarOpen: boolean;
 	activeChapterId?: string | null;
 	initialChapterId?: string | null;
 	onActiveChapterChange?: (chapterId: string | null) => void;
@@ -46,6 +51,7 @@ function chaptersForDocument(document: LoadedDocument): ReaderChapter[] {
 export function ReaderDocumentLayout({
 	document,
 	chapterSidebarOpen,
+	bookmarkSidebarOpen,
 	activeChapterId: activeChapterIdProp,
 	initialChapterId = null,
 	onActiveChapterChange,
@@ -54,55 +60,59 @@ export function ReaderDocumentLayout({
 	const chapters = useMemo(() => chaptersForDocument(document), [document]);
 	const hasChapters = chapters.length > 0;
 	const chapterPanelRef = usePanelRef();
+	const bookmarkPanelRef = usePanelRef();
 	const expandedChapterSizeRef = useRef(20);
-	const animationFrameRef = useRef<number | null>(null);
-	const skipToggleAnimationRef = useRef(true);
+	const expandedBookmarkSizeRef = useRef(22);
+	const chapterFrameRef = useRef<number | null>(null);
+	const bookmarkFrameRef = useRef<number | null>(null);
+	const skipChapterToggleRef = useRef(true);
+	const skipBookmarkToggleRef = useRef(true);
 	const isDraggingHandleRef = useRef(false);
 	const { defaultLayout, onLayoutChanged: persistLayout } = useDefaultLayout({
 		id: LAYOUT_STORAGE_ID,
-		panelIds: hasChapters
-			? [CHAPTER_PANEL_ID, DOCUMENT_PANEL_ID]
-			: [DOCUMENT_PANEL_ID],
+		panelIds: [
+			...(hasChapters ? [CHAPTER_PANEL_ID] : []),
+			DOCUMENT_PANEL_ID,
+			BOOKMARK_PANEL_ID,
+		],
 	});
 
-	const cancelSidebarAnimation = useCallback(() => {
-		if (animationFrameRef.current !== null) {
-			cancelAnimationFrame(animationFrameRef.current);
-			animationFrameRef.current = null;
+	const cancelFrame = useCallback((ref: { current: number | null }) => {
+		if (ref.current !== null) {
+			cancelAnimationFrame(ref.current);
+			ref.current = null;
 		}
 	}, []);
 
-	const animateChapterPanel = useCallback(
-		(targetPercent: number) => {
-			const panel = chapterPanelRef.current;
+	const animatePanel = useCallback(
+		(
+			panel: PanelHandle | null,
+			frameRef: { current: number | null },
+			targetPercent: number,
+		) => {
 			if (!panel) return;
-
 			if (isDraggingHandleRef.current) {
 				panel.resize(`${targetPercent}%`);
 				return;
 			}
-
-			cancelSidebarAnimation();
+			cancelFrame(frameRef);
 			const startPercent = panel.getSize().asPercentage;
 			const startTime = performance.now();
-
 			const step = (now: number) => {
 				const progress = Math.min(1, (now - startTime) / SIDEBAR_ANIMATION_MS);
 				const next =
 					startPercent +
 					(targetPercent - startPercent) * easeOutCubic(progress);
 				panel.resize(`${next}%`);
-
 				if (progress < 1) {
-					animationFrameRef.current = requestAnimationFrame(step);
+					frameRef.current = requestAnimationFrame(step);
 				} else {
-					animationFrameRef.current = null;
+					frameRef.current = null;
 				}
 			};
-
-			animationFrameRef.current = requestAnimationFrame(step);
+			frameRef.current = requestAnimationFrame(step);
 		},
-		[cancelSidebarAnimation, chapterPanelRef],
+		[cancelFrame],
 	);
 
 	const handleLayoutChanged = useCallback(
@@ -112,13 +122,22 @@ export function ReaderDocumentLayout({
 			if (
 				chapterSidebarOpen &&
 				chapterSize > 0 &&
-				animationFrameRef.current === null &&
+				chapterFrameRef.current === null &&
 				!isDraggingHandleRef.current
 			) {
 				expandedChapterSizeRef.current = chapterSize;
 			}
+			const bookmarkSize = layout[BOOKMARK_PANEL_ID];
+			if (
+				bookmarkSidebarOpen &&
+				bookmarkSize > 0 &&
+				bookmarkFrameRef.current === null &&
+				!isDraggingHandleRef.current
+			) {
+				expandedBookmarkSizeRef.current = bookmarkSize;
+			}
 		},
-		[chapterSidebarOpen, persistLayout],
+		[chapterSidebarOpen, bookmarkSidebarOpen, persistLayout],
 	);
 
 	const isControlled = activeChapterIdProp !== undefined;
@@ -164,8 +183,8 @@ export function ReaderDocumentLayout({
 		const panel = chapterPanelRef.current;
 		if (!panel) return;
 
-		if (skipToggleAnimationRef.current) {
-			skipToggleAnimationRef.current = false;
+		if (skipChapterToggleRef.current) {
+			skipChapterToggleRef.current = false;
 			if (chapterSidebarOpen) {
 				const size = panel.getSize().asPercentage;
 				if (size > 0) expandedChapterSizeRef.current = size;
@@ -177,22 +196,48 @@ export function ReaderDocumentLayout({
 		}
 
 		if (chapterSidebarOpen) {
-			animateChapterPanel(expandedChapterSizeRef.current);
+			animatePanel(panel, chapterFrameRef, expandedChapterSizeRef.current);
 			return;
 		}
-
 		if (!panel.isCollapsed()) {
 			expandedChapterSizeRef.current = panel.getSize().asPercentage;
 		}
-		animateChapterPanel(0);
-	}, [
-		chapterSidebarOpen,
-		hasChapters,
-		animateChapterPanel,
-		chapterPanelRef,
-	]);
+		animatePanel(panel, chapterFrameRef, 0);
+	}, [chapterSidebarOpen, hasChapters, animatePanel, chapterPanelRef]);
 
-	useEffect(() => () => cancelSidebarAnimation(), [cancelSidebarAnimation]);
+	useEffect(() => {
+		const panel = bookmarkPanelRef.current;
+		if (!panel) return;
+
+		if (skipBookmarkToggleRef.current) {
+			skipBookmarkToggleRef.current = false;
+			if (bookmarkSidebarOpen) {
+				const size = panel.getSize().asPercentage;
+				if (size > 0) expandedBookmarkSizeRef.current = size;
+			} else if (!panel.isCollapsed()) {
+				expandedBookmarkSizeRef.current = panel.getSize().asPercentage;
+				panel.collapse();
+			}
+			return;
+		}
+
+		if (bookmarkSidebarOpen) {
+			animatePanel(panel, bookmarkFrameRef, expandedBookmarkSizeRef.current);
+			return;
+		}
+		if (!panel.isCollapsed()) {
+			expandedBookmarkSizeRef.current = panel.getSize().asPercentage;
+		}
+		animatePanel(panel, bookmarkFrameRef, 0);
+	}, [bookmarkSidebarOpen, animatePanel, bookmarkPanelRef]);
+
+	useEffect(
+		() => () => {
+			cancelFrame(chapterFrameRef);
+			cancelFrame(bookmarkFrameRef);
+		},
+		[cancelFrame],
+	);
 
 	const selectChapter = (chapterId: string) => {
 		if (!isControlled) setInternalChapterId(chapterId);
@@ -229,7 +274,7 @@ export function ReaderDocumentLayout({
 					<ResizableHandle
 						onPointerDown={() => {
 							isDraggingHandleRef.current = true;
-							cancelSidebarAnimation();
+							cancelFrame(chapterFrameRef);
 						}}
 						onPointerUp={() => {
 							isDraggingHandleRef.current = false;
@@ -258,6 +303,34 @@ export function ReaderDocumentLayout({
 						/>
 					</ScrollArea>
 				</div>
+			</ResizablePanel>
+			<ResizableHandle
+				onPointerDown={() => {
+					isDraggingHandleRef.current = true;
+					cancelFrame(bookmarkFrameRef);
+				}}
+				onPointerUp={() => {
+					isDraggingHandleRef.current = false;
+				}}
+				onPointerCancel={() => {
+					isDraggingHandleRef.current = false;
+				}}
+				className={cn(
+					"transition-opacity duration-200 ease-out",
+					!bookmarkSidebarOpen && "pointer-events-none opacity-0",
+				)}
+			/>
+			<ResizablePanel
+				id={BOOKMARK_PANEL_ID}
+				panelRef={bookmarkPanelRef}
+				defaultSize={0}
+				minSize="220px"
+				maxSize="480px"
+				collapsible
+				collapsedSize={0}
+				className="min-w-0 overflow-hidden border-l border-border"
+			>
+				<BookmarkSidebar open={bookmarkSidebarOpen} />
 			</ResizablePanel>
 		</ResizablePanelGroup>
 	);

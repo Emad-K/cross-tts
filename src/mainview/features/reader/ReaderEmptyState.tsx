@@ -1,4 +1,4 @@
-import { BookOpen, FileText, FolderOpen, Plus } from "lucide-react";
+import { BookOpen, FileText, FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
@@ -60,14 +60,11 @@ function CoverCard({
 		<button
 			type="button"
 			onClick={onOpen}
-			className="group flex flex-col gap-2 text-left focus:outline-none"
+			className="group flex w-full min-w-0 flex-col gap-2 text-left focus:outline-none"
 			title={book.title}
 		>
 			<div
-				className={cn(
-					"relative flex aspect-[2/3] items-center justify-center overflow-hidden rounded-lg border border-border shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md",
-					!cover && "p-3",
-				)}
+				className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md"
 				style={
 					cover
 						? undefined
@@ -85,20 +82,20 @@ function CoverCard({
 						decoding="async"
 					/>
 				) : (
-					<>
-						<span className="line-clamp-4 text-center text-sm font-semibold leading-snug text-white/95">
+					<div className="flex size-full items-center justify-center p-3">
+						<span className="line-clamp-5 text-center text-sm font-semibold leading-snug text-white/95">
 							{book.title}
 						</span>
-						<span className="absolute bottom-1.5 right-2 text-[10px] font-medium uppercase tracking-wide text-white/60">
-							{book.format}
-						</span>
-					</>
+					</div>
 				)}
+				{/* Full title on hover (the label below is truncated). */}
+				<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+					<span className="line-clamp-3 text-xs font-medium leading-snug text-white">
+						{book.title}
+					</span>
+				</div>
 			</div>
-			<span
-				className="truncate text-sm font-medium text-foreground"
-				title={book.title}
-			>
+			<span className="w-full truncate text-sm font-medium text-foreground">
 				{book.title}
 			</span>
 		</button>
@@ -168,23 +165,12 @@ export function ReaderEmptyState({
 
 	return (
 		<div className={cn("flex-1 overflow-y-auto px-6 py-8", className)}>
-			<div className="mx-auto w-full max-w-5xl">
-				<div className="mb-5 flex items-center justify-between gap-3">
-					<h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-						My books
-					</h1>
-					<Button
-						type="button"
-						size="sm"
-						className="gap-2"
-						onClick={onOpenFile}
-					>
-						<FolderOpen className="size-4" aria-hidden />
-						Open file
-					</Button>
-				</div>
+			<div className="mx-auto w-full max-w-6xl">
+				<h1 className="mb-6 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+					My books
+				</h1>
 
-				<div className="grid grid-cols-3 gap-x-4 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+				<div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-5 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
 					{library.map((b) => (
 						<CoverCard
 							key={b.path}
@@ -192,19 +178,6 @@ export function ReaderEmptyState({
 							onOpen={() => onOpenBook(b.path)}
 						/>
 					))}
-					<button
-						type="button"
-						onClick={onOpenFile}
-						className="group flex flex-col gap-2 text-left focus:outline-none"
-						title="Open a file"
-					>
-						<div className="flex aspect-[2/3] items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors group-hover:border-foreground/40 group-hover:bg-accent">
-							<Plus className="size-7" aria-hidden />
-						</div>
-						<span className="truncate text-sm font-medium text-muted-foreground">
-							Open file
-						</span>
-					</button>
 				</div>
 			</div>
 		</div>

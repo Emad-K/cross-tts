@@ -1,6 +1,4 @@
 import {
-	Bookmark,
-	BookmarkCheck,
 	ChevronDown,
 	ChevronsDown,
 	ChevronsUp,
@@ -13,26 +11,15 @@ import {
 	Volume2,
 } from "lucide-react";
 import { useId, useEffect, useMemo, useState } from "react";
-import {
-	bookmarkId,
-	hasBookmark,
-	sortBookmarks,
-} from "@shared/bookmarks";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuLabel,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-	navigateToBookmark,
-	useBookmarksStore,
-} from "./bookmarks/bookmarksStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -153,37 +140,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 			? "Preparing audio…"
 			: null;
 
-	const bookmarkPath = useBookmarksStore((s) => s.currentPath);
-	const bookmarkChapterId = useBookmarksStore((s) => s.currentChapterId);
-	const bookmarksByPath = useBookmarksStore((s) => s.byPath);
-	const toggleBookmarkAt = useBookmarksStore((s) => s.toggleAt);
-
-	const currentBookmarks = bookmarkPath
-		? (bookmarksByPath[bookmarkPath] ?? [])
-		: [];
-	const sortedBookmarks = useMemo(
-		() => sortBookmarks(currentBookmarks),
-		[currentBookmarks],
-	);
-	const canBookmark = bookmarkPath != null && chunks.length > 0;
-	const isBookmarked =
-		canBookmark &&
-		hasBookmark(currentBookmarks, bookmarkChapterId, currentChunkIndex);
-
-	const onToggleBookmark = () => {
-		if (!canBookmark) return;
-		const snippet = (chunks[currentChunkIndex]?.text ?? "")
-			.replace(/\s+/g, " ")
-			.trim()
-			.slice(0, 48);
-		toggleBookmarkAt({
-			id: bookmarkId(bookmarkChapterId, currentChunkIndex),
-			chapterId: bookmarkChapterId,
-			chunkIndex: currentChunkIndex,
-			label: snippet || `Chunk ${currentChunkIndex + 1}`,
-			createdAt: Date.now(),
-		});
-	};
 
 	return (
 		<footer
@@ -268,49 +224,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 						>
 							<SkipForward className="size-5" />
 						</Button>
-
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon"
-									aria-label="Bookmarks"
-									disabled={!canBookmark && sortedBookmarks.length === 0}
-									title="Bookmarks"
-								>
-									{isBookmarked ? (
-										<BookmarkCheck className="size-5 text-primary" />
-									) : (
-										<Bookmark className="size-5" />
-									)}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="center" className="max-w-[20rem]">
-								<DropdownMenuItem
-									onSelect={onToggleBookmark}
-									disabled={!canBookmark}
-								>
-									{isBookmarked ? "Remove bookmark here" : "Bookmark this spot"}
-								</DropdownMenuItem>
-								{sortedBookmarks.length > 0 ? (
-									<>
-										<DropdownMenuSeparator />
-										<DropdownMenuLabel>Saved spots</DropdownMenuLabel>
-										{sortedBookmarks.map((b) => (
-											<DropdownMenuItem
-												key={b.id}
-												onSelect={() => navigateToBookmark(b)}
-												className="truncate"
-												title={b.label}
-											>
-												{b.label}
-											</DropdownMenuItem>
-										))}
-									</>
-								) : null}
-							</DropdownMenuContent>
-						</DropdownMenu>
 
 						<div
 							className="mx-1 hidden h-8 w-px shrink-0 bg-border sm:mx-2 sm:block"
