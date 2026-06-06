@@ -31,6 +31,8 @@ export function ChapterSidebar({
 				className,
 			)}
 		>
+			{/* Clears the floating chapters toggle pinned at the page corner. */}
+			<div className="h-11 shrink-0" aria-hidden />
 			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
 				<BookMarked
 					className="size-4 shrink-0 text-muted-foreground"

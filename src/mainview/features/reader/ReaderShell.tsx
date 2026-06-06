@@ -1,4 +1,6 @@
+import { Bookmark, BookMarked } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { LoadedDocument } from "./types";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
@@ -48,13 +50,17 @@ export function ReaderShell({
 	className,
 }: ReaderShellProps) {
 	const hasDoc = document !== null;
+	const mightHaveChapters =
+		document?.format === "epub" || Boolean(document?.chapters?.length);
 	const [chapterSidebarOpen, setChapterSidebarOpen] = useState(false);
+	const [bookmarkSidebarOpen, setBookmarkSidebarOpen] = useState(false);
 
 	useEffect(() => {
 		const hasChapters =
 			document?.format === "epub" ||
 			Boolean(document?.chapters?.length);
 		setChapterSidebarOpen(hasChapters);
+		setBookmarkSidebarOpen(false);
 	}, [document]);
 
 	return (
@@ -76,11 +82,6 @@ export function ReaderShell({
 					onOpenLogs={onOpenLogs}
 					onOpenAudiobook={onOpenAudiobook}
 					showAudiobook={document?.format === "epub"}
-					showChapterToggle={hasDoc}
-					chapterSidebarOpen={chapterSidebarOpen}
-					onToggleChapterSidebar={() =>
-						setChapterSidebarOpen((open) => !open)
-					}
 				/>
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 					{documentLoading ? (
@@ -90,6 +91,7 @@ export function ReaderShell({
 						<ReaderDocumentLayout
 							document={document}
 							chapterSidebarOpen={chapterSidebarOpen}
+							bookmarkSidebarOpen={bookmarkSidebarOpen}
 							activeChapterId={activeChapterId}
 							initialChapterId={initialChapterId}
 							onActiveChapterChange={onActiveChapterChange}
@@ -102,6 +104,48 @@ export function ReaderShell({
 							onOpenBook={onOpenBook}
 						/>
 					)}
+
+					{/* Floating sidebar toggles, at the page's two top corners. The
+					    sidebars reserve top space so their content clears these. */}
+					{hasDoc && mightHaveChapters ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className={cn(
+								"absolute left-2 top-2 z-20 size-8 text-muted-foreground hover:bg-accent hover:text-foreground",
+								chapterSidebarOpen && "text-foreground",
+							)}
+							onClick={() => setChapterSidebarOpen((o) => !o)}
+							aria-pressed={chapterSidebarOpen}
+							aria-label={chapterSidebarOpen ? "Hide chapters" : "Show chapters"}
+							title={chapterSidebarOpen ? "Hide chapters" : "Show chapters"}
+						>
+							<BookMarked className="size-4" aria-hidden />
+						</Button>
+					) : null}
+					{hasDoc ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className={cn(
+								"absolute right-2 top-2 z-20 size-8 text-muted-foreground hover:bg-accent hover:text-foreground",
+								bookmarkSidebarOpen && "text-foreground",
+							)}
+							onClick={() => setBookmarkSidebarOpen((o) => !o)}
+							aria-pressed={bookmarkSidebarOpen}
+							aria-label={
+								bookmarkSidebarOpen ? "Hide bookmarks" : "Show bookmarks"
+							}
+							title={bookmarkSidebarOpen ? "Hide bookmarks" : "Show bookmarks"}
+						>
+							<Bookmark
+								className={cn("size-4", bookmarkSidebarOpen && "fill-current")}
+								aria-hidden
+							/>
+						</Button>
+					) : null}
 				</main>
 				{hasDoc ? <PlaybackControls /> : null}
 			</div>

@@ -1,12 +1,4 @@
-import {
-	AudioLines,
-	Bell,
-	FolderOpen,
-	Library,
-	PanelLeft,
-	PanelLeftClose,
-	Settings,
-} from "lucide-react";
+import { AudioLines, Bell, Library, Plus, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,16 +7,14 @@ import { useLogStore } from "./logging";
 export type ReaderHeaderProps = {
 	/** When omitted, the filename badge is hidden (no document yet). */
 	fileName?: string | null;
+	/** Add (open) a book — shown on the home screen. */
 	onOpenFile: () => void;
-	/** Open the Library (all opened books). When omitted, the button is hidden. */
+	/** Go to the Library (home). Present only while a document is open. */
 	onOpenLibrary?: () => void;
 	onOpenSettings?: () => void;
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
 	showAudiobook?: boolean;
-	showChapterToggle?: boolean;
-	chapterSidebarOpen?: boolean;
-	onToggleChapterSidebar?: () => void;
 	className?: string;
 };
 
@@ -36,12 +26,10 @@ export function ReaderHeader({
 	onOpenLogs,
 	onOpenAudiobook,
 	showAudiobook = false,
-	showChapterToggle = false,
-	chapterSidebarOpen = false,
-	onToggleChapterSidebar,
 	className,
 }: ReaderHeaderProps) {
 	const unreadIssues = useLogStore((s) => s.unreadIssues);
+	const reading = Boolean(onOpenLibrary);
 	return (
 		<header
 			className={cn(
@@ -51,26 +39,6 @@ export function ReaderHeader({
 		>
 			<div className="mx-auto flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-3.5">
 				<div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-					{showChapterToggle ? (
-						<Button
-							type="button"
-							variant="outline"
-							size="icon"
-							className="shrink-0 border-border bg-transparent text-foreground hover:bg-accent"
-							onClick={onToggleChapterSidebar}
-							aria-label={
-								chapterSidebarOpen ? "Hide chapters" : "Show chapters"
-							}
-							aria-pressed={chapterSidebarOpen}
-							title={chapterSidebarOpen ? "Hide chapters" : "Show chapters"}
-						>
-							{chapterSidebarOpen ? (
-								<PanelLeftClose className="size-4" aria-hidden />
-							) : (
-								<PanelLeft className="size-4" aria-hidden />
-							)}
-						</Button>
-					) : null}
 					{fileName ? (
 						<Badge
 							variant="secondary"
@@ -82,7 +50,7 @@ export function ReaderHeader({
 					) : null}
 				</div>
 				<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
-					{onOpenLibrary ? (
+					{reading ? (
 						<Button
 							type="button"
 							variant="outline"
@@ -94,17 +62,19 @@ export function ReaderHeader({
 							<Library className="size-4" aria-hidden />
 							Library
 						</Button>
-					) : null}
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
-						onClick={onOpenFile}
-					>
-						<FolderOpen className="size-4" aria-hidden />
-						Open file
-					</Button>
+					) : (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
+							onClick={onOpenFile}
+							title="Add a book"
+						>
+							<Plus className="size-4" aria-hidden />
+							Add
+						</Button>
+					)}
 					{showAudiobook ? (
 						<Button
 							type="button"
