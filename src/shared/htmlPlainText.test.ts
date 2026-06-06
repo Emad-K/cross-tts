@@ -1,5 +1,39 @@
 import { describe, expect, test } from "bun:test";
-import { buildPreToCanonicalMap, htmlToPlainText } from "./htmlPlainText";
+import {
+	buildPreToCanonicalMap,
+	finalizePlainTextInner,
+	htmlToPlainText,
+} from "./htmlPlainText";
+
+/** Naive O(n²) reference: re-finalize every prefix. The fast path must match. */
+function referenceMap(pre: string): { canonical: string; map: number[] } {
+	const innerFull = finalizePlainTextInner(pre);
+	const leadingSkip = innerFull.length - innerFull.trimStart().length;
+	const canonical = innerFull.trim();
+	const canonicalLength = canonical.length;
+	const map = new Array<number>(pre.length + 1);
+	for (let i = 0; i <= pre.length; i++) {
+		if (i >= pre.length) {
+			map[i] = canonicalLength;
+		} else {
+			const inner = finalizePlainTextInner(pre.slice(0, i));
+			map[i] = Math.min(
+				canonicalLength,
+				Math.max(0, inner.length - leadingSkip),
+			);
+		}
+	}
+	return { canonical, map };
+}
+
+/** Deterministic LCG so the fuzz cases are reproducible. */
+function lcg(seed: number): () => number {
+	let s = seed >>> 0;
+	return () => {
+		s = (s * 1664525 + 1013904223) >>> 0;
+		return s / 0x100000000;
+	};
+}
 
 describe("htmlToPlainText", () => {
 	test("inline tags become spaces like strip phase", () => {
@@ -31,6 +65,47 @@ describe("htmlToPlainText", () => {
 		expect(out).toBe(
 			"Chapter 1: Spirit Awakening\n\n Martial arts. The weak is humiliated.",
 		);
+	});
+});
+
+describe("buildPreToCanonicalMap fast path == naive reference", () => {
+	const fixed = [
+		"",
+		" ",
+		"x",
+		"a  b",
+		"  Hello  \n\n  World  ",
+		"a\r\nb\r\n\r\nc",
+		"word \n   \n\n\n next",
+		"\t\t tabs \t and   spaces \t\t",
+		"trailing spaces   ",
+		"\n\n\nleading newlines",
+		"Chapter 1: Spirit Awakening\n\n \r\n\r\n Martial arts.\r\n",
+		"mixed\r \t\n\r\n  end",
+	];
+	for (const pre of fixed) {
+		test(`fixed: ${JSON.stringify(pre).slice(0, 40)}`, () => {
+			const a = buildPreToCanonicalMap(pre);
+			const b = referenceMap(pre);
+			expect(a.canonical).toBe(b.canonical);
+			expect(a.map).toEqual(b.map);
+		});
+	}
+
+	test("fuzz: 400 random whitespace-heavy strings match the reference", () => {
+		const rnd = lcg(0xc0ffee);
+		const alphabet = ["a", "b", " ", " ", "\t", "\n", "\n", "\r"];
+		for (let n = 0; n < 400; n++) {
+			const len = Math.floor(rnd() * 40);
+			let s = "";
+			for (let i = 0; i < len; i++) {
+				s += alphabet[Math.floor(rnd() * alphabet.length)];
+			}
+			const a = buildPreToCanonicalMap(s);
+			const b = referenceMap(s);
+			expect(a.canonical).toBe(b.canonical);
+			expect(a.map).toEqual(b.map);
+		}
 	});
 });
 

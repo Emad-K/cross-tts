@@ -70,10 +70,10 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** `PlaybackControls` now shows a status line during the first-play wait — "Warming up voice model… N%" (model load/download) then "Preparing audio…" (first-sentence synthesis) — instead of a bare spinner.
 - **See the effect:** press Play the first time after launch; the transport bar explains the pause.
 
-### 10. O(n) rewrite of `buildPreToCanonicalMap`
-- **Problem:** currently O(n²) (re-finalizes every prefix). Memoization (done above) takes it off the hot path, but a single long chapter still pays O(n²) once.
-- **Touch:** `src/shared/htmlPlainText.ts` — build the map in one forward pass that mirrors the four `finalizePlainTextInner` collapses with index tracking.
-- **RISK:** must stay byte-exact vs the current implementation. Keep the O(n²) version as an oracle in tests (random fixtures, assert identical maps).
+### 10. O(n) rewrite of `buildPreToCanonicalMap` — ✅ done (v1.8.4)
+- **What:** the map is now built in a single forward pass. A non-whitespace char always contributes one canonical char; a maximal whitespace run is finalized independently (no `finalizePlainTextInner` rule spans a non-ws↔ws boundary), so only the live trailing run is re-finalized — near-linear instead of O(n²).
+- **Safety:** the naive O(n²) version is kept as a test oracle; `htmlPlainText.test.ts` asserts byte-identical `canonical` + `map` across fixtures and 400 random whitespace-heavy strings.
+- **See the effect:** opening a long chapter no longer pays the quadratic cost (previously a noticeable hitch on large chapters even with the parse memoized).
 
 ---
 

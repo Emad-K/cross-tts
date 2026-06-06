@@ -80,6 +80,15 @@ export type PreToCanonicalMap = {
 /**
  * Map pre-indices to canonical (TTS) indices without trimming each prefix
  * (trimming prefixes caused cumulative highlight drift through the chapter).
+ *
+ * `map[i]` must equal `finalizePlainTextInner(pre.slice(0, i)).length` (minus
+ * the leading skip, clamped). The naive form re-finalizes every prefix —
+ * O(n²), which froze the UI on long chapters. Instead we build the prefix
+ * length incrementally: a non-whitespace char always contributes exactly one
+ * character (no collapse rule touches it), and a maximal whitespace run is
+ * finalized independently (none of the four `finalizePlainTextInner` rules span
+ * a non-ws↔ws boundary), so only the live trailing whitespace run is
+ * re-finalized. `htmlPlainText.test.ts` pins this against the naive version.
  */
 export function buildPreToCanonicalMap(pre: string): PreToCanonicalMap {
 	const innerFull = finalizePlainTextInner(pre);
@@ -88,16 +97,29 @@ export function buildPreToCanonicalMap(pre: string): PreToCanonicalMap {
 	const canonicalLength = canonical.length;
 	const map = new Array<number>(pre.length + 1);
 
-	for (let i = 0; i <= pre.length; i++) {
-		if (i >= pre.length) {
-			map[i] = canonicalLength;
+	const clamp = (len: number): number =>
+		Math.min(canonicalLength, Math.max(0, len - leadingSkip));
+
+	// `stableLen` is the finalized length of everything before the current
+	// trailing whitespace run; `tail` is that run.
+	let stableLen = 0;
+	let tail = "";
+	map[0] = clamp(0);
+	for (let i = 0; i < pre.length; i++) {
+		const c = pre[i]!;
+		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+			tail += c;
 		} else {
-			const inner = finalizePlainTextInner(pre.slice(0, i));
-			map[i] = Math.min(
-				canonicalLength,
-				Math.max(0, inner.length - leadingSkip),
-			);
+			if (tail) {
+				stableLen += finalizePlainTextInner(tail).length;
+				tail = "";
+			}
+			stableLen += 1;
 		}
+		const len = tail
+			? stableLen + finalizePlainTextInner(tail).length
+			: stableLen;
+		map[i + 1] = i + 1 < pre.length ? clamp(len) : canonicalLength;
 	}
 
 	return { canonical, map };
