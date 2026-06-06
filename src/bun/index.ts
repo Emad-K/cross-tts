@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
@@ -180,6 +180,11 @@ function registerRpcHandlers(): void {
 				};
 			}
 		},
+	);
+	ipcMain.handle(
+		"audioFileExists",
+		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
+			existsSync(join(dir, fileName)),
 	);
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
 		void shell.openPath(path);

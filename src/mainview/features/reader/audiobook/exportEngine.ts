@@ -2,10 +2,11 @@ import { create } from "zustand";
 import type { AudioFormat } from "@shared/audiobook";
 import { trackFileName } from "@shared/audiobook";
 import {
+	audioFileExists,
 	getEpubChapterContent,
 	writeAudioFile,
 } from "@/lib/desktopBridge";
-import { logError } from "../logging";
+import { logError, logInfo } from "../logging";
 import { getMaxChunkChars } from "../settings/appSettingsStore";
 import {
 	buildTtsChunks,
@@ -34,6 +35,8 @@ type ExportState = {
 	currentChapterTitle: string;
 	etaSeconds: number | null;
 	filesWritten: number;
+	/** Chapters skipped because their file already existed (resumed export). */
+	skippedChapters: number;
 	outputDir: string | null;
 	error: string | null;
 };
@@ -47,6 +50,7 @@ const INITIAL: ExportState = {
 	currentChapterTitle: "",
 	etaSeconds: null,
 	filesWritten: 0,
+	skippedChapters: 0,
 	outputDir: null,
 	error: null,
 };
@@ -150,6 +154,21 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				currentChapterTitle: title,
 			});
 
+			// Resume: a chapter already written to this folder is a checkpoint —
+			// skip re-synthesizing it. Delete the folder to force a fresh export.
+			const trackName = trackFileName(ci + 1, title, opts.format);
+			if (await audioFileExists(opts.dir, trackName)) {
+				done += chunks.length;
+				useExportStore.setState((s) => ({
+					doneChunks: done,
+					skippedChapters: s.skippedChapters + 1,
+				}));
+				logInfo(`Skipping already-exported chapter: ${title}`, {
+					source: "export",
+				});
+				continue;
+			}
+
 			let enc: ReturnType<typeof createEncoder> | null = null;
 			for (const chunk of chunks) {
 				await gate();
@@ -170,8 +189,7 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 			if (abort) break;
 			if (enc) {
 				const bytes = enc.finish();
-				const name = trackFileName(ci + 1, title, opts.format);
-				const res = await writeAudioFile(opts.dir, name, bytes);
+				const res = await writeAudioFile(opts.dir, trackName, bytes);
 				if (!res.ok) throw new Error(res.error || "Couldn't write the file");
 				useExportStore.setState({
 					filesWritten: useExportStore.getState().filesWritten + 1,
