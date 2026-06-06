@@ -14,6 +14,7 @@ import {
 } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { AudioCache, audioCacheKey } from "./ttsAudioCache";
+import { useSweepStore } from "./sweepStore";
 import { useTtsStore } from "./ttsStore";
 
 /** How many upcoming chunks to synthesize ahead so playback never waits. */
@@ -373,14 +374,34 @@ function playBuffer(
 		activeSource = src;
 		src.buffer = buffer;
 		src.connect(gain);
+
+		// Drive the in-sentence progress sweep from the audio clock. ctx.currentTime
+		// freezes while suspended (pause), so the sweep pauses for free. No real
+		// per-token timing exists, so this is a duration-proportional estimate.
+		const startTime = ctx.currentTime;
+		const duration = buffer.duration || 0;
+		let raf = 0;
+		const tick = () => {
+			if (signal.aborted) return;
+			const p =
+				duration > 0
+					? Math.min(1, Math.max(0, (ctx.currentTime - startTime) / duration))
+					: 0;
+			useSweepStore.getState().setProgress(p);
+			raf = requestAnimationFrame(tick);
+		};
+
 		src.onended = () => {
 			if (activeSource === src) activeSource = null;
+			cancelAnimationFrame(raf);
 			resolve();
 		};
 		try {
 			src.start();
+			raf = requestAnimationFrame(tick);
 		} catch (e) {
 			activeSource = null;
+			cancelAnimationFrame(raf);
 			reject(e);
 		}
 	});
@@ -582,6 +603,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		// settings simply miss and re-synthesize.
 		const cached = hasCachedChunkAudio(chunk.text, snap.voice, snap.speed);
 
+		useSweepStore.getState().setProgress(0);
 		useTtsStore.setState({
 			playback: cached ? "playing" : "buffering",
 			currentChunkIndex: idx,
@@ -759,6 +781,7 @@ export function skipChunk(delta: number): void {
 export function stopPlaybackUi(): void {
 	interruptPlaybackForReschedule();
 	void getAudioGraph().ctx.suspend();
+	useSweepStore.getState().setProgress(0);
 	useTtsStore.setState({
 		playback: "idle",
 		highlightRange: null,
