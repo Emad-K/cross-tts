@@ -35,10 +35,16 @@ export function decodeHtmlEntities(raw: string): string {
 
 /** Collapse whitespace without trimming ends (used for offset mapping). */
 export function finalizePlainTextInner(raw: string): string {
-	return raw
-		.replace(/[ \t]+\n/g, "\n")
-		.replace(/\n{3,}/g, "\n\n")
-		.replace(/[ \t]{2,}/g, " ");
+	return (
+		raw
+			// Match the HTML parser's newline normalization (CRLF / lone CR → LF).
+			// The webview DOM has no \r (Chromium normalizes on parse), so the regex
+			// path must drop it too or every offset after a CRLF drifts the highlight.
+			.replace(/\r\n?/g, "\n")
+			.replace(/[ \t]+\n/g, "\n")
+			.replace(/\n{3,}/g, "\n\n")
+			.replace(/[ \t]{2,}/g, " ")
+	);
 }
 
 /** Collapse whitespace after tag stripping — shared by regex and DOM walks. */
