@@ -1,3 +1,4 @@
+import type { BookProgress } from "./recentBooks";
 import type { TtsTextRulesState } from "./ttsTextRules";
 import { defaultTtsTextRulesState } from "./ttsTextRules";
 
@@ -22,6 +23,8 @@ export type WebPersistedSlice = {
 	currentChunkIndex: number;
 	/** Regex and pronunciation transforms applied at TTS synthesis time. */
 	ttsTextRules: TtsTextRulesState;
+	/** Recently-opened books keyed by path, for the library + per-book resume. */
+	books: Record<string, BookProgress>;
 };
 
 export type AppSessionFileV1 = {
@@ -43,4 +46,5 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	activeChapterId: null,
 	currentChunkIndex: 0,
 	ttsTextRules: defaultTtsTextRulesState(),
+	books: {},
 });

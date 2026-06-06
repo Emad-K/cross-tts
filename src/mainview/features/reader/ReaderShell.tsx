@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { BookProgress } from "@shared/recentBooks";
 import type { LoadedDocument } from "./types";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
@@ -19,6 +20,8 @@ export type ReaderShellProps = {
 	initialChapterId?: string | null;
 	onActiveChapterChange?: (chapterId: string | null) => void;
 	onOpenFile: () => void;
+	recentBooks?: BookProgress[];
+	onOpenRecent?: (path: string) => void;
 	onOpenSettings?: () => void;
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
@@ -37,6 +40,8 @@ export function ReaderShell({
 	initialChapterId = null,
 	onActiveChapterChange,
 	onOpenFile,
+	recentBooks,
+	onOpenRecent,
 	onOpenSettings,
 	onOpenLogs,
 	onOpenAudiobook,
@@ -67,6 +72,9 @@ export function ReaderShell({
 				<ReaderHeader
 					fileName={hasDoc ? document.fileName : null}
 					onOpenFile={onOpenFile}
+					recentBooks={recentBooks}
+					currentPath={document?.filePath ?? null}
+					onOpenRecent={onOpenRecent}
 					onOpenSettings={onOpenSettings}
 					onOpenLogs={onOpenLogs}
 					onOpenAudiobook={onOpenAudiobook}
