@@ -6,5 +6,10 @@ out/
 release/
 *.tsbuildinfo
 
+# Use pnpm only (packageManager pinned in package.json); block stray lockfiles
+bun.lock
+package-lock.json
+yarn.lock
+
 # Local Claude Code session/config
 .claude/
