@@ -52,7 +52,7 @@ describe("ttsRulesExchange", () => {
 			"replace",
 			(prefix) => `${prefix}-${++id}`,
 		);
-		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(4);
+		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(7);
 		expect(merged.regexRules.filter((r) => !r.builtIn)).toHaveLength(0);
 		expect(merged.pronunciationRules).toHaveLength(2);
 		expect(merged.pronunciationRules.find((r) => r.word === "gif")).toBeTruthy();
