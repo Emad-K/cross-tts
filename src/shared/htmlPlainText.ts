@@ -1,5 +1,6 @@
 import {
 	BLOCK_END_TAG_PATTERN,
+	BLOCK_START_TAG_PATTERN,
 	EPUB_BLOCK_TAGS,
 	EPUB_SKIP_TAGS,
 	stripNoTextVoidTags,
@@ -66,7 +67,11 @@ export function htmlToPlainText(html: string): string {
 	s = stripNoTextVoidTags(s);
 	s = s.replace(/<br\s*\/?>/gi, "\n");
 	s = s.replace(BLOCK_END_TAG_PATTERN, "\n\n");
-	s = s.replace(/<[^>]+>/g, " ");
+	// Opening block tags add a space; inline tags add nothing so they don't
+	// split a word they're glued inside (drop-caps, styled letters). Must stay
+	// identical to the DOM walk in domPlainTextPre.
+	s = s.replace(BLOCK_START_TAG_PATTERN, " ");
+	s = s.replace(/<[^>]+>/g, "");
 	s = decodeHtmlEntities(s);
 	return finalizePlainText(s);
 }

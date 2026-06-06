@@ -57,17 +57,17 @@ export function buildDomPlainTextPre(root: Node): DomPlainTextPre {
 
 		if (isEpubVoidNoTextTag(tag)) return;
 
-		pre += " ";
+		// Block elements add a space on open and a paragraph break on close;
+		// inline elements add nothing, so a tag glued inside a word (drop-caps,
+		// styled letters) doesn't split it. Mirrors htmlToPlainText.
+		const isBlock = EPUB_BLOCK_TAGS.has(tag);
+		if (isBlock) pre += " ";
 
 		for (const child of el.childNodes) {
 			walk(child);
 		}
 
-		if (EPUB_BLOCK_TAGS.has(tag)) {
-			pre += "\n\n";
-		} else {
-			pre += " ";
-		}
+		if (isBlock) pre += "\n\n";
 	}
 
 	for (const child of root.childNodes) {

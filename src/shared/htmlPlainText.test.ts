@@ -36,9 +36,14 @@ function lcg(seed: number): () => number {
 }
 
 describe("htmlToPlainText", () => {
-	test("inline tags become spaces like strip phase", () => {
+	test("inline tags add no characters (don't split words)", () => {
 		const html = "<p>Hello <em>world</em>.</p>";
-		expect(htmlToPlainText(html)).toBe("Hello world .");
+		expect(htmlToPlainText(html)).toBe("Hello world.");
+	});
+
+	test("a tag glued inside a word is not split (drop-cap)", () => {
+		const html = '<p><span class="dropcap">M</span>artial arts.</p>';
+		expect(htmlToPlainText(html)).toBe("Martial arts.");
 	});
 
 	test("ignores head when body is present", () => {

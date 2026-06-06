@@ -166,6 +166,16 @@ export const BLOCK_END_TAG_PATTERN = new RegExp(
 	"gi",
 );
 
+/**
+ * Regex: opening block tag → a single space (matches the DOM walk, which emits
+ * a space when entering a block). Inline tags emit nothing, so a tag glued
+ * inside a word (`<span>M</span>artial`, drop-caps) doesn't split it.
+ */
+export const BLOCK_START_TAG_PATTERN = new RegExp(
+	`<(?:${tagAlternation(EPUB_BLOCK_TAGS)})(?:\\s[^>]*)?>`,
+	"gi",
+);
+
 export function isEpubSkipTag(tag: string): boolean {
 	return EPUB_SKIP_TAGS.has(tag);
 }
