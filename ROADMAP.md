@@ -57,10 +57,9 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **Touch:** session schema + a sidebar panel; anchor by `(chapterId, chunkIndex)`.
 - **See the effect:** jump-list of saved spots per book.
 
-### 7. Audiobook export checkpointing
-- **Problem:** export is sequential + in-memory (`src/mainview/features/reader/audiobook/exportEngine.ts`); a crash restarts from zero.
-- **Touch:** write each finished chapter to disk and record progress; resume skips completed chapters.
-- **See the effect:** kill mid-export, relaunch, resume — finished chapters aren't re-synthesized.
+### 7. Audiobook export checkpointing — ✅ done (v1.8.2)
+- **What:** the per-chapter output files are the checkpoint. `startExport` now checks `audioFileExists(dir, trackName)` (new RPC) before each chapter and skips re-synthesizing ones already written; their segments still count toward progress. The dialog shows "Resumed — skipped N already-exported chapters."
+- **See the effect:** cancel/crash mid-export, restart into the same folder — finished chapters aren't re-synthesized. Delete the folder to force a fresh export.
 
 ### 8. CJK / pinyin pronunciation dictionary
 - **Problem:** one-off pronunciation rules (`builtin-pron-qi`) don't scale; cultivation terms (qi, jin, dao, dantian) mispronounce.

@@ -64,6 +64,7 @@ export function AudiobookExportDialog({
 	const currentChapterTitle = useExportStore((s) => s.currentChapterTitle);
 	const etaSeconds = useExportStore((s) => s.etaSeconds);
 	const filesWritten = useExportStore((s) => s.filesWritten);
+	const skippedChapters = useExportStore((s) => s.skippedChapters);
 	const outputDir = useExportStore((s) => s.outputDir);
 	const error = useExportStore((s) => s.error);
 
@@ -273,6 +274,12 @@ export function AudiobookExportDialog({
 										: `~${formatEta(etaSeconds)} left`}
 								</span>
 							</div>
+							{skippedChapters > 0 ? (
+								<p className="text-xs text-muted-foreground">
+									Resumed — skipped {skippedChapters} already-exported{" "}
+									{skippedChapters === 1 ? "chapter" : "chapters"}.
+								</p>
+							) : null}
 							<div className="flex justify-end gap-2 pt-1">
 								<Button
 									type="button"

@@ -126,6 +126,15 @@ export async function writeAudioFile(
 	return b.request.writeAudioFile({ dir, fileName, data });
 }
 
+export async function audioFileExists(
+	dir: string,
+	fileName: string,
+): Promise<boolean> {
+	const b = bridge();
+	if (!b) return false;
+	return b.request.audioFileExists({ dir, fileName });
+}
+
 export async function revealPath(path: string): Promise<void> {
 	const b = bridge();
 	if (!b) return;

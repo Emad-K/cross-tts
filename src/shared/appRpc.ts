@@ -104,6 +104,11 @@ export type AppRpcSchema = {
 			params: { dir: string; fileName: string; data: Uint8Array };
 			response: { ok: boolean; path: string | null; error?: string };
 		};
+		/** Whether an audiobook track already exists (used to resume an export). */
+		audioFileExists: {
+			params: { dir: string; fileName: string };
+			response: boolean;
+		};
 		/** Reveal an arbitrary path in the OS file manager. */
 		revealPath: {
 			params: { path: string };
