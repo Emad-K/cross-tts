@@ -5,8 +5,13 @@ import {
 	FONT_SCALE_MAX,
 	FONT_SCALE_MIN,
 	FONT_SCALE_STEP,
+	MAX_CHUNK_CHARS_MAX,
+	MAX_CHUNK_CHARS_MIN,
+	MAX_CHUNK_CHARS_STEP,
+	READER_PADDINGS,
 	THEMES,
 	type ColorMode,
+	type ReaderPadding,
 	defaultAppearance,
 	fontStack,
 } from "@shared/appearance";
@@ -20,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+import { useTtsStore } from "../tts";
 import { useAppSettingsStore } from "./appSettingsStore";
 
 const MODES: { id: ColorMode; label: string; icon: typeof Sun }[] = [
@@ -50,6 +56,8 @@ export function AppearancePanel() {
 
 	const [scaleDraft, setScaleDraft] = useState<number | null>(null);
 	const scale = scaleDraft ?? a.fontScale;
+	const [chunkDraft, setChunkDraft] = useState<number | null>(null);
+	const chunkChars = chunkDraft ?? a.maxChunkChars;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -155,6 +163,50 @@ export function AppearancePanel() {
 							<span>Smaller</span>
 							<span>Larger</span>
 						</div>
+					</Field>
+
+					<Field label="Reading padding">
+						<Select
+							value={a.readerPadding}
+							onValueChange={(v) =>
+								void setAppearance({ readerPadding: v as ReaderPadding })
+							}
+						>
+							<SelectTrigger className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{READER_PADDINGS.map((p) => (
+									<SelectItem key={p.id} value={p.id}>
+										{p.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<p className="mt-2 text-xs text-muted-foreground">
+							Space around the document text. Tighter shows more per screen.
+						</p>
+					</Field>
+
+					<Field label={`Max segment length · ${chunkChars} chars`}>
+						<Slider
+							value={[chunkChars]}
+							min={MAX_CHUNK_CHARS_MIN}
+							max={MAX_CHUNK_CHARS_MAX}
+							step={MAX_CHUNK_CHARS_STEP}
+							onValueChange={(v) => setChunkDraft(v[0] ?? MAX_CHUNK_CHARS_MIN)}
+							onValueCommit={(v) => {
+								setChunkDraft(null);
+								const next = v[0] ?? MAX_CHUNK_CHARS_MIN;
+								void setAppearance({ maxChunkChars: next });
+								// Rebuild the open document's chunks with the new size.
+								useTtsStore.getState().rechunk();
+							}}
+						/>
+						<p className="mt-2 text-xs text-muted-foreground">
+							Longest text the engine speaks at once. Shorter = snappier start
+							and finer highlighting; longer = fewer breaks.
+						</p>
 					</Field>
 				</div>
 			</ScrollArea>

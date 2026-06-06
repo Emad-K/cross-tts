@@ -11,8 +11,10 @@ export type TtsChunk = {
 	end: number;
 };
 
-/** Prefer whole sentences; sub-split only when a sentence exceeds this. */
-const MAX_CHARS_IN_CHUNK = 300;
+/** Default max characters per chunk; overridable via settings. */
+export const DEFAULT_MAX_CHUNK_CHARS = 300;
+export const MIN_MAX_CHUNK_CHARS = 120;
+export const MAX_MAX_CHUNK_CHARS = 600;
 
 /** Match TxtViewer: normalize newlines only (no trim) so indices line up. */
 export function normalizedReaderText(raw: string): string {
@@ -56,8 +58,8 @@ function collectSentenceSpans(full: string): { start: number; end: number }[] {
 }
 
 /** Prefer commas / semicolons / colons, then spaces, inside a long clause. */
-function clauseBreakWithin(s: string): number {
-	const hard = Math.min(s.length, MAX_CHARS_IN_CHUNK);
+function clauseBreakWithin(s: string, maxChars: number): number {
+	const hard = Math.min(s.length, maxChars);
 	const win = s.slice(0, hard);
 	const candidates = [
 		win.lastIndexOf("; "),
@@ -78,6 +80,7 @@ function splitLongSentence(
 	full: string,
 	absStart: number,
 	absEnd: number,
+	maxChars: number,
 ): Omit<TtsChunk, "index">[] {
 	const slice = full.slice(absStart, absEnd);
 	const lead = slice.length - slice.trimStart().length;
@@ -87,7 +90,7 @@ function splitLongSentence(
 	const core = full.slice(t0, t1);
 	if (!core.trim()) return [];
 
-	if (core.length <= MAX_CHARS_IN_CHUNK) {
+	if (core.length <= maxChars) {
 		const t = core.trim();
 		if (!t.length) return [];
 		const li = core.indexOf(t[0]!);
@@ -98,10 +101,10 @@ function splitLongSentence(
 	const out: Omit<TtsChunk, "index">[] = [];
 	let offset = 0;
 	while (offset < core.length) {
-		let take = Math.min(MAX_CHARS_IN_CHUNK, core.length - offset);
+		let take = Math.min(maxChars, core.length - offset);
 		if (take < core.length - offset) {
 			const win = core.slice(offset, offset + take);
-			const br = clauseBreakWithin(win);
+			const br = clauseBreakWithin(win, maxChars);
 			if (br > 0) take = br;
 		}
 		const rawPiece = core.slice(offset, offset + take);
@@ -135,9 +138,10 @@ function blockSpans(full: string): { start: number; end: number }[] {
 function mergeUndersizedChunks(
 	full: string,
 	pieces: Omit<TtsChunk, "index">[],
+	maxChars: number,
 ): Omit<TtsChunk, "index">[] {
-	const MIN_CHUNK_CHARS = 48;
-	const MAX_MERGED_CHARS = 300;
+	const MIN_CHUNK_CHARS = Math.min(48, Math.floor(maxChars / 2));
+	const MAX_MERGED_CHARS = maxChars;
 	if (pieces.length === 0) return [];
 
 	const out: Omit<TtsChunk, "index">[] = [];
@@ -174,9 +178,16 @@ function mergeUndersizedChunks(
 /**
  * Split document text into speakable chunks on sentence boundaries when possible.
  */
-export function buildTtsChunks(raw: string): TtsChunk[] {
+export function buildTtsChunks(
+	raw: string,
+	maxChars: number = DEFAULT_MAX_CHUNK_CHARS,
+): TtsChunk[] {
 	const full = normalizedReaderText(raw);
 	if (!full.trim()) return [];
+	const cap = Math.max(
+		MIN_MAX_CHUNK_CHARS,
+		Math.min(MAX_MAX_CHUNK_CHARS, Math.floor(maxChars) || DEFAULT_MAX_CHUNK_CHARS),
+	);
 
 	const merged: Omit<TtsChunk, "index">[] = [];
 	for (const { start: blockStart, end: blockEnd } of blockSpans(full)) {
@@ -187,14 +198,10 @@ export function buildTtsChunks(raw: string): TtsChunk[] {
 		const pieces: Omit<TtsChunk, "index">[] = [];
 		for (const { start, end } of spans) {
 			pieces.push(
-				...splitLongSentence(
-					full,
-					blockStart + start,
-					blockStart + end,
-				),
+				...splitLongSentence(full, blockStart + start, blockStart + end, cap),
 			);
 		}
-		merged.push(...mergeUndersizedChunks(full, pieces));
+		merged.push(...mergeUndersizedChunks(full, pieces, cap));
 	}
 	return merged
 		.filter((c) => isSpeakableChunkText(c.text))

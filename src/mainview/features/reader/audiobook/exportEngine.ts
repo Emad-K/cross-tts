@@ -6,6 +6,7 @@ import {
 	writeAudioFile,
 } from "@/lib/desktopBridge";
 import { logError } from "../logging";
+import { getMaxChunkChars } from "../settings/appSettingsStore";
 import {
 	buildTtsChunks,
 	ensureKokoroLoaded,
@@ -133,7 +134,7 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				return;
 			}
 			const content = await getEpubChapterContent(opts.filePath, ch.id);
-			const chunks = buildTtsChunks(content?.text ?? "");
+			const chunks = buildTtsChunks(content?.text ?? "", getMaxChunkChars());
 			items.push({ title: ch.title, chunks });
 			total += chunks.length;
 		}

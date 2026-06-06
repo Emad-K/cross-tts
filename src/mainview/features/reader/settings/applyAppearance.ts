@@ -1,5 +1,9 @@
 import { useEffect } from "react";
-import { type Appearance, fontStack } from "@shared/appearance";
+import {
+	type Appearance,
+	READER_PADDING_VALUES,
+	fontStack,
+} from "@shared/appearance";
 import { useAppSettingsStore } from "./appSettingsStore";
 
 function prefersDark(): boolean {
@@ -25,6 +29,9 @@ export function applyAppearance(a: Appearance): void {
 	else root.setAttribute("data-theme", a.theme);
 	root.style.setProperty("--reader-font", fontStack(a.fontFamily));
 	root.style.setProperty("--reader-scale", String(a.fontScale));
+	const pad = READER_PADDING_VALUES[a.readerPadding] ?? READER_PADDING_VALUES.comfortable;
+	root.style.setProperty("--reader-pad-x", `${pad.x}rem`);
+	root.style.setProperty("--reader-pad-y", `${pad.y}rem`);
 }
 
 /** Keep the DOM in sync with the appearance setting (and the OS theme on system). */

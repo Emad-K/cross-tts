@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { AppConfigInfo } from "@shared/appConfig";
 import type { GpuPowerPreference } from "@shared/appConfig";
 import type { Appearance } from "@shared/appearance";
+import { MAX_CHUNK_CHARS_DEFAULT } from "@shared/appearance";
 import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
@@ -158,6 +159,14 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 /** True when TTS should attempt the GPU (WebGPU). Defaults to false until hydrated. */
 export function isGpuPreferenceEnabled(): boolean {
 	return useAppSettingsStore.getState().config?.gpuEnabled ?? false;
+}
+
+/** Configured max characters per TTS chunk (defaults until hydrated). */
+export function getMaxChunkChars(): number {
+	return (
+		useAppSettingsStore.getState().config?.appearance.maxChunkChars ??
+		MAX_CHUNK_CHARS_DEFAULT
+	);
 }
 
 /** Largest selectable CPU thread count: logical cores − 1 (min 1). */

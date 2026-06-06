@@ -24,9 +24,11 @@
 		--highlight: 38 92% 50% / 0.25;
 		--highlight-foreground: 25 85% 28%;
 		--radius: 0.5rem;
-		/* Reading surface: font + size multiplier, driven by appearance settings. */
+		/* Reading surface: font + size multiplier + padding, from appearance settings. */
 		--reader-scale: 1;
 		--reader-font: Georgia, "Times New Roman", ui-serif, serif;
+		--reader-pad-x: 2rem;
+		--reader-pad-y: 3.5rem;
 	}
 
 	.dark {
@@ -207,10 +209,12 @@
 		overflow: hidden;
 	}
 
-	/* Document reading area: font family + size follow the appearance settings. */
+	/* Document reading area: font, size, and padding follow appearance settings. */
 	.reader-surface {
 		font-family: var(--reader-font);
 		font-size: calc(1.05rem * var(--reader-scale));
+		padding-inline: var(--reader-pad-x);
+		padding-block: var(--reader-pad-y);
 	}
 	@media (min-width: 640px) {
 		.reader-surface {
