@@ -31,6 +31,7 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume, useLibraryStore } from "./library/libraryStore";
+import { LibraryDialog } from "./library/LibraryDialog";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
@@ -103,6 +104,7 @@ export function ReaderApp() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
+	const [libraryOpen, setLibraryOpen] = useState(false);
 	useAppearanceSync();
 
 	function isPlaybackActive(
@@ -463,8 +465,8 @@ export function ReaderApp() {
 				initialChapterId={initialChapterId}
 				onActiveChapterChange={setActiveChapterId}
 				onOpenFile={openFilePicker}
-				recentBooks={recentBooks}
-				onOpenRecent={openRecentBook}
+				onOpenLibrary={() => setLibraryOpen(true)}
+				onOpenBook={openRecentBook}
 				onOpenSettings={() => setSettingsOpen(true)}
 				onOpenLogs={() => setLogsOpen(true)}
 				onOpenAudiobook={() => setAudiobookOpen(true)}
@@ -474,6 +476,13 @@ export function ReaderApp() {
 					setActiveChapterId(null);
 					setDocument(SAMPLE_TXT_DOCUMENT);
 				}}
+			/>
+			<LibraryDialog
+				open={libraryOpen}
+				onOpenChange={setLibraryOpen}
+				books={recentBooks}
+				currentPath={document?.filePath ?? null}
+				onOpenBook={openRecentBook}
 			/>
 			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />

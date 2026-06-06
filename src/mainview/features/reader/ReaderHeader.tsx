@@ -1,23 +1,14 @@
 import {
 	AudioLines,
 	Bell,
-	Clock,
 	FolderOpen,
+	Library,
 	PanelLeft,
 	PanelLeftClose,
 	Settings,
 } from "lucide-react";
-import type { BookProgress } from "@shared/recentBooks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useLogStore } from "./logging";
 
@@ -25,11 +16,8 @@ export type ReaderHeaderProps = {
 	/** When omitted, the filename badge is hidden (no document yet). */
 	fileName?: string | null;
 	onOpenFile: () => void;
-	/** Recently-opened books, most-recent first. */
-	recentBooks?: BookProgress[];
-	/** Path of the currently-open book, to exclude from the recent menu. */
-	currentPath?: string | null;
-	onOpenRecent?: (path: string) => void;
+	/** Open the Library (all opened books). When omitted, the button is hidden. */
+	onOpenLibrary?: () => void;
 	onOpenSettings?: () => void;
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
@@ -40,24 +28,10 @@ export type ReaderHeaderProps = {
 	className?: string;
 };
 
-/** Compact "x ago" label for the recent-books menu. */
-function relativeTime(ms: number): string {
-	const diff = Date.now() - ms;
-	if (diff < 60_000) return "just now";
-	const mins = Math.floor(diff / 60_000);
-	if (mins < 60) return `${mins}m ago`;
-	const hours = Math.floor(mins / 60);
-	if (hours < 24) return `${hours}h ago`;
-	const days = Math.floor(hours / 24);
-	return days < 30 ? `${days}d ago` : `${Math.floor(days / 30)}mo ago`;
-}
-
 export function ReaderHeader({
 	fileName,
 	onOpenFile,
-	recentBooks = [],
-	currentPath,
-	onOpenRecent,
+	onOpenLibrary,
 	onOpenSettings,
 	onOpenLogs,
 	onOpenAudiobook,
@@ -68,8 +42,6 @@ export function ReaderHeader({
 	className,
 }: ReaderHeaderProps) {
 	const unreadIssues = useLogStore((s) => s.unreadIssues);
-	const otherBooks = recentBooks.filter((b) => b.path !== currentPath);
-	const showRecent = Boolean(onOpenRecent) && otherBooks.length > 0;
 	return (
 		<header
 			className={cn(
@@ -110,39 +82,18 @@ export function ReaderHeader({
 					) : null}
 				</div>
 				<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
-					{showRecent ? (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
-									title="Recently opened books"
-								>
-									<Clock className="size-4" aria-hidden />
-									Recent
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="max-w-[20rem]">
-								<DropdownMenuLabel>Recent books</DropdownMenuLabel>
-								<DropdownMenuSeparator />
-								{otherBooks.map((b) => (
-									<DropdownMenuItem
-										key={b.path}
-										onSelect={() => onOpenRecent?.(b.path)}
-										className="flex flex-col items-start gap-0.5"
-									>
-										<span className="w-full truncate font-medium" title={b.title}>
-											{b.title}
-										</span>
-										<span className="text-xs text-muted-foreground">
-											{relativeTime(b.updatedAt)}
-										</span>
-									</DropdownMenuItem>
-								))}
-							</DropdownMenuContent>
-						</DropdownMenu>
+					{onOpenLibrary ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
+							onClick={onOpenLibrary}
+							title="Your library"
+						>
+							<Library className="size-4" aria-hidden />
+							Library
+						</Button>
 					) : null}
 					<Button
 						type="button"
