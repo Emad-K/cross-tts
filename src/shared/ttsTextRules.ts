@@ -85,6 +85,42 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				caseSensitive: false,
 				builtIn: true,
 			},
+			{
+				id: "builtin-translator-editor-lines",
+				kind: "regex",
+				label: "Remove lines starting with Translator: or Editor:",
+				// Whole line whose first word is translator/editor + colon.
+				pattern: "(?:^|\\n)[ \\t]*(?:translator|editor)[ \\t]*:[^\\n\\r]*",
+				replacement: "",
+				enabled: true,
+				caseSensitive: false,
+				builtIn: true,
+			},
+			{
+				// Must run before the inline note rule below so the whole
+				// "(...)" is removed instead of leaving empty parens.
+				id: "builtin-tl-note-parenthetical",
+				kind: "regex",
+				label: "Remove parenthetical translator notes — (TN: …), (Translator Note: …)",
+				pattern:
+					"\\(\\s*(?:translator(?:['’]?s)?[ \\t]*note|t/?n)\\b[^)]*\\)",
+				replacement: "",
+				enabled: true,
+				caseSensitive: false,
+				builtIn: true,
+			},
+			{
+				id: "builtin-tl-note-inline",
+				kind: "regex",
+				label:
+					"Remove inline translator notes — TN:, Translator Note:, translatorNote: (to end of line)",
+				pattern:
+					"\\b(?:translator[ \\t]*note|t/?n)[ \\t]*:[^\\n\\r]*",
+				replacement: "",
+				enabled: true,
+				caseSensitive: false,
+				builtIn: true,
+			},
 		],
 		pronunciationRules: [
 			{
