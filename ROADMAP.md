@@ -60,10 +60,9 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **What:** the per-chapter output files are the checkpoint. `startExport` now checks `audioFileExists(dir, trackName)` (new RPC) before each chapter and skips re-synthesizing ones already written; their segments still count toward progress. The dialog shows "Resumed — skipped N already-exported chapters."
 - **See the effect:** cancel/crash mid-export, restart into the same folder — finished chapters aren't re-synthesized. Delete the folder to force a fresh export.
 
-### 8. CJK / pinyin pronunciation dictionary
-- **Problem:** one-off pronunciation rules (`builtin-pron-qi`) don't scale; cultivation terms (qi, jin, dao, dantian) mispronounce.
-- **Touch:** ship a curated pinyin→IPA map consumed by `kokoroPhonemize.ts`; expose as a toggotable rule group in the rules editor.
-- **See the effect:** common terms pronounced correctly without per-user setup.
+### 8. CJK / pinyin pronunciation dictionary — ⏸ deferred (needs audio verification)
+- **Why deferred:** `kokoroPhonemize` injects pronunciation-rule IPA **raw** into the phoneme stream (no re-phonemization), so a wrong IPA produces garbled audio — worse than eSpeak's guess. Short pinyin words (dan, li, yang, yin) also collide with English homographs under the whole-word match. A good pack therefore needs listening tests, which can't be done from the build pipeline.
+- **Path forward:** the mechanism already exists — pronunciation rules are user-editable and import/export as JSON (`ttsRulesExchange`). Build a curated pinyin→IPA pack with audio QA, ship it as a (default-off) builtin rule group, and let users enable per-term. The single safe builtin (`qi → tʃiː`) stays.
 
 ### 9. Model warm-up state in UI — ✅ done (v1.8.3)
 - **What:** `PlaybackControls` now shows a status line during the first-play wait — "Warming up voice model… N%" (model load/download) then "Preparing audio…" (first-sentence synthesis) — instead of a bare spinner.
