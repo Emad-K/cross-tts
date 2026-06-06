@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # Silence the Node 20 deprecation; run JS actions on Node 24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     strategy:
@@ -28,8 +32,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@v2
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
+      - run: pnpm run test
       - run: pnpm run build
 
       - name: Package
@@ -48,6 +55,7 @@ jobs:
             release/*.zip
             release/*.yml
             release/*.blockmap
+            !release/builder-debug.yml
           if-no-files-found: warn
 
   publish:

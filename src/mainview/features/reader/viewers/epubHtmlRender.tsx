@@ -250,17 +250,21 @@ export function plainTextFromHtmlDom(html: string): string {
 }
 
 /**
- * Render sanitized EPUB chapter HTML with TTS read-along highlights.
- * Highlights use the same canonical text as TTS ({@link htmlToPlainText}).
+ * HTML-only part of read-along rendering: DOM parse + canonical text + the
+ * pre→canonical offset map. Depends solely on `html`, so callers memoize it on
+ * `[html]` and keep the O(n²) {@link buildPreToCanonicalMap} off the per-chunk
+ * render path (it used to rerun on every highlight tick).
  */
-export function renderEpubHtmlWithReadAlong(
-	html: string,
-	props: EpubReadAlongProps,
-): ReactElement {
+export type EpubReadAlongParse = {
+	body: HTMLElement;
+	canonical: string;
+	map: number[];
+	spanByNode: WeakMap<Text, DomTextSpan>;
+};
+
+export function parseEpubReadAlong(html: string): EpubReadAlongParse | null {
 	const body = bodyFromHtml(html);
-	if (!body) {
-		return <div className="epub-chapter-body" />;
-	}
+	if (!body) return null;
 
 	const canonical = htmlToPlainText(html);
 	const { pre, spans } = buildDomPlainTextPre(body);
@@ -280,21 +284,43 @@ export function renderEpubHtmlWithReadAlong(
 		spanByNode.set(span.node, span);
 	}
 
+	return { body, canonical, map, spanByNode };
+}
+
+/** Per-tick part: walk the parsed DOM applying the current chunk/highlight props. */
+export function renderEpubReadAlong(
+	parsed: EpubReadAlongParse,
+	props: EpubReadAlongProps,
+): ReactElement {
 	const ctx: WalkCtx = {
 		...props,
-		canonical,
-		map,
-		spanByNode,
+		canonical: parsed.canonical,
+		map: parsed.map,
+		spanByNode: parsed.spanByNode,
 		keySeq: 0,
 	};
 
 	const children: ReactNode[] = [];
-	for (const child of body.childNodes) {
+	for (const child of parsed.body.childNodes) {
 		const rendered = walkNode(child, ctx);
 		if (rendered != null) children.push(rendered);
 	}
 
 	return <div className="epub-chapter-body">{children}</div>;
+}
+
+/**
+ * Render sanitized EPUB chapter HTML with TTS read-along highlights.
+ * Highlights use the same canonical text as TTS ({@link htmlToPlainText}).
+ * Prefer {@link parseEpubReadAlong} + {@link renderEpubReadAlong} in hot paths.
+ */
+export function renderEpubHtmlWithReadAlong(
+	html: string,
+	props: EpubReadAlongProps,
+): ReactElement {
+	const parsed = parseEpubReadAlong(html);
+	if (!parsed) return <div className="epub-chapter-body" />;
+	return renderEpubReadAlong(parsed, props);
 }
 
 export function plainTextMatchesTtsSource(

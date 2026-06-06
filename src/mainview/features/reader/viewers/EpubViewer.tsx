@@ -4,8 +4,9 @@ import { getEpubChapterContent } from "@/lib/desktopBridge";
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { cn } from "@/lib/utils";
 import {
+	parseEpubReadAlong,
 	plainTextFromHtmlDom,
-	renderEpubHtmlWithReadAlong,
+	renderEpubReadAlong,
 } from "./epubHtmlRender";
 import { scrollElementFullyVisible } from "./scrollActiveChunk";
 
@@ -63,9 +64,13 @@ export function EpubViewer({
 		scrollElementFullyVisible(el);
 	}, [activeChunkIndex, chunks, html]);
 
+	// DOM parse + offset map depend only on the chapter HTML; memoize them so
+	// they don't rerun on every chunk advance (the O(n²) map was the hot path).
+	const parsed = useMemo(() => (html ? parseEpubReadAlong(html) : null), [html]);
+
 	const body = useMemo(() => {
-		if (!html) return null;
-		return renderEpubHtmlWithReadAlong(html, {
+		if (!parsed) return null;
+		return renderEpubReadAlong(parsed, {
 			chunks,
 			activeChunkIndex,
 			highlightRange,
@@ -74,7 +79,7 @@ export function EpubViewer({
 				activeChunkRef.current = el;
 			},
 		});
-	}, [html, chunks, activeChunkIndex, highlightRange, onChunkClick]);
+	}, [parsed, chunks, activeChunkIndex, highlightRange, onChunkClick]);
 
 	useEffect(() => {
 		if (!html || !chunks.length) return;

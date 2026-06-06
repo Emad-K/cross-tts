@@ -4,20 +4,23 @@ import { isSpeakableChunkText } from "./ttsChunkText";
 import { buildTtsChunks } from "./chunkText";
 
 describe("buildTtsChunks", () => {
-	test("does not merge EPUB heading block with following paragraph", () => {
+	test("drops the chapter heading and keeps the paragraph as its own chunk", () => {
+		// The builtin chapter-heading rule removes "Chapter 3: …" from speech, so
+		// the heading is filtered rather than merged into the following paragraph.
+		// The invariant that matters: the paragraph chunk must not absorb the
+		// heading text.
 		const html =
 			"<h3>Chapter 3: Mortal Desires For The Immortal</h3>" +
 			"<p>Time seemed to have hit the accelerator button.</p>";
 		const text = htmlToPlainText(html);
 		const chunks = buildTtsChunks(text);
 
-		expect(chunks.length).toBeGreaterThanOrEqual(2);
-		expect(chunks[0]!.text).toBe(
-			"Chapter 3: Mortal Desires For The Immortal",
-		);
-		expect(chunks[1]!.text).toBe(
-			"Time seemed to have hit the accelerator button.",
-		);
+		expect(chunks.some((c) => c.text.includes("Chapter 3"))).toBe(false);
+		expect(
+			chunks.some(
+				(c) => c.text === "Time seemed to have hit the accelerator button.",
+			),
+		).toBe(true);
 	});
 
 	test("still merges undersized sentences within the same block", () => {

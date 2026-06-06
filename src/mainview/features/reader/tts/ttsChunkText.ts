@@ -1,11 +1,14 @@
 import { applyTtsTextRules } from "@shared/ttsTextRules";
+import { normalizeTtsSynthesisText } from "@shared/ttsTextNormalize";
 import type { KokoroVoiceId } from "./kokoroVoices";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
 import { getTtsRulesForEngine } from "../ttsRules/ttsRulesStore";
 
-/** Regex-cleaned chunk text; on-screen chunk text is unchanged for highlights. */
+/** Regex-cleaned + normalized chunk text; on-screen text is unchanged for highlights. */
 export function textForTtsSynthesis(chunkText: string): string {
-	return applyTtsTextRules(chunkText, getTtsRulesForEngine());
+	return normalizeTtsSynthesisText(
+		applyTtsTextRules(chunkText, getTtsRulesForEngine()),
+	);
 }
 
 /** True when Kokoro should run (non-empty after rules and contains letters or digits). */
