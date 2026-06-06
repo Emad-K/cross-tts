@@ -66,10 +66,9 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 - **Touch:** ship a curated pinyin→IPA map consumed by `kokoroPhonemize.ts`; expose as a toggotable rule group in the rules editor.
 - **See the effect:** common terms pronounced correctly without per-user setup.
 
-### 9. Model warm-up state in UI
-- **Problem:** first GPU load (fp32) blocks first play with no signal beyond download.
-- **Touch:** `ttsEngine.ts` already emits load phases; surface a "warming up model…" indicator in `PlaybackControls.tsx`.
-- **See the effect:** first Play shows warm-up instead of an unexplained pause.
+### 9. Model warm-up state in UI — ✅ done (v1.8.3)
+- **What:** `PlaybackControls` now shows a status line during the first-play wait — "Warming up voice model… N%" (model load/download) then "Preparing audio…" (first-sentence synthesis) — instead of a bare spinner.
+- **See the effect:** press Play the first time after launch; the transport bar explains the pause.
 
 ### 10. O(n) rewrite of `buildPreToCanonicalMap`
 - **Problem:** currently O(n²) (re-finalizes every prefix). Memoization (done above) takes it off the hot path, but a single long chapter still pays O(n²) once.
