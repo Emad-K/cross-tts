@@ -21,13 +21,21 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
 		}),
 }));
 
-/** Resume position for a previously-opened book, or null if unseen. */
-export function getBookResume(
-	path: string,
-): { chapterId: string | null; chunkIndex: number } | null {
+/** Resume position (and per-book voice/speed) for a book, or null if unseen. */
+export function getBookResume(path: string): {
+	chapterId: string | null;
+	chunkIndex: number;
+	voice?: string;
+	speed?: number;
+} | null {
 	const entry = useLibraryStore.getState().books[path];
 	if (!entry) return null;
-	return { chapterId: entry.chapterId, chunkIndex: entry.chunkIndex };
+	return {
+		chapterId: entry.chapterId,
+		chunkIndex: entry.chunkIndex,
+		voice: entry.voice,
+		speed: entry.speed,
+	};
 }
 
 /** Recent books, most-recent first (non-reactive read). */

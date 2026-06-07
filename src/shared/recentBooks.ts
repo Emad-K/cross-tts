@@ -10,6 +10,10 @@ export type BookProgress = {
 	chunkIndex: number;
 	/** Approximate read progress through the whole book, 0..1. */
 	progress?: number;
+	/** Per-book voice override (Kokoro voice id); falls back to the global voice. */
+	voice?: string;
+	/** Per-book playback speed; falls back to the global speed. */
+	speed?: number;
 	/** Epoch ms of the last update; used for ordering and pruning. */
 	updatedAt: number;
 };
@@ -64,6 +68,12 @@ function coerceBookProgress(raw: unknown): BookProgress | null {
 		progress:
 			typeof o.progress === "number" && o.progress >= 0 && o.progress <= 1
 				? o.progress
+				: undefined,
+		voice:
+			typeof o.voice === "string" && o.voice.length > 0 ? o.voice : undefined,
+		speed:
+			typeof o.speed === "number" && o.speed >= 0.5 && o.speed <= 2
+				? o.speed
 				: undefined,
 		updatedAt:
 			typeof o.updatedAt === "number" && o.updatedAt >= 0 ? o.updatedAt : 0,

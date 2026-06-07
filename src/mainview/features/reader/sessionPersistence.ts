@@ -70,6 +70,8 @@ export function buildWebSlice(
 			chapterId,
 			chunkIndex: t.currentChunkIndex,
 			progress: readProgress(doc, chapterId, t.currentChunkIndex, t.chunks.length),
+			voice: t.voice,
+			speed: t.speed,
 			updatedAt: Date.now(),
 		});
 		useLibraryStore.getState().setBooks(books);
