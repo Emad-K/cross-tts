@@ -527,6 +527,27 @@ function interruptPlaybackForReschedule(): void {
 	playbackAbort = null;
 }
 
+/** Stop any current loop and start a fresh one from the store's current chunk. */
+function startPlaybackLoopFresh(): void {
+	interruptPlaybackForReschedule();
+	const ab = new AbortController();
+	playbackAbort = ab;
+	playbackLoopPromise = runPlaybackLoop(ab.signal);
+	void playbackLoopPromise;
+}
+
+/** Re-seek the loop to the store's current chunk, preserving play/pause state. */
+function rescheduleForSeek(): void {
+	const pb = useTtsStore.getState().playback;
+	if (pb === "playing" || pb === "buffering") {
+		startPlaybackLoopFresh();
+	} else if (pb === "paused") {
+		// Drop the suspended loop holding the old position so the next resume
+		// starts a fresh loop at the seeked chunk (not where it was paused).
+		interruptPlaybackForReschedule();
+	}
+}
+
 export async function pausePlayback(): Promise<void> {
 	const { ctx } = getAudioGraph();
 	await ctx.suspend();
@@ -699,25 +720,21 @@ export async function startOrResumePlayback(): Promise<void> {
 	}
 
 	if (playback === "paused") {
-		await resumePlayback();
-		return;
+		// A live (suspended) loop just needs the audio clock resumed; if it was
+		// dropped (seeked while paused) start a fresh loop at the current chunk.
+		if (playbackLoopPromise) {
+			await resumePlayback();
+			return;
+		}
 	}
 
-	interruptPlaybackForReschedule();
-	const ab = new AbortController();
-	playbackAbort = ab;
-	playbackLoopPromise = runPlaybackLoop(ab.signal);
-	void playbackLoopPromise;
+	startPlaybackLoopFresh();
 }
 
 export function restartPlaybackIfPlaying(): void {
 	const p = useTtsStore.getState().playback;
 	if (p !== "playing" && p !== "buffering") return;
-	interruptPlaybackForReschedule();
-	const ab = new AbortController();
-	playbackAbort = ab;
-	playbackLoopPromise = runPlaybackLoop(ab.signal);
-	void playbackLoopPromise;
+	startPlaybackLoopFresh();
 }
 
 export async function togglePlayPause(): Promise<void> {
@@ -730,15 +747,8 @@ export async function togglePlayPause(): Promise<void> {
 }
 
 export function seekToChunkAndMaybePlay(index: number): void {
-	const { playback, seekToChunk } = useTtsStore.getState();
-	seekToChunk(index);
-	if (playback === "playing" || playback === "buffering") {
-		interruptPlaybackForReschedule();
-		const ab = new AbortController();
-		playbackAbort = ab;
-		playbackLoopPromise = runPlaybackLoop(ab.signal);
-		void playbackLoopPromise;
-	}
+	useTtsStore.getState().seekToChunk(index);
+	rescheduleForSeek();
 }
 
 export function seekProgressPercent(pct: number): void {
@@ -746,18 +756,9 @@ export function seekProgressPercent(pct: number): void {
 	if (chunks.length === 0) return;
 	const clamped = Math.max(0, Math.min(100, pct));
 	const n = chunks.length;
-	const idx =
-		n <= 1 ? 0 : Math.round((clamped / 100) * (n - 1));
-	const clampedIdx = Math.max(0, Math.min(n - 1, idx));
-	seekToChunk(clampedIdx);
-	const pb = useTtsStore.getState().playback;
-	if (pb === "playing" || pb === "buffering") {
-		interruptPlaybackForReschedule();
-		const ab = new AbortController();
-		playbackAbort = ab;
-		playbackLoopPromise = runPlaybackLoop(ab.signal);
-		void playbackLoopPromise;
-	}
+	const idx = n <= 1 ? 0 : Math.round((clamped / 100) * (n - 1));
+	seekToChunk(Math.max(0, Math.min(n - 1, idx)));
+	rescheduleForSeek();
 }
 
 export function skipChunk(delta: number): void {
@@ -768,14 +769,7 @@ export function skipChunk(delta: number): void {
 		Math.min(chunks.length - 1, currentChunkIndex + delta),
 	);
 	seekToChunk(next);
-	const pb = useTtsStore.getState().playback;
-	if (pb === "playing" || pb === "buffering") {
-		interruptPlaybackForReschedule();
-		const ab = new AbortController();
-		playbackAbort = ab;
-		playbackLoopPromise = runPlaybackLoop(ab.signal);
-		void playbackLoopPromise;
-	}
+	rescheduleForSeek();
 }
 
 export function stopPlaybackUi(): void {
