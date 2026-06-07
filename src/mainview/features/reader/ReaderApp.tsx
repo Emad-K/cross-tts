@@ -29,6 +29,7 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
+import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
@@ -415,6 +416,16 @@ export function ReaderApp() {
 			try {
 				const doc = await loadDocumentFromPath(path);
 				if (!doc) return;
+				// Restore this book's own voice / speed (falls back to current).
+				if (
+					resume?.voice &&
+					KOKORO_VOICE_IDS.includes(resume.voice as KokoroVoiceId)
+				) {
+					useTtsStore.getState().setVoice(resume.voice as KokoroVoiceId);
+				}
+				if (resume?.speed != null) {
+					useTtsStore.getState().setSpeed(resume.speed);
+				}
 				forceResumeRef.current = resume?.chunkIndex != null;
 				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
 				setInitialChapterId(resume?.chapterId ?? null);
