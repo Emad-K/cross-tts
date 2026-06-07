@@ -18,6 +18,14 @@ files:
 asar: true
 npmRebuild: false
 
+# Tells electron-updater where to look for new versions (embedded as
+# app-update.yml). CI still uploads assets manually (--publish never); this only
+# configures the update feed, it does not publish.
+publish:
+  provider: github
+  owner: Emad-K
+  repo: cross-tts
+
 # Consistent, space-free names with version + arch for every target.
 artifactName: ${name}-${version}-${arch}.${ext}
 
