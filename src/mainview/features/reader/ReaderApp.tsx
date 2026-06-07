@@ -459,7 +459,21 @@ export function ReaderApp() {
 	}, []);
 
 	return (
-		<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+		<div
+			className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+			onDragOver={(e) => {
+				if (isDesktopApp()) e.preventDefault();
+			}}
+			onDrop={(e) => {
+				if (!isDesktopApp()) return;
+				e.preventDefault();
+				const file = e.dataTransfer.files?.[0];
+				const path = (file as (File & { path?: string }) | undefined)?.path;
+				const name = file?.name.toLowerCase() ?? "";
+				if (!path || (!name.endsWith(".epub") && !name.endsWith(".txt"))) return;
+				openRecentBook(path);
+			}}
+		>
 			<input
 				ref={inputRef}
 				type="file"
