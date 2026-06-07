@@ -17,6 +17,26 @@ function documentTitle(doc: LoadedDocument): string {
 	return doc.format === "epub" ? doc.title : doc.fileName;
 }
 
+/**
+ * Approximate whole-book progress (0..1): for EPUBs, completed chapters plus the
+ * fraction read of the current chapter; for plain text, fraction of chunks read.
+ */
+function readProgress(
+	doc: LoadedDocument,
+	chapterId: string | null,
+	chunkIndex: number,
+	chunkCount: number,
+): number {
+	const within = chunkCount > 0 ? Math.min(1, chunkIndex / chunkCount) : 0;
+	if (doc.format === "epub") {
+		const total = doc.chapters.length || 1;
+		const idx = doc.chapters.findIndex((c) => c.id === chapterId);
+		if (idx < 0) return 0;
+		return Math.max(0, Math.min(1, (idx + within) / total));
+	}
+	return within;
+}
+
 const DEBOUNCE_MS = 500;
 
 let scheduleSave: (() => void) | null = null;
@@ -49,6 +69,7 @@ export function buildWebSlice(
 			format: doc.format,
 			chapterId,
 			chunkIndex: t.currentChunkIndex,
+			progress: readProgress(doc, chapterId, t.currentChunkIndex, t.chunks.length),
 			updatedAt: Date.now(),
 		});
 		useLibraryStore.getState().setBooks(books);

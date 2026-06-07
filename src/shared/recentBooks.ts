@@ -8,6 +8,8 @@ export type BookProgress = {
 	/** Active EPUB chapter id, or null for .txt. */
 	chapterId: string | null;
 	chunkIndex: number;
+	/** Approximate read progress through the whole book, 0..1. */
+	progress?: number;
 	/** Epoch ms of the last update; used for ordering and pruning. */
 	updatedAt: number;
 };
@@ -59,6 +61,10 @@ function coerceBookProgress(raw: unknown): BookProgress | null {
 			typeof o.chunkIndex === "number" && o.chunkIndex >= 0
 				? Math.floor(o.chunkIndex)
 				: 0,
+		progress:
+			typeof o.progress === "number" && o.progress >= 0 && o.progress <= 1
+				? o.progress
+				: undefined,
 		updatedAt:
 			typeof o.updatedAt === "number" && o.updatedAt >= 0 ? o.updatedAt : 0,
 	};

@@ -1,4 +1,4 @@
-import { BookOpen, FileText, FolderOpen } from "lucide-react";
+import { BookOpen, FileText, FolderOpen, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
@@ -6,6 +6,7 @@ import { getBookCover } from "@/lib/desktopBridge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useLibraryStore } from "./library/libraryStore";
+import { touchSessionSave } from "./sessionPersistence";
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
 const coverCache = new Map<string, string | null>();
@@ -50,55 +51,84 @@ function titleHue(title: string): number {
 function CoverCard({
 	book,
 	onOpen,
+	onRemove,
 }: {
 	book: BookProgress;
 	onOpen: () => void;
+	onRemove: () => void;
 }) {
 	const hue = titleHue(book.title);
 	const cover = useBookCover(book);
+	const pct = Math.round(Math.min(1, Math.max(0, book.progress ?? 0)) * 100);
 	return (
-		<button
-			type="button"
-			onClick={onOpen}
-			className="group flex w-full min-w-0 flex-col gap-2 text-left focus:outline-none"
-			title={book.title}
-		>
-			<div
-				className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md"
-				style={
-					cover
-						? undefined
-						: {
-								backgroundImage: `linear-gradient(160deg, hsl(${hue} 45% 38%), hsl(${(hue + 40) % 360} 50% 22%))`,
-							}
-				}
+		<div className="group relative">
+			<button
+				type="button"
+				onClick={onOpen}
+				className="flex w-full min-w-0 flex-col gap-2 text-left focus:outline-none"
+				title={book.title}
 			>
-				{cover ? (
-					<img
-						src={cover}
-						alt={book.title}
-						className="size-full object-cover"
-						loading="lazy"
-						decoding="async"
-					/>
-				) : (
-					<div className="flex size-full items-center justify-center p-3">
-						<span className="line-clamp-5 text-center text-sm font-semibold leading-snug text-white/95">
+				<div
+					className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border shadow-sm transition-transform group-hover:-translate-y-0.5 group-hover:shadow-md"
+					style={
+						cover
+							? undefined
+							: {
+									backgroundImage: `linear-gradient(160deg, hsl(${hue} 45% 38%), hsl(${(hue + 40) % 360} 50% 22%))`,
+								}
+					}
+				>
+					{cover ? (
+						<img
+							src={cover}
+							alt={book.title}
+							className="size-full object-cover"
+							loading="lazy"
+							decoding="async"
+						/>
+					) : (
+						<div className="flex size-full items-center justify-center p-3">
+							<span className="line-clamp-5 text-center text-sm font-semibold leading-snug text-white/95">
+								{book.title}
+							</span>
+						</div>
+					)}
+					{/* Full title on hover (the label below is truncated). */}
+					<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+						<span className="line-clamp-3 text-xs font-medium leading-snug text-white">
 							{book.title}
 						</span>
 					</div>
-				)}
-				{/* Full title on hover (the label below is truncated). */}
-				<div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-2.5 pt-8 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-					<span className="line-clamp-3 text-xs font-medium leading-snug text-white">
-						{book.title}
-					</span>
+					{/* Read-progress bar. */}
+					{pct > 0 ? (
+						<div
+							className="absolute inset-x-0 bottom-0 h-1 bg-black/40"
+							title={`${pct}% read`}
+						>
+							<div
+								className="h-full bg-primary"
+								style={{ width: `${pct}%` }}
+							/>
+						</div>
+					) : null}
 				</div>
-			</div>
-			<span className="w-full truncate text-sm font-medium text-foreground">
-				{book.title}
-			</span>
-		</button>
+				<span className="w-full truncate text-sm font-medium text-foreground">
+					{book.title}
+				</span>
+			</button>
+			<button
+				type="button"
+				onClick={(e) => {
+					e.stopPropagation();
+					onRemove();
+				}}
+				aria-label="Remove from library"
+				title="Remove from library"
+				className="absolute right-1.5 top-1.5 rounded-full bg-background/85 p-1 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition hover:bg-destructive hover:text-destructive-foreground focus:opacity-100 group-hover:opacity-100"
+			>
+				<X className="size-3.5" aria-hidden />
+			</button>
+		</div>
 	);
 }
 
@@ -114,7 +144,13 @@ export function ReaderEmptyState({
 	className,
 }: ReaderEmptyStateProps) {
 	const books = useLibraryStore((s) => s.books);
+	const removeBook = useLibraryStore((s) => s.removeBook);
 	const library = recentBooksList(books);
+
+	const onRemove = (path: string) => {
+		removeBook(path);
+		touchSessionSave();
+	};
 
 	if (library.length === 0 || !onOpenBook) {
 		return (
@@ -176,6 +212,7 @@ export function ReaderEmptyState({
 							key={b.path}
 							book={b}
 							onOpen={() => onOpenBook(b.path)}
+							onRemove={() => onRemove(b.path)}
 						/>
 					))}
 				</div>
