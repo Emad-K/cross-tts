@@ -392,8 +392,10 @@ function pickCoverItem(parsed: ParsedEpub): ManifestItem | null {
 	return null;
 }
 
-/** Cover image as a data URL, or null if the EPUB has none we can find. */
-export async function readEpubCover(filePath: string): Promise<string | null> {
+/** Raw cover image bytes + mime, or null if the EPUB has none we can find. */
+export async function readEpubCoverBytes(
+	filePath: string,
+): Promise<{ data: Uint8Array; mime: string } | null> {
 	const parsed = await loadParsedEpub(filePath);
 	if (!parsed) return null;
 	const item = pickCoverItem(parsed);
@@ -403,14 +405,21 @@ export async function readEpubCover(filePath: string): Promise<string | null> {
 	);
 	if (!entry) return null;
 	try {
-		const base64 = await entry.async("base64");
+		const data = await entry.async("uint8array");
 		const mime = item.mediaType.startsWith("image/")
 			? item.mediaType
 			: guessImageMime(item.href);
-		return `data:${mime};base64,${base64}`;
+		return { data, mime };
 	} catch {
 		return null;
 	}
+}
+
+/** Cover image as a (full-size) data URL, or null if none. */
+export async function readEpubCover(filePath: string): Promise<string | null> {
+	const raw = await readEpubCoverBytes(filePath);
+	if (!raw) return null;
+	return `data:${raw.mime};base64,${Buffer.from(raw.data).toString("base64")}`;
 }
 
 export function clearEpubCache(filePath?: string): void {

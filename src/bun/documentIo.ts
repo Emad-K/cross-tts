@@ -1,20 +1,80 @@
-import { basename } from "node:path";
-import { type BrowserWindow, dialog } from "electron";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { type BrowserWindow, dialog, nativeImage } from "electron";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
 } from "../shared/documentRpc";
+import { dataDir } from "./appConfigStore";
 import {
 	readEpubChapterContent,
-	readEpubCover,
+	readEpubCoverBytes,
 	readEpubManifest,
 } from "./epub/parseEpub";
 import { readTextDocumentAtPath } from "./textDocumentIo";
 
-/** Cover image (data URL) for an EPUB path, or null for non-EPUB / no cover. */
+/** Cover thumbnail width; grid cards are small, so downscale aggressively. */
+const COVER_THUMB_WIDTH = 256;
+
+function coverCacheDir(): string {
+	const dir = join(dataDir(), "covers");
+	mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
+function jpegDataUrl(jpeg: Buffer): string {
+	return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+}
+
+/**
+ * Cover image (data URL) for an EPUB, downscaled to a thumbnail and cached on
+ * disk. Returns null for non-EPUB or no cover. The cache key includes the file
+ * mtime so a replaced book re-extracts. Falls back to the raw image if Electron
+ * can't decode it (e.g. SVG/WebP covers).
+ */
 export async function getBookCover(filePath: string): Promise<string | null> {
 	if (!isEpubPath(filePath)) return null;
-	return readEpubCover(filePath);
+
+	let mtimeMs = 0;
+	try {
+		mtimeMs = statSync(filePath).mtimeMs;
+	} catch {
+		return null;
+	}
+
+	const key = createHash("sha1").update(`${filePath}:${mtimeMs}`).digest("hex");
+	const cachePath = join(coverCacheDir(), `${key}.jpg`);
+	if (existsSync(cachePath)) {
+		try {
+			return jpegDataUrl(readFileSync(cachePath));
+		} catch {
+			// fall through and re-generate
+		}
+	}
+
+	const raw = await readEpubCoverBytes(filePath);
+	if (!raw) return null;
+
+	try {
+		let img = nativeImage.createFromBuffer(Buffer.from(raw.data));
+		if (img.isEmpty()) {
+			// Electron couldn't decode it (SVG/WebP): serve the original bytes.
+			return `data:${raw.mime};base64,${Buffer.from(raw.data).toString("base64")}`;
+		}
+		if (img.getSize().width > COVER_THUMB_WIDTH) {
+			img = img.resize({ width: COVER_THUMB_WIDTH, quality: "good" });
+		}
+		const jpeg = img.toJPEG(72);
+		try {
+			writeFileSync(cachePath, jpeg);
+		} catch {
+			// cache write is best-effort
+		}
+		return jpegDataUrl(jpeg);
+	} catch {
+		return `data:${raw.mime};base64,${Buffer.from(raw.data).toString("base64")}`;
+	}
 }
 
 function isEpubPath(path: string): boolean {
