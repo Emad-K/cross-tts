@@ -132,9 +132,37 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				builtIn: true,
 			},
+			// Starter pinyin pack for Chinese web novels. Shipped DISABLED — the
+			// IPA is best-effort and some words collide with English homographs
+			// (dan, li). Enable and fine-tune what you need in the rules editor.
+			...CJK_PRONUNCIATION_PACK,
 		],
 	};
 }
+
+/** Common cultivation-novel terms → best-effort IPA. Off by default. */
+const CJK_PRONUNCIATION_PACK: PronunciationRule[] = (
+	[
+		["dao", "daʊ"],
+		["jin", "dʒɪn"],
+		["dantian", "dɑːnˈtjɛn"],
+		["qigong", "tʃiːˈɡɒŋ"],
+		["jianghu", "dʒjɑːŋˈhuː"],
+		["wuxia", "wuːˈʃjɑː"],
+		["xianxia", "ʃjɛnˈʃjɑː"],
+		["shifu", "ʃiːˈfuː"],
+		["gongzi", "ɡʊŋˈziː"],
+		["senpai", "sɛnˈpaɪ"],
+	] as const
+).map(([word, phonetic]) => ({
+	id: `builtin-pron-${word}`,
+	kind: "pronunciation" as const,
+	word,
+	phonetic,
+	caseSensitive: false,
+	enabled: false,
+	builtIn: true,
+}));
 
 export function escapeRegexLiteral(word: string): string {
 	return word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
