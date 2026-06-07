@@ -1,13 +1,10 @@
 import { Bookmark, BookmarkPlus, Trash2 } from "lucide-react";
-import {
-	bookmarkId,
-	hasBookmark,
-	sortBookmarks,
-} from "@shared/bookmarks";
+import { hasBookmark, sortBookmarks } from "@shared/bookmarks";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
+	bookmarkCurrentSpot,
 	navigateToBookmark,
 	useBookmarksStore,
 } from "../bookmarks/bookmarksStore";
@@ -34,18 +31,7 @@ export function BookmarkSidebar({ open, className }: BookmarkSidebarProps) {
 		canBookmark && hasBookmark(list, chapterId, currentChunkIndex);
 
 	const addHere = () => {
-		if (!canBookmark) return;
-		const snippet = (chunks[currentChunkIndex]?.text ?? "")
-			.replace(/\s+/g, " ")
-			.trim()
-			.slice(0, 60);
-		toggleAt({
-			id: bookmarkId(chapterId, currentChunkIndex),
-			chapterId,
-			chunkIndex: currentChunkIndex,
-			label: snippet || `Chunk ${currentChunkIndex + 1}`,
-			createdAt: Date.now(),
-		});
+		if (canBookmark) bookmarkCurrentSpot();
 	};
 
 	return (

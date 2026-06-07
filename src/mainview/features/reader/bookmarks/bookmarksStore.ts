@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Bookmark } from "@shared/bookmarks";
-import { toggleBookmark } from "@shared/bookmarks";
+import { bookmarkId, toggleBookmark } from "@shared/bookmarks";
+import { useTtsStore } from "../tts";
 
 type BookmarksStore = {
 	/** Saved spots keyed by document path (mirrors the persisted session map). */
@@ -36,6 +37,27 @@ export const useBookmarksStore = create<BookmarksStore>((set, get) => ({
 export function getBookmarksFor(path: string | null): Bookmark[] {
 	if (!path) return [];
 	return useBookmarksStore.getState().byPath[path] ?? [];
+}
+
+/** Toggle a bookmark at the current reading position (current book + chunk). */
+export function bookmarkCurrentSpot(): void {
+	const s = useBookmarksStore.getState();
+	if (!s.currentPath) return;
+	const t = useTtsStore.getState();
+	if (t.chunks.length === 0) return;
+	const chunkIndex = t.currentChunkIndex;
+	const label =
+		(t.chunks[chunkIndex]?.text ?? "")
+			.replace(/\s+/g, " ")
+			.trim()
+			.slice(0, 60) || `Chunk ${chunkIndex + 1}`;
+	s.toggleAt({
+		id: bookmarkId(s.currentChapterId, chunkIndex),
+		chapterId: s.currentChapterId,
+		chunkIndex,
+		label,
+		createdAt: Date.now(),
+	});
 }
 
 // --- jump handler: ReaderApp owns chapter/chunk navigation, registers here ---
