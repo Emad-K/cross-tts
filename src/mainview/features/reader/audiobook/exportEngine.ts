@@ -111,7 +111,15 @@ export type StartExportOpts = {
 	dir: string;
 	voice: KokoroVoiceId;
 	speed: number;
+	/** Write the whole book as one file instead of one file per chapter. */
+	combine?: boolean;
+	/** Book title, used to name the combined file. */
+	bookTitle?: string;
 };
+
+function sanitizeFileName(name: string): string {
+	return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "audiobook";
+}
 
 export async function startExport(opts: StartExportOpts): Promise<void> {
 	abort = false;
@@ -146,6 +154,9 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 
 		let done = 0;
 		const t0 = performance.now();
+		// One encoder spanning the whole book when combining into a single file.
+		let combinedEnc: ReturnType<typeof createEncoder> | null = null;
+
 		for (let ci = 0; ci < items.length; ci++) {
 			if (abort) break;
 			const { title, chunks } = items[ci]!;
@@ -154,10 +165,10 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				currentChapterTitle: title,
 			});
 
-			// Resume: a chapter already written to this folder is a checkpoint —
-			// skip re-synthesizing it. Delete the folder to force a fresh export.
 			const trackName = trackFileName(ci + 1, title, opts.format);
-			if (await audioFileExists(opts.dir, trackName)) {
+			// Resume: a per-chapter file already on disk is a checkpoint — skip it.
+			// (Single-file exports can't checkpoint mid-book, so don't skip there.)
+			if (!opts.combine && (await audioFileExists(opts.dir, trackName))) {
 				done += chunks.length;
 				useExportStore.setState((s) => ({
 					doneChunks: done,
@@ -175,8 +186,14 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				if (abort) break;
 				const pcm = await synthesizeChunkPcm(chunk.text, opts.voice, opts.speed);
 				if (pcm) {
-					if (!enc) enc = createEncoder(opts.format, pcm.sampleRate);
-					enc.append(pcm.audio);
+					if (opts.combine) {
+						if (!combinedEnc)
+							combinedEnc = createEncoder(opts.format, pcm.sampleRate);
+						combinedEnc.append(pcm.audio);
+					} else {
+						if (!enc) enc = createEncoder(opts.format, pcm.sampleRate);
+						enc.append(pcm.audio);
+					}
 				}
 				done++;
 				const elapsed = (performance.now() - t0) / 1000;
@@ -187,7 +204,7 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				});
 			}
 			if (abort) break;
-			if (enc) {
+			if (!opts.combine && enc) {
 				const bytes = enc.finish();
 				const res = await writeAudioFile(opts.dir, trackName, bytes);
 				if (!res.ok) throw new Error(res.error || "Couldn't write the file");
@@ -195,6 +212,14 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 					filesWritten: useExportStore.getState().filesWritten + 1,
 				});
 			}
+		}
+
+		if (!abort && opts.combine && combinedEnc) {
+			const bytes = combinedEnc.finish();
+			const name = `${sanitizeFileName(opts.bookTitle ?? "audiobook")}.${opts.format}`;
+			const res = await writeAudioFile(opts.dir, name, bytes);
+			if (!res.ok) throw new Error(res.error || "Couldn't write the file");
+			useExportStore.setState({ filesWritten: 1 });
 		}
 
 		useExportStore.setState(

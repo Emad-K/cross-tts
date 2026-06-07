@@ -511,6 +511,7 @@ export function ReaderApp() {
 					open={audiobookOpen}
 					onOpenChange={setAudiobookOpen}
 					filePath={document.filePath}
+					bookTitle={document.title}
 					chapters={document.chapters}
 				/>
 			) : null}
