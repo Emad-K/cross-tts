@@ -1,12 +1,38 @@
-import { BookOpen, FileText, FolderOpen, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDownUp, BookOpen, FileText, FolderOpen, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
 import { getBookCover } from "@/lib/desktopBridge";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useLibraryStore } from "./library/libraryStore";
 import { touchSessionSave } from "./sessionPersistence";
+
+type SortKey = "recent" | "title" | "progress";
+
+const SORT_LABELS: Record<SortKey, string> = {
+	recent: "Recent",
+	title: "Title",
+	progress: "Progress",
+};
+
+function sortLibrary(list: BookProgress[], sort: SortKey): BookProgress[] {
+	if (sort === "title") {
+		return [...list].sort((a, b) => a.title.localeCompare(b.title));
+	}
+	if (sort === "progress") {
+		return [...list].sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
+	}
+	return list; // recentBooksList is already most-recent-first
+}
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
 const coverCache = new Map<string, string | null>();
@@ -146,6 +172,16 @@ export function ReaderEmptyState({
 	const books = useLibraryStore((s) => s.books);
 	const removeBook = useLibraryStore((s) => s.removeBook);
 	const library = recentBooksList(books);
+	const [query, setQuery] = useState("");
+	const [sort, setSort] = useState<SortKey>("recent");
+
+	const shown = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		const filtered = q
+			? library.filter((b) => b.title.toLowerCase().includes(q))
+			: library;
+		return sortLibrary(filtered, sort);
+	}, [library, query, sort]);
 
 	const onRemove = (path: string) => {
 		removeBook(path);
@@ -202,20 +238,74 @@ export function ReaderEmptyState({
 	return (
 		<div className={cn("flex-1 overflow-y-auto px-6 py-8", className)}>
 			<div className="mx-auto w-full max-w-6xl">
-				<h1 className="mb-6 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-					My books
-				</h1>
-
-				<div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-5 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
-					{library.map((b) => (
-						<CoverCard
-							key={b.path}
-							book={b}
-							onOpen={() => onOpenBook(b.path)}
-							onRemove={() => onRemove(b.path)}
-						/>
-					))}
+				<div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+						My books
+					</h1>
+					<div className="flex items-center gap-2">
+						<div className="relative">
+							<Search
+								className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+								aria-hidden
+							/>
+							<Input
+								type="search"
+								value={query}
+								onChange={(e) => setQuery(e.target.value)}
+								placeholder="Search books…"
+								className="h-9 w-44 pl-8 sm:w-56"
+								aria-label="Search books"
+							/>
+						</div>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="gap-2 border-border bg-transparent"
+									title="Sort books"
+								>
+									<ArrowDownUp className="size-4" aria-hidden />
+									{SORT_LABELS[sort]}
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								<DropdownMenuRadioGroup
+									value={sort}
+									onValueChange={(v) => setSort(v as SortKey)}
+								>
+									<DropdownMenuRadioItem value="recent">
+										Recent
+									</DropdownMenuRadioItem>
+									<DropdownMenuRadioItem value="title">
+										Title
+									</DropdownMenuRadioItem>
+									<DropdownMenuRadioItem value="progress">
+										Progress
+									</DropdownMenuRadioItem>
+								</DropdownMenuRadioGroup>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</div>
 				</div>
+
+				{shown.length === 0 ? (
+					<p className="py-12 text-center text-sm text-muted-foreground">
+						No books match “{query}”.
+					</p>
+				) : (
+					<div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-5 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
+						{shown.map((b) => (
+							<CoverCard
+								key={b.path}
+								book={b}
+								onOpen={() => onOpenBook(b.path)}
+								onRemove={() => onRemove(b.path)}
+							/>
+						))}
+					</div>
+				)}
 			</div>
 		</div>
 	);
