@@ -54,7 +54,8 @@ describe("ttsRulesExchange", () => {
 		);
 		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(7);
 		expect(merged.regexRules.filter((r) => !r.builtIn)).toHaveLength(0);
-		expect(merged.pronunciationRules).toHaveLength(2);
+		// 11 builtin pronunciations (qi + the default-off CJK pack) + imported gif.
+		expect(merged.pronunciationRules.filter((r) => r.builtIn)).toHaveLength(11);
 		expect(merged.pronunciationRules.find((r) => r.word === "gif")).toBeTruthy();
 		expect(merged.pronunciationRules.find((r) => r.id === "builtin-pron-qi")).toBeTruthy();
 	});
