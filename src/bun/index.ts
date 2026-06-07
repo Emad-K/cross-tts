@@ -30,6 +30,7 @@ import {
 	pickInitialWindowFrame,
 	saveAppSessionFile,
 } from "./appSessionStore";
+import { initAutoUpdate } from "./autoUpdate";
 import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getBookCover,
@@ -337,6 +338,7 @@ app.whenReady().then(async () => {
 
 	registerRpcHandlers();
 	createWindow();
+	initAutoUpdate();
 
 	kokoroHubReady = startKokoroHubServer()
 		.then((url) => {
