@@ -5,6 +5,7 @@ import type { LoadedDocument } from "./types";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
+import { bookmarkCurrentSpot } from "./bookmarks/bookmarksStore";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
@@ -62,6 +63,39 @@ export function ReaderShell({
 		setChapterSidebarOpen(hasChapters);
 		setBookmarkSidebarOpen(false);
 	}, [document]);
+
+	// Single-key reader shortcuts (ignored while typing): [ chapters, ] bookmarks,
+	// b bookmark the current spot.
+	useEffect(() => {
+		if (!hasDoc) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.ctrlKey || e.metaKey || e.altKey) return;
+			const el = e.target as HTMLElement | null;
+			const tag = el?.tagName;
+			if (
+				tag === "INPUT" ||
+				tag === "TEXTAREA" ||
+				tag === "SELECT" ||
+				el?.isContentEditable
+			) {
+				return;
+			}
+			if (e.key === "[") {
+				if (mightHaveChapters) {
+					setChapterSidebarOpen((o) => !o);
+					e.preventDefault();
+				}
+			} else if (e.key === "]") {
+				setBookmarkSidebarOpen((o) => !o);
+				e.preventDefault();
+			} else if (e.key === "b" || e.key === "B") {
+				bookmarkCurrentSpot();
+				e.preventDefault();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [hasDoc, mightHaveChapters]);
 
 	return (
 		<TooltipProvider delayDuration={300} skipDelayDuration={0}>
