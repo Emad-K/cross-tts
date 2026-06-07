@@ -36,6 +36,7 @@ export type AudiobookExportDialogProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	filePath: string;
+	bookTitle?: string;
 	chapters: ReaderChapter[];
 };
 
@@ -54,6 +55,7 @@ export function AudiobookExportDialog({
 	open,
 	onOpenChange,
 	filePath,
+	bookTitle,
 	chapters,
 }: AudiobookExportDialogProps) {
 	const phase = useExportStore((s) => s.phase);
@@ -75,6 +77,7 @@ export function AudiobookExportDialog({
 	const [fromId, setFromId] = useState(chapters[0]?.id ?? "");
 	const [toId, setToId] = useState(chapters[chapters.length - 1]?.id ?? "");
 	const [format, setFormat] = useState<AudioFormat>("mp3");
+	const [combine, setCombine] = useState(false);
 	const [dir, setDir] = useState<string | null>(null);
 
 	const active = phase === "preparing" || phase === "running" || phase === "paused";
@@ -101,6 +104,8 @@ export function AudiobookExportDialog({
 			dir,
 			voice,
 			speed,
+			combine,
+			bookTitle,
 		});
 	};
 
@@ -199,6 +204,16 @@ export function AudiobookExportDialog({
 										))}
 									</SelectContent>
 								</Select>
+							</div>
+
+							<div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+								<div className="min-w-0">
+									<p className="text-sm font-medium">Single file</p>
+									<p className="text-xs text-muted-foreground">
+										One file for the whole book instead of one per chapter.
+									</p>
+								</div>
+								<Switch checked={combine} onCheckedChange={setCombine} />
 							</div>
 
 							<div>
