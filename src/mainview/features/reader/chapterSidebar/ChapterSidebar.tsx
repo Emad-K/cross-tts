@@ -1,4 +1,6 @@
-import { BookMarked } from "lucide-react";
+import { BookMarked, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ReaderChapter } from "../types";
@@ -20,6 +22,13 @@ export function ChapterSidebar({
 	className,
 }: ChapterSidebarProps) {
 	const hasChapters = chapters.length > 0;
+	const [query, setQuery] = useState("");
+
+	const filtered = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return chapters;
+		return chapters.filter((c) => c.title.toLowerCase().includes(q));
+	}, [chapters, query]);
 
 	return (
 		<aside
@@ -43,18 +52,32 @@ export function ChapterSidebar({
 				</h2>
 				{hasChapters ? (
 					<span className="ml-auto text-xs tabular-nums text-muted-foreground">
-						{chapters.length}
+						{query.trim() ? `${filtered.length}/${chapters.length}` : chapters.length}
 					</span>
 				) : null}
 			</div>
+
+			{hasChapters ? (
+				<div className="shrink-0 px-3 py-2">
+					<div className="relative">
+						<Search
+							className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+							aria-hidden
+						/>
+						<Input
+							type="search"
+							value={query}
+							onChange={(e) => setQuery(e.target.value)}
+							placeholder="Search chapters…"
+							className="h-8 pl-8 text-sm"
+							aria-label="Search chapters"
+						/>
+					</div>
+				</div>
+			) : null}
+
 			<ScrollArea className="min-h-0 flex-1">
-				{hasChapters ? (
-					<VirtualChapterList
-						chapters={chapters}
-						activeChapterId={activeChapterId}
-						onSelectChapter={onSelectChapter}
-					/>
-				) : (
+				{!hasChapters ? (
 					<div className="px-4 py-8 text-center">
 						<p className="text-sm text-muted-foreground">
 							No chapters in this document yet.
@@ -63,6 +86,16 @@ export function ChapterSidebar({
 							Open an EPUB or a multi-section text file to see chapters.
 						</p>
 					</div>
+				) : filtered.length === 0 ? (
+					<p className="px-4 py-8 text-center text-sm text-muted-foreground">
+						No chapters match “{query}”.
+					</p>
+				) : (
+					<VirtualChapterList
+						chapters={filtered}
+						activeChapterId={activeChapterId}
+						onSelectChapter={onSelectChapter}
+					/>
 				)}
 			</ScrollArea>
 		</aside>
