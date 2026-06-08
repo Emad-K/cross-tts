@@ -30,6 +30,7 @@ const api: AppApi = {
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
+		setAutoUpdate: (params) => ipcRenderer.invoke("setAutoUpdate", params),
 		setShortcutBinding: (params) =>
 			ipcRenderer.invoke("setShortcutBinding", params),
 		setAppearance: (params) => ipcRenderer.invoke("setAppearance", params),
