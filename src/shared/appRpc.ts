@@ -114,6 +114,16 @@ export type AppRpcSchema = {
 			params: { filePath: string };
 			response: string | null;
 		};
+		/** Find text in the current page; results arrive via onFoundInPage. */
+		findInPage: {
+			params: { text: string; forward?: boolean; findNext?: boolean };
+			response: void;
+		};
+		/** Clear the current in-page find selection/highlights. */
+		stopFindInPage: {
+			params: void;
+			response: void;
+		};
 		/** Reveal an arbitrary path in the OS file manager. */
 		revealPath: {
 			params: { path: string };
@@ -162,4 +172,14 @@ export type AppApi = {
 	onShortcut: (listener: (action: ShortcutAction) => void) => () => void;
 	/** Subscribe to model-download progress from the main process. */
 	onModelProgress: (listener: (progress: ModelProgress) => void) => () => void;
+	/** Subscribe to in-page find results from the main process. */
+	onFoundInPage: (listener: (result: FoundInPageResult) => void) => () => void;
+};
+
+/** Result of an in-page find, mirroring Electron's `found-in-page` event. */
+export type FoundInPageResult = {
+	/** 1-based index of the currently-active match (0 if none). */
+	activeMatchOrdinal: number;
+	/** Total number of matches on the page. */
+	matches: number;
 };

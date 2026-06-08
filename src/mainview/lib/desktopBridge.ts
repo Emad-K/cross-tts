@@ -1,4 +1,4 @@
-import type { AppApi } from "@shared/appRpc";
+import type { AppApi, FoundInPageResult } from "@shared/appRpc";
 import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
 import type { Appearance } from "@shared/appearance";
 import type { ForwardedLogEntry } from "@shared/logEntry";
@@ -211,6 +211,30 @@ export function subscribeToShortcuts(
 	const b = bridge();
 	if (!b?.onShortcut) return () => {};
 	return b.onShortcut(listener);
+}
+
+export function findInPage(
+	text: string,
+	opts?: { forward?: boolean; findNext?: boolean },
+): void {
+	const b = bridge();
+	if (!b) return;
+	void b.request.findInPage({ text, ...opts });
+}
+
+export function stopFindInPage(): void {
+	const b = bridge();
+	if (!b) return;
+	void b.request.stopFindInPage();
+}
+
+/** Subscribe to in-page find results. No-op (noop unsubscribe) on web. */
+export function subscribeFoundInPage(
+	listener: (result: FoundInPageResult) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onFoundInPage) return () => {};
+	return b.onFoundInPage(listener);
 }
 
 export async function chooseDataDirectory(): Promise<AppConfigInfo | null> {

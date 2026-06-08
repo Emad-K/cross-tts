@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppApi } from "../shared/appRpc";
+import type { AppApi, FoundInPageResult } from "../shared/appRpc";
 import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
@@ -38,6 +38,8 @@ const api: AppApi = {
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
+		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
+		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
@@ -66,6 +68,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:model-progress", handler);
 		return () => {
 			ipcRenderer.removeListener("app:model-progress", handler);
+		};
+	},
+	onFoundInPage: (listener: (result: FoundInPageResult) => void) => {
+		const handler = (_event: unknown, result: FoundInPageResult) =>
+			listener(result);
+		ipcRenderer.on("app:found-in-page", handler);
+		return () => {
+			ipcRenderer.removeListener("app:found-in-page", handler);
 		};
 	},
 };

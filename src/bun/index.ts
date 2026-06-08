@@ -192,6 +192,23 @@ function registerRpcHandlers(): void {
 		"getBookCover",
 		(_event, { filePath }: { filePath: string }) => getBookCover(filePath),
 	);
+	ipcMain.handle(
+		"findInPage",
+		(
+			_event,
+			{
+				text,
+				forward,
+				findNext,
+			}: { text: string; forward?: boolean; findNext?: boolean },
+		) => {
+			if (!text) return;
+			mainWindow?.webContents.findInPage(text, { forward, findNext });
+		},
+	);
+	ipcMain.handle("stopFindInPage", () => {
+		mainWindow?.webContents.stopFindInPage("clearSelection");
+	});
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
 		void shell.openPath(path);
 	});
@@ -307,6 +324,14 @@ function createWindow(): void {
 			// safe to enable for defense-in-depth.
 			sandbox: true,
 		},
+	});
+
+	// Forward in-page find results to the renderer's find bar.
+	mainWindow.webContents.on("found-in-page", (_event, result) => {
+		mainWindow?.webContents.send("app:found-in-page", {
+			activeMatchOrdinal: result.activeMatchOrdinal,
+			matches: result.matches,
+		});
 	});
 
 	const devUrl = process.env["ELECTRON_RENDERER_URL"];
