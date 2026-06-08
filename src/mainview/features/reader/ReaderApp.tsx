@@ -1,4 +1,6 @@
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useRef,
@@ -14,10 +16,22 @@ import {
 } from "@/lib/desktopBridge";
 import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
-import { AudiobookExportDialog } from "./audiobook/AudiobookExportDialog";
-import { isExportActive } from "./audiobook/exportEngine";
-import { LogPanel, useLogStore } from "./logging";
-import { SettingsDialog } from "./settings/SettingsDialog";
+import { isExportActive } from "./audiobook/exportStore";
+import { useLogStore } from "./logging";
+
+const AudiobookExportDialog = lazy(() =>
+	import("./audiobook/AudiobookExportDialog").then((m) => ({
+		default: m.AudiobookExportDialog,
+	})),
+);
+const SettingsDialog = lazy(() =>
+	import("./settings/SettingsDialog").then((m) => ({
+		default: m.SettingsDialog,
+	})),
+);
+const LogPanel = lazy(() =>
+	import("./logging").then((m) => ({ default: m.LogPanel })),
+);
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
@@ -534,16 +548,28 @@ export function ReaderApp() {
 					setDocument(SAMPLE_TXT_DOCUMENT);
 				}}
 			/>
-			<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-			<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />
-			{document?.format === "epub" ? (
-				<AudiobookExportDialog
-					open={audiobookOpen}
-					onOpenChange={setAudiobookOpen}
-					filePath={document.filePath}
-					bookTitle={document.title}
-					chapters={document.chapters}
-				/>
+			{/* Heavy, on-demand dialogs are code-split: their chunks (and deps like
+			    the MP3 encoder) load on first open, not at startup. */}
+			{settingsOpen ? (
+				<Suspense fallback={null}>
+					<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+				</Suspense>
+			) : null}
+			{logsOpen ? (
+				<Suspense fallback={null}>
+					<LogPanel open={logsOpen} onOpenChange={setLogsOpen} />
+				</Suspense>
+			) : null}
+			{document?.format === "epub" && audiobookOpen ? (
+				<Suspense fallback={null}>
+					<AudiobookExportDialog
+						open={audiobookOpen}
+						onOpenChange={setAudiobookOpen}
+						filePath={document.filePath}
+						bookTitle={document.title}
+						chapters={document.chapters}
+					/>
+				</Suspense>
 			) : null}
 		</div>
 	);
