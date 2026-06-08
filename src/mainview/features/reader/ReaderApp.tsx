@@ -75,10 +75,32 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 	});
 }
 
+/** Minimal centered loading screen shown during the initial session restore. */
+function BootScreen() {
+	return (
+		<div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-5 bg-background">
+			<span className="text-sm font-medium tracking-wide text-muted-foreground">
+				Cross TTS
+			</span>
+			<div className="h-1 w-48 overflow-hidden rounded-full bg-muted">
+				<div className="h-full w-1/3 rounded-full bg-primary [animation:boot_1.1s_ease-in-out_infinite]" />
+			</div>
+			<style>
+				{
+					"@keyframes boot{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}"
+				}
+			</style>
+		</div>
+	);
+}
+
 export function ReaderApp() {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [document, setDocument] = useState<LoadedDocument | null>(null);
 	const [sessionReady, setSessionReady] = useState(false);
+	// True until the initial session restore resolves, so the UI doesn't flash
+	// the library before jumping to a restored book.
+	const [booting, setBooting] = useState(true);
 	const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
 	const documentRef = useRef(document);
 	const activeChapterIdRef = useRef(activeChapterId);
@@ -130,7 +152,10 @@ export function ReaderApp() {
 			if (cancelled) return;
 			setSessionReady(true);
 
-			if (!session.documentPath) return;
+			if (!session.documentPath) {
+				setBooting(false);
+				return;
+			}
 
 			pendingChunkIndexRef.current = session.pendingChunkIndex;
 			setInitialChapterId(session.activeChapterId);
@@ -145,7 +170,10 @@ export function ReaderApp() {
 				if (cancelled || !doc) return;
 				setDocument(doc);
 			} finally {
-				if (!cancelled) setDocumentLoading(false);
+				if (!cancelled) {
+					setDocumentLoading(false);
+					setBooting(false);
+				}
 			}
 		})();
 		return () => {
@@ -457,6 +485,8 @@ export function ReaderApp() {
 			// Engine / toast layer can surface errors later.
 		}
 	}, []);
+
+	if (booting) return <BootScreen />;
 
 	return (
 		<div
