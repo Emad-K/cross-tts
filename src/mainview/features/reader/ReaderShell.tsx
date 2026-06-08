@@ -7,6 +7,7 @@ import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
 import { bookmarkCurrentSpot } from "./bookmarks/bookmarksStore";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
+import { FindBar } from "./find/FindBar";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
 import { ReaderLoadingOverlay } from "./ReaderLoadingOverlay";
@@ -55,6 +56,7 @@ export function ReaderShell({
 		document?.format === "epub" || Boolean(document?.chapters?.length);
 	const [chapterSidebarOpen, setChapterSidebarOpen] = useState(false);
 	const [bookmarkSidebarOpen, setBookmarkSidebarOpen] = useState(false);
+	const [findOpen, setFindOpen] = useState(false);
 
 	useEffect(() => {
 		const hasChapters =
@@ -62,6 +64,7 @@ export function ReaderShell({
 			Boolean(document?.chapters?.length);
 		setChapterSidebarOpen(hasChapters);
 		setBookmarkSidebarOpen(false);
+		setFindOpen(false);
 	}, [document]);
 
 	// Single-key reader shortcuts (ignored while typing): [ chapters, ] bookmarks,
@@ -69,6 +72,12 @@ export function ReaderShell({
 	useEffect(() => {
 		if (!hasDoc) return;
 		const onKey = (e: KeyboardEvent) => {
+			// Ctrl/Cmd+F opens the in-chapter find bar (works while typing too).
+			if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
+				setFindOpen(true);
+				e.preventDefault();
+				return;
+			}
 			if (e.ctrlKey || e.metaKey || e.altKey) return;
 			const el = e.target as HTMLElement | null;
 			const tag = el?.tagName;
@@ -120,6 +129,9 @@ export function ReaderShell({
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 					{documentLoading ? (
 						<ReaderLoadingOverlay message={loadingMessage} />
+					) : null}
+					{hasDoc && findOpen ? (
+						<FindBar onClose={() => setFindOpen(false)} />
 					) : null}
 					{hasDoc ? (
 						<ReaderDocumentLayout
