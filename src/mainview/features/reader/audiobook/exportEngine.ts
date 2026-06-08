@@ -1,4 +1,3 @@
-import { create } from "zustand";
 import type { AudioFormat } from "@shared/audiobook";
 import { trackFileName } from "@shared/audiobook";
 import {
@@ -16,46 +15,16 @@ import {
 	synthesizeChunkPcm,
 } from "../tts";
 import { createEncoder } from "./audioEncode";
+import {
+	INITIAL_EXPORT_STATE,
+	isExportActive,
+	useExportStore,
+} from "./exportStore";
 
-export type ExportPhase =
-	| "idle"
-	| "preparing"
-	| "running"
-	| "paused"
-	| "done"
-	| "cancelled"
-	| "error";
+export { isExportActive, useExportStore } from "./exportStore";
+export type { ExportPhase, ExportState } from "./exportStore";
 
-type ExportState = {
-	phase: ExportPhase;
-	totalChunks: number;
-	doneChunks: number;
-	totalChapters: number;
-	currentChapterIndex: number;
-	currentChapterTitle: string;
-	etaSeconds: number | null;
-	filesWritten: number;
-	/** Chapters skipped because their file already existed (resumed export). */
-	skippedChapters: number;
-	outputDir: string | null;
-	error: string | null;
-};
-
-const INITIAL: ExportState = {
-	phase: "idle",
-	totalChunks: 0,
-	doneChunks: 0,
-	totalChapters: 0,
-	currentChapterIndex: 0,
-	currentChapterTitle: "",
-	etaSeconds: null,
-	filesWritten: 0,
-	skippedChapters: 0,
-	outputDir: null,
-	error: null,
-};
-
-export const useExportStore = create<ExportState>(() => ({ ...INITIAL }));
+const INITIAL = INITIAL_EXPORT_STATE;
 
 // --- driver state (module-level, not in the store to avoid re-render churn) ---
 let abort = false;
@@ -71,12 +40,6 @@ function releaseWaiters(): void {
 	const w = waiters;
 	waiters = [];
 	for (const f of w) f();
-}
-
-/** True while an export is preparing, running, or paused (blocks other actions). */
-export function isExportActive(): boolean {
-	const p = useExportStore.getState().phase;
-	return p === "preparing" || p === "running" || p === "paused";
 }
 
 export function pauseExport(): void {
