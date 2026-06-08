@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Content-Security-Policy. The key line is img-src: a malicious EPUB can
+      reference <img src="http://attacker/track.png"> and without this the
+      renderer would load it, phoning home. EPUB HTML renders as inert React
+      elements (no script execution), so script/connect stay permissive enough
+      for Vite (dev), the WASM TTS engine, and the local 127.0.0.1 model server.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self' http://127.0.0.1:* ws: wss: https:; object-src 'none'; frame-src 'none'; base-uri 'self'"
+    />
     <title>Cross TTS</title>
   </head>
   <body class="w-full h-full">
