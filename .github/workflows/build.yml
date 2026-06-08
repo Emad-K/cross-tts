@@ -52,6 +52,10 @@ jobs:
       - name: Build renderer + main + preload
         run: pnpm run build
 
+      - name: Install rpm tooling (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Package
         run: pnpm exec electron-builder --publish never
         env:
@@ -65,6 +69,7 @@ jobs:
           path: |
             release/*.AppImage
             release/*.deb
+            release/*.rpm
             release/*.exe
             release/*.dmg
             release/*.zip
