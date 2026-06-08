@@ -7,6 +7,7 @@ import {
 	Keyboard,
 	Loader2,
 	Palette,
+	RefreshCw,
 	RotateCcw,
 	Wand2,
 	Zap,
@@ -59,6 +60,7 @@ type SectionId =
 	| "storage"
 	| "performance"
 	| "shortcuts"
+	| "updates"
 	| "rules";
 
 const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
@@ -66,6 +68,7 @@ const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
 	{ id: "storage", label: "Storage", icon: FolderCog },
 	{ id: "performance", label: "Performance", icon: Zap },
 	{ id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+	{ id: "updates", label: "Updates", icon: RefreshCw },
 	{ id: "rules", label: "Text & speech", icon: Wand2 },
 ];
 
@@ -598,6 +601,46 @@ function PerformancePanel() {
 	);
 }
 
+function UpdatesPanel() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setAutoUpdate = useAppSettingsStore((s) => s.setAutoUpdate);
+	// `null` = not chosen yet; treat as off until the user opts in.
+	const enabled = config?.autoUpdate === true;
+
+	return (
+		<SectionPane
+			title="Updates"
+			description="How Cross TTS keeps itself up to date."
+		>
+			<div className="rounded-lg border border-border bg-muted/20 p-4">
+				<label
+					htmlFor={switchId}
+					className="flex cursor-pointer items-center justify-between gap-4"
+				>
+					<span className="flex items-center gap-2 text-sm font-medium">
+						<RefreshCw className="size-4 text-muted-foreground" aria-hidden />
+						Automatic updates
+					</span>
+					<Switch
+						id={switchId}
+						checked={enabled}
+						onCheckedChange={(v) => void setAutoUpdate(v)}
+					/>
+				</label>
+				<p className="mt-3 text-xs text-muted-foreground">
+					When on, new versions download in the background and install the next
+					time you restart. When off, Cross TTS never checks for updates — grab
+					new releases yourself from GitHub.
+				</p>
+			</div>
+			<p className="mt-3 text-[11px] text-muted-foreground">
+				Updates only apply to the installed desktop app.
+			</p>
+		</SectionPane>
+	);
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [section, setSection] = useState<SectionId>("appearance");
 	const hydrate = useAppSettingsStore((s) => s.hydrate);
@@ -657,6 +700,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 					{section === "storage" ? <StoragePanel /> : null}
 					{section === "performance" ? <PerformancePanel /> : null}
 					{section === "shortcuts" ? <ShortcutsPanel /> : null}
+					{section === "updates" ? <UpdatesPanel /> : null}
 					{section === "rules" ? (
 						<TtsRulesPanel active={section === "rules"} />
 					) : null}

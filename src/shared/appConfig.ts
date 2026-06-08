@@ -39,6 +39,11 @@ export type AppConfigFileV1 = {
 	shortcutsEnabled: boolean;
 	/** Accelerator per action (Electron syntax). */
 	shortcuts: ShortcutBindings;
+	/**
+	 * Automatic updates. `true`/`false` is the user's choice; `null` means they
+	 * haven't been asked yet (prompt once on the next packaged launch).
+	 */
+	autoUpdate: boolean | null;
 	/** Theme, color mode, and reading font. */
 	appearance: Appearance;
 };
@@ -60,6 +65,8 @@ export type AppConfigInfo = {
 	cpuThreads: number;
 	shortcutsEnabled: boolean;
 	shortcuts: ShortcutBindings;
+	/** Automatic updates: true/false chosen, null = not asked yet. */
+	autoUpdate: boolean | null;
 	appearance: Appearance;
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
@@ -75,5 +82,6 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	cpuThreads: 0,
 	shortcutsEnabled: false,
 	shortcuts: defaultShortcutBindings(),
+	autoUpdate: null,
 	appearance: defaultAppearance(),
 });

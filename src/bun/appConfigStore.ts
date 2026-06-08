@@ -77,6 +77,10 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.shortcutsEnabled === "boolean") {
 			next.shortcutsEnabled = o.shortcutsEnabled;
 		}
+		// Absent (older configs) stays null → the user is prompted once.
+		if (typeof o.autoUpdate === "boolean") {
+			next.autoUpdate = o.autoUpdate;
+		}
 		next.shortcuts = coerceShortcutBindings(o.shortcuts);
 		next.appearance = coerceAppearance(o.appearance);
 		cached = next;
@@ -133,6 +137,15 @@ export function shortcutBindings() {
 
 export function setShortcutsEnabled(value: boolean): void {
 	persist({ ...loadAppConfig(), shortcutsEnabled: value });
+}
+
+/** Auto-update preference: true/false chosen, null = not asked yet. */
+export function autoUpdatePref(): boolean | null {
+	return loadAppConfig().autoUpdate;
+}
+
+export function setAutoUpdate(value: boolean): void {
+	persist({ ...loadAppConfig(), autoUpdate: value });
 }
 
 export function setShortcutBinding(action: ShortcutAction, accel: string): void {
@@ -199,6 +212,7 @@ export function appConfigInfo(): AppConfigInfo {
 		cpuThreads: config.cpuThreads,
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
+		autoUpdate: config.autoUpdate,
 		appearance: config.appearance,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,

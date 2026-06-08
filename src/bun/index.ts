@@ -30,7 +30,7 @@ import {
 	pickInitialWindowFrame,
 	saveAppSessionFile,
 } from "./appSessionStore";
-import { initAutoUpdate } from "./autoUpdate";
+import { initAutoUpdate, setAutoUpdateEnabled } from "./autoUpdate";
 import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getBookCover,
@@ -254,6 +254,13 @@ function registerRpcHandlers(): void {
 		},
 	);
 	ipcMain.handle(
+		"setAutoUpdate",
+		(_event, { enabled }: { enabled: boolean }) => {
+			setAutoUpdateEnabled(enabled);
+			return appConfigInfo();
+		},
+	);
+	ipcMain.handle(
 		"setShortcutBinding",
 		(
 			_event,
@@ -365,7 +372,7 @@ app.whenReady().then(async () => {
 
 	registerRpcHandlers();
 	createWindow();
-	initAutoUpdate();
+	void initAutoUpdate();
 
 	kokoroHubReady = startKokoroHubServer()
 		.then((url) => {

@@ -7,6 +7,7 @@ import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
 	setAppearance as setAppearanceRpc,
+	setAutoUpdate as setAutoUpdateRpc,
 	setCpuThreads as setCpuThreadsRpc,
 	setGpuEnabled as setGpuEnabledRpc,
 	setGpuPower as setGpuPowerRpc,
@@ -27,6 +28,7 @@ type AppSettingsState = {
 	setGpuPower: (power: GpuPowerPreference) => Promise<void>;
 	setCpuThreads: (threads: number) => Promise<void>;
 	setShortcutsEnabled: (enabled: boolean) => Promise<void>;
+	setAutoUpdate: (enabled: boolean) => Promise<void>;
 	setShortcutBinding: (
 		action: ShortcutAction,
 		accelerator: string,
@@ -107,6 +109,21 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		} catch (e) {
 			if (prev) set({ config: prev });
 			logError("Couldn't change the shortcuts setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setAutoUpdate: async (enabled) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, autoUpdate: enabled } });
+		try {
+			const config = await setAutoUpdateRpc(enabled);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the auto-update setting.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});

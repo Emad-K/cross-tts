@@ -84,6 +84,11 @@ export type AppRpcSchema = {
 			params: { enabled: boolean };
 			response: AppConfigInfo;
 		};
+		/** Enable/disable automatic update checks and downloads. */
+		setAutoUpdate: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
 		/** Rebind one global shortcut action (Electron accelerator string). */
 		setShortcutBinding: {
 			params: { action: ShortcutAction; accelerator: string };

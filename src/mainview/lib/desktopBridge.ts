@@ -195,6 +195,14 @@ export async function setShortcutsEnabled(
 	return b.request.setShortcutsEnabled({ enabled });
 }
 
+export async function setAutoUpdate(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setAutoUpdate({ enabled });
+}
+
 export async function setShortcutBinding(
 	action: ShortcutAction,
 	accelerator: string,
