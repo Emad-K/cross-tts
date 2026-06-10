@@ -111,6 +111,38 @@ export function toLoadedDocument(result: ReadDocumentResult): LoadedDocument {
 	};
 }
 
+/**
+ * Record a document at `path` in the recent-books library without opening it
+ * (used by drag-and-drop). Existing entries keep their resume position and just
+ * float to the top. Returns the book title, or null if the file was unreadable.
+ */
+export async function addBookToLibrary(path: string): Promise<string | null> {
+	const existing = useLibraryStore.getState().books[path];
+	if (existing) {
+		const books = upsertRecentBook(useLibraryStore.getState().books, {
+			...existing,
+			updatedAt: Date.now(),
+		});
+		useLibraryStore.getState().setBooks(books);
+		return existing.title;
+	}
+	const result = await readDocumentAtPath(path);
+	if (!result) return null;
+	const doc = toLoadedDocument(result);
+	const title = documentTitle(doc);
+	const books = upsertRecentBook(useLibraryStore.getState().books, {
+		path,
+		title,
+		format: doc.format,
+		chapterId: null,
+		chunkIndex: 0,
+		progress: 0,
+		updatedAt: Date.now(),
+	});
+	useLibraryStore.getState().setBooks(books);
+	return title;
+}
+
 export type HydratedSession = {
 	documentPath: string | null;
 	pendingChunkIndex: number | null;

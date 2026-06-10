@@ -171,6 +171,8 @@ export type AppApi = {
 				: [AppRequests[K]["params"]]
 		) => Promise<AppRequests[K]["response"]>;
 	};
+	/** Absolute OS path of a dropped/picked File (Electron webUtils), "" if unknown. */
+	getPathForFile: (file: File) => string;
 	/** Subscribe to log entries forwarded from the main process. Returns an unsubscribe fn. */
 	onLog: (listener: (entry: ForwardedLogEntry) => void) => () => void;
 	/** Subscribe to global-shortcut triggers from the main process. */

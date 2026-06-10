@@ -10,10 +10,14 @@ import {
 import {
 	getEpubChapterContent,
 	isDesktopApp,
+	pathForFile,
 	pickDocument,
 	subscribeToMainProcessLogs,
 	subscribeToShortcuts,
 } from "@/lib/desktopBridge";
+import { Toaster } from "@/components/toast/Toaster";
+import { showToast } from "@/components/toast/toastStore";
+import { partitionByDocumentSupport } from "@shared/droppedFiles";
 import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
 import { isExportActive } from "./audiobook/exportStore";
@@ -36,6 +40,7 @@ import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
+	addBookToLibrary,
 	hydratePersistedSession,
 	loadDocumentFromPath,
 	subscribeDebouncedSessionSave,
@@ -500,24 +505,125 @@ export function ReaderApp() {
 		}
 	}, []);
 
+	const [dragActive, setDragActive] = useState(false);
+
+	const handleDroppedFiles = useCallback(
+		async (files: File[]) => {
+			const { supported, rejected } = partitionByDocumentSupport(files);
+			if (rejected.length > 0) {
+				showToast({
+					title:
+						rejected.length === 1
+							? `"${rejected[0]?.name}" isn't supported`
+							: `${rejected.length} files skipped`,
+					description: "Only .txt and .epub files can be added.",
+					variant: "destructive",
+				});
+			}
+			if (supported.length === 0) return;
+
+			if (!isDesktopApp()) {
+				// Web build can't read paths: open the first dropped .txt directly.
+				const txt = supported.find((f) =>
+					f.name.toLowerCase().endsWith(".txt"),
+				);
+				if (!txt) {
+					showToast({
+						title: "EPUBs need the desktop app",
+						variant: "destructive",
+					});
+					return;
+				}
+				try {
+					pendingChunkIndexRef.current = null;
+					setInitialChapterId(null);
+					setActiveChapterId(null);
+					setDocument(await readTxtFile(txt));
+				} catch {
+					showToast({
+						title: `Couldn't read "${txt.name}"`,
+						variant: "destructive",
+					});
+				}
+				return;
+			}
+
+			// One file opens right away (the session save records it in the library);
+			// several files are added to the library to read later.
+			if (supported.length === 1) {
+				const file = supported[0];
+				const path = file ? pathForFile(file) : null;
+				if (path) openRecentBook(path);
+				return;
+			}
+
+			let added = 0;
+			for (const file of supported) {
+				const path = pathForFile(file);
+				if (path && (await addBookToLibrary(path)) !== null) added++;
+			}
+			touchSessionSave();
+			if (added > 0) {
+				showToast({
+					title: `Added ${added} book${added === 1 ? "" : "s"} to your library`,
+				});
+			}
+			if (added < supported.length) {
+				const failed = supported.length - added;
+				showToast({
+					title: `Couldn't add ${failed} file${failed === 1 ? "" : "s"}`,
+					description: "They may be unreadable or invalid documents.",
+					variant: "destructive",
+				});
+			}
+		},
+		[openRecentBook],
+	);
+
+	// Whole-window drag-and-drop: every view accepts .txt/.epub drops.
+	useEffect(() => {
+		let depth = 0;
+		const hasFiles = (e: DragEvent) =>
+			Array.from(e.dataTransfer?.types ?? []).includes("Files");
+		const onDragEnter = (e: DragEvent) => {
+			if (!hasFiles(e)) return;
+			e.preventDefault();
+			depth++;
+			setDragActive(true);
+		};
+		const onDragOver = (e: DragEvent) => {
+			if (!hasFiles(e)) return;
+			e.preventDefault();
+		};
+		const onDragLeave = (e: DragEvent) => {
+			if (!hasFiles(e)) return;
+			depth = Math.max(0, depth - 1);
+			if (depth === 0) setDragActive(false);
+		};
+		const onDrop = (e: DragEvent) => {
+			if (!hasFiles(e)) return;
+			e.preventDefault();
+			depth = 0;
+			setDragActive(false);
+			const files = Array.from(e.dataTransfer?.files ?? []);
+			if (files.length > 0) void handleDroppedFiles(files);
+		};
+		window.addEventListener("dragenter", onDragEnter);
+		window.addEventListener("dragover", onDragOver);
+		window.addEventListener("dragleave", onDragLeave);
+		window.addEventListener("drop", onDrop);
+		return () => {
+			window.removeEventListener("dragenter", onDragEnter);
+			window.removeEventListener("dragover", onDragOver);
+			window.removeEventListener("dragleave", onDragLeave);
+			window.removeEventListener("drop", onDrop);
+		};
+	}, [handleDroppedFiles]);
+
 	if (booting) return <BootScreen />;
 
 	return (
-		<div
-			className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
-			onDragOver={(e) => {
-				if (isDesktopApp()) e.preventDefault();
-			}}
-			onDrop={(e) => {
-				if (!isDesktopApp()) return;
-				e.preventDefault();
-				const file = e.dataTransfer.files?.[0];
-				const path = (file as (File & { path?: string }) | undefined)?.path;
-				const name = file?.name.toLowerCase() ?? "";
-				if (!path || (!name.endsWith(".epub") && !name.endsWith(".txt"))) return;
-				openRecentBook(path);
-			}}
-		>
+		<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 			<input
 				ref={inputRef}
 				type="file"
@@ -571,6 +677,17 @@ export function ReaderApp() {
 					/>
 				</Suspense>
 			) : null}
+			{dragActive ? (
+				<div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+					<div className="rounded-xl border-2 border-dashed border-primary px-10 py-8 text-center">
+						<p className="text-lg font-medium">Drop books to add them</p>
+						<p className="mt-1 text-sm text-muted-foreground">
+							.epub and .txt files
+						</p>
+					</div>
+				</div>
+			) : null}
+			<Toaster />
 		</div>
 	);
 }

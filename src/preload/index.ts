@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppApi, FoundInPageResult } from "../shared/appRpc";
 import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
@@ -46,6 +46,13 @@ const api: AppApi = {
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
 		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+	},
+	getPathForFile: (file: File) => {
+		try {
+			return webUtils.getPathForFile(file);
+		} catch {
+			return "";
+		}
 	},
 	onLog: (listener: (entry: ForwardedLogEntry) => void) => {
 		const handler = (_event: unknown, entry: ForwardedLogEntry) =>
