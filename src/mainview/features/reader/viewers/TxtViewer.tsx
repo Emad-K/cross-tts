@@ -10,6 +10,7 @@ import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { normalizedReaderText } from "@/features/reader/tts/chunkText";
 import { SWEEP_CLASS, bindSweep } from "@/features/reader/tts/sweepStore";
 import { cn } from "@/lib/utils";
+import { isTextSelectionClick } from "./chunkClickGuard";
 
 const SCROLL_EDGE_PADDING_PX = 12;
 
@@ -163,7 +164,10 @@ export function TxtViewer({
 						active && SWEEP_CLASS,
 						!active && "hover:bg-muted/40",
 					)}
-					onClick={() => onChunkClick?.(c.index)}
+					onClick={() => {
+						if (isTextSelectionClick(window.getSelection())) return;
+						onChunkClick?.(c.index);
+					}}
 					onKeyDown={(e) => {
 						if (e.key === "Enter" || e.key === " ") {
 							e.preventDefault();

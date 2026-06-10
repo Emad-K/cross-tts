@@ -14,6 +14,7 @@ export {
 	resumePlayback,
 	seekProgressPercent,
 	seekToChunkAndMaybePlay,
+	seekToChunkAndPlay,
 	setChapterPlaybackFinishedHandler,
 	setVolumeLive,
 	skipChunk,

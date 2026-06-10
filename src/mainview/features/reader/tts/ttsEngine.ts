@@ -751,6 +751,17 @@ export function seekToChunkAndMaybePlay(index: number): void {
 	rescheduleForSeek();
 }
 
+/**
+ * Click-to-play: seek to a chunk and make sure playback is running from there.
+ * If already playing, {@link rescheduleForSeek} restarted the loop at the new
+ * chunk and {@link startOrResumePlayback} is a no-op; if paused/idle it starts
+ * a fresh loop at the seeked chunk.
+ */
+export function seekToChunkAndPlay(index: number): void {
+	seekToChunkAndMaybePlay(index);
+	void startOrResumePlayback();
+}
+
 export function seekProgressPercent(pct: number): void {
 	const { chunks, seekToChunk } = useTtsStore.getState();
 	if (chunks.length === 0) return;

@@ -1,5 +1,5 @@
 import type { LoadedDocument } from "../types";
-import { seekToChunkAndMaybePlay, useTtsStore } from "../tts";
+import { seekToChunkAndPlay, useTtsStore } from "../tts";
 import { EpubViewer } from "./EpubViewer";
 import { TxtViewer } from "./TxtViewer";
 
@@ -27,7 +27,7 @@ export function DocumentViewer({
 					highlightRange={highlightRange}
 					chunks={chunks}
 					activeChunkIndex={currentChunkIndex}
-					onChunkClick={(i) => seekToChunkAndMaybePlay(i)}
+					onChunkClick={(i) => seekToChunkAndPlay(i)}
 				/>
 			);
 		case "epub":
@@ -47,7 +47,7 @@ export function DocumentViewer({
 					chunks={chunks}
 					activeChunkIndex={currentChunkIndex}
 					highlightRange={highlightRange}
-					onChunkClick={(i) => seekToChunkAndMaybePlay(i)}
+					onChunkClick={(i) => seekToChunkAndPlay(i)}
 				/>
 			);
 	}
