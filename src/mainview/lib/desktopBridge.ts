@@ -136,6 +136,16 @@ export async function writeAudioFile(
 	return b.request.writeAudioFile({ dir, fileName, data });
 }
 
+export async function appendAudioFile(
+	dir: string,
+	fileName: string,
+	data: Uint8Array,
+): Promise<{ ok: boolean; path: string | null; error?: string }> {
+	const b = bridge();
+	if (!b) return { ok: false, path: null, error: "Not in desktop app" };
+	return b.request.appendAudioFile({ dir, fileName, data });
+}
+
 export async function audioFileExists(
 	dir: string,
 	fileName: string,
@@ -149,6 +159,14 @@ export async function getBookCover(filePath: string): Promise<string | null> {
 	const b = bridge();
 	if (!b) return null;
 	return b.request.getBookCover({ filePath });
+}
+
+export async function getBookCoverBytes(
+	filePath: string,
+): Promise<{ data: Uint8Array; mime: string } | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getBookCoverBytes({ filePath });
 }
 
 export async function revealPath(path: string): Promise<void> {

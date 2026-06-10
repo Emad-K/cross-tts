@@ -1,9 +1,10 @@
 /** Audiobook export formats and file-naming, shared by main + renderer. */
-export type AudioFormat = "mp3" | "wav";
+export type AudioFormat = "mp3" | "wav" | "m4b";
 
 export const AUDIO_FORMATS: { id: AudioFormat; label: string; ext: string }[] = [
 	{ id: "mp3", label: "MP3 (smaller)", ext: "mp3" },
 	{ id: "wav", label: "WAV (lossless)", ext: "wav" },
+	{ id: "m4b", label: "M4B audiobook (single file)", ext: "m4b" },
 ];
 
 export function formatExt(format: AudioFormat): string {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
@@ -43,6 +43,7 @@ import {
 import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getBookCover,
+	getBookCoverBytes,
 	getEpubChapterContent,
 	pickDocument,
 	readDocumentAtPath,
@@ -198,6 +199,25 @@ function registerRpcHandlers(): void {
 		},
 	);
 	ipcMain.handle(
+		"appendAudioFile",
+		(
+			_event,
+			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
+		) => {
+			try {
+				const path = join(dir, fileName);
+				appendFileSync(path, Buffer.from(data));
+				return { ok: true, path };
+			} catch (e) {
+				return {
+					ok: false,
+					path: null,
+					error: e instanceof Error ? e.message : String(e),
+				};
+			}
+		},
+	);
+	ipcMain.handle(
 		"audioFileExists",
 		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
 			existsSync(join(dir, fileName)),
@@ -205,6 +225,10 @@ function registerRpcHandlers(): void {
 	ipcMain.handle(
 		"getBookCover",
 		(_event, { filePath }: { filePath: string }) => getBookCover(filePath),
+	);
+	ipcMain.handle(
+		"getBookCoverBytes",
+		(_event, { filePath }: { filePath: string }) => getBookCoverBytes(filePath),
 	);
 	ipcMain.handle(
 		"findInPage",

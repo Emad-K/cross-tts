@@ -31,6 +31,7 @@ import {
 	startExport,
 	useExportStore,
 } from "./exportEngine";
+import { canExportM4b } from "./singleFileEncode";
 
 export type AudiobookExportDialogProps = {
 	open: boolean;
@@ -79,13 +80,21 @@ export function AudiobookExportDialog({
 	const [format, setFormat] = useState<AudioFormat>("mp3");
 	const [combine, setCombine] = useState(false);
 	const [dir, setDir] = useState<string | null>(null);
+	const [aacOk, setAacOk] = useState<boolean | null>(null);
 
 	const active = phase === "preparing" || phase === "running" || phase === "paused";
+	const isM4b = format === "m4b";
 
 	useEffect(() => {
 		// Reset a finished/idle run when the dialog is reopened fresh.
 		if (open && !isExportActive() && phase !== "idle") resetExport();
 	}, [open, phase]);
+
+	useEffect(() => {
+		// Probe AAC encode support once, to tell the user when M4B will fall
+		// back to a single MP3 with chapters.
+		if (open && aacOk === null) void canExportM4b().then(setAacOk);
+	}, [open, aacOk]);
 
 	const onStart = () => {
 		let selected = chapters;
@@ -140,7 +149,8 @@ export function AudiobookExportDialog({
 								<div>
 									<p className="text-sm font-medium">Entire book</p>
 									<p className="text-xs text-muted-foreground">
-										All {chapters.length} chapters as separate files.
+										All {chapters.length} chapters
+										{isM4b || combine ? "" : " as separate files"}.
 									</p>
 								</div>
 								<Switch checked={entire} onCheckedChange={setEntire} />
@@ -204,17 +214,29 @@ export function AudiobookExportDialog({
 										))}
 									</SelectContent>
 								</Select>
+								{isM4b ? (
+									<p className="mt-1.5 text-xs text-muted-foreground">
+										One file with chapter markers and the book cover embedded.
+										Pause works, but a cancelled M4B export can’t be resumed
+										later.
+										{aacOk === false
+											? " AAC isn’t available on this device, so the book will be saved as a single MP3 with chapter markers instead."
+											: null}
+									</p>
+								) : null}
 							</div>
 
-							<div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
-								<div className="min-w-0">
-									<p className="text-sm font-medium">Single file</p>
-									<p className="text-xs text-muted-foreground">
-										One file for the whole book instead of one per chapter.
-									</p>
+							{!isM4b ? (
+								<div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+									<div className="min-w-0">
+										<p className="text-sm font-medium">Single file</p>
+										<p className="text-xs text-muted-foreground">
+											One file for the whole book instead of one per chapter.
+										</p>
+									</div>
+									<Switch checked={combine} onCheckedChange={setCombine} />
 								</div>
-								<Switch checked={combine} onCheckedChange={setCombine} />
-							</div>
+							) : null}
 
 							<div>
 								<p className="mb-1.5 text-xs font-medium text-muted-foreground">

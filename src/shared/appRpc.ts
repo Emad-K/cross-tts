@@ -111,6 +111,11 @@ export type AppRpcSchema = {
 			params: { dir: string; fileName: string; data: Uint8Array };
 			response: { ok: boolean; path: string | null; error?: string };
 		};
+		/** Append bytes to an audiobook file (chunked writes for large files). */
+		appendAudioFile: {
+			params: { dir: string; fileName: string; data: Uint8Array };
+			response: { ok: boolean; path: string | null; error?: string };
+		};
 		/** Whether an audiobook track already exists (used to resume an export). */
 		audioFileExists: {
 			params: { dir: string; fileName: string };
@@ -120,6 +125,11 @@ export type AppRpcSchema = {
 		getBookCover: {
 			params: { filePath: string };
 			response: string | null;
+		};
+		/** Full-size raw cover image bytes (for embedding into audiobooks). */
+		getBookCoverBytes: {
+			params: { filePath: string };
+			response: { data: Uint8Array; mime: string } | null;
 		};
 		/** Find text in the current page; results arrive via onFoundInPage. */
 		findInPage: {

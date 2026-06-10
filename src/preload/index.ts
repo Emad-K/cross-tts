@@ -38,9 +38,12 @@ const api: AppApi = {
 		setAppearance: (params) => ipcRenderer.invoke("setAppearance", params),
 		chooseExportFolder: () => ipcRenderer.invoke("chooseExportFolder"),
 		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
+		appendAudioFile: (params) => ipcRenderer.invoke("appendAudioFile", params),
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
+		getBookCoverBytes: (params) =>
+			ipcRenderer.invoke("getBookCoverBytes", params),
 		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
 		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
