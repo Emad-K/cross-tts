@@ -4,6 +4,7 @@ import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import type { UpdateStatus } from "../shared/updateStatus";
+import type { WatchedFileCandidate } from "../shared/watchedFolders";
 
 /**
  * Typed RPC bridge between the renderer and the Electron main process.
@@ -50,6 +51,11 @@ const api: AppApi = {
 		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
 		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
 		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),
+		addWatchedFolder: () => ipcRenderer.invoke("addWatchedFolder"),
+		removeWatchedFolder: (params) =>
+			ipcRenderer.invoke("removeWatchedFolder", params),
+		getWatchedFileCandidates: () =>
+			ipcRenderer.invoke("getWatchedFileCandidates"),
 	},
 	getPathForFile: (file: File) => {
 		try {
@@ -96,6 +102,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:update-status", handler);
 		return () => {
 			ipcRenderer.removeListener("app:update-status", handler);
+		};
+	},
+	onWatchedFiles: (listener: (candidates: WatchedFileCandidate[]) => void) => {
+		const handler = (_event: unknown, candidates: WatchedFileCandidate[]) =>
+			listener(candidates);
+		ipcRenderer.on("app:watched-files", handler);
+		return () => {
+			ipcRenderer.removeListener("app:watched-files", handler);
 		};
 	},
 };

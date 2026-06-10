@@ -14,6 +14,7 @@ import type {
 } from "@shared/documentRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 import type { UpdateStatus } from "@shared/updateStatus";
+import type { WatchedFileCandidate } from "@shared/watchedFolders";
 
 /**
  * Typed bridge to the Electron main process. The preload script exposes the
@@ -314,4 +315,38 @@ export function subscribeToMainProcessLogs(
 	const b = bridge();
 	if (!b?.onLog) return () => {};
 	return b.onLog(listener);
+}
+
+/** Pick a folder to watch for new books; null on cancel / web. */
+export async function addWatchedFolder(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.addWatchedFolder();
+}
+
+/** Stop watching a folder; null on web. */
+export async function removeWatchedFolder(
+	dir: string,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.removeWatchedFolder({ dir });
+}
+
+/** Scan watched folders now; empty on web. */
+export async function getWatchedFileCandidates(): Promise<
+	WatchedFileCandidate[]
+> {
+	const b = bridge();
+	if (!b) return [];
+	return b.request.getWatchedFileCandidates();
+}
+
+/** Subscribe to watched-folder scan snapshots. No-op (noop unsubscribe) on web. */
+export function subscribeToWatchedFiles(
+	listener: (candidates: WatchedFileCandidate[]) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onWatchedFiles) return () => {};
+	return b.onWatchedFiles(listener);
 }

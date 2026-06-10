@@ -8,6 +8,7 @@ import type {
 } from "./modelAssets";
 import type { ShortcutAction } from "./shortcuts";
 import type { UpdateStatus } from "./updateStatus";
+import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
 	EpubChapterContentResult,
@@ -170,6 +171,21 @@ export type AppRpcSchema = {
 			params: void;
 			response: void;
 		};
+		/** Open a folder picker and add the selection to the watched-folder list. */
+		addWatchedFolder: {
+			params: void;
+			response: AppConfigInfo | null;
+		};
+		/** Remove one folder from the watched-folder list. */
+		removeWatchedFolder: {
+			params: { dir: string };
+			response: AppConfigInfo;
+		};
+		/** Scan all watched folders now; further snapshots arrive via onWatchedFiles. */
+		getWatchedFileCandidates: {
+			params: void;
+			response: WatchedFileCandidate[];
+		};
 	};
 };
 
@@ -199,6 +215,10 @@ export type AppApi = {
 	onFoundInPage: (listener: (result: FoundInPageResult) => void) => () => void;
 	/** Subscribe to update-status changes from the main process. */
 	onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
+	/** Subscribe to watched-folder scan snapshots from the main process. */
+	onWatchedFiles: (
+		listener: (candidates: WatchedFileCandidate[]) => void,
+	) => () => void;
 };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */

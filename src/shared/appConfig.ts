@@ -46,6 +46,8 @@ export type AppConfigFileV1 = {
 	autoUpdate: boolean | null;
 	/** Theme, color mode, and reading font. */
 	appearance: Appearance;
+	/** Folders scanned for new .epub/.txt files to auto-add to the library. */
+	watchedFolders: string[];
 };
 
 /**
@@ -68,6 +70,8 @@ export type AppConfigInfo = {
 	/** Automatic updates: true/false chosen, null = not asked yet. */
 	autoUpdate: boolean | null;
 	appearance: Appearance;
+	/** Folders scanned for new .epub/.txt files to auto-add to the library. */
+	watchedFolders: string[];
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */
@@ -84,4 +88,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	shortcuts: defaultShortcutBindings(),
 	autoUpdate: null,
 	appearance: defaultAppearance(),
+	watchedFolders: [],
 });

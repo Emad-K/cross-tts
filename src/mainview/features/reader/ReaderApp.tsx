@@ -49,6 +49,7 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
+import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import {
 	setBookmarkNavHandler,
@@ -216,6 +217,13 @@ export function ReaderApp() {
 
 	// Mirror update state and toast a sticky "restart to update" when ready.
 	useEffect(() => initUpdateStatusSync(), []);
+
+	// Auto-add new books from watched folders. Waits for the session so the
+	// initial scan dedupes against the hydrated library instead of an empty one.
+	useEffect(() => {
+		if (!sessionReady) return;
+		return initWatchedFoldersSync();
+	}, [sessionReady]);
 
 	// Dispatch OS-global shortcut triggers (forwarded from the main process) to
 	// the playback engine.

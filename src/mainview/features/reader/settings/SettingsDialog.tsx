@@ -4,12 +4,14 @@ import {
 	Download,
 	FolderCog,
 	FolderOpen,
+	FolderPlus,
 	Keyboard,
 	Loader2,
 	Palette,
 	RefreshCw,
 	RotateCcw,
 	Wand2,
+	X,
 	Zap,
 } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -39,6 +41,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
+	addWatchedFolder,
 	checkForUpdates,
 	chooseDataDirectory,
 	downloadModel,
@@ -47,6 +50,7 @@ import {
 	isDesktopApp,
 	quitAndInstallUpdate,
 	relaunchApp,
+	removeWatchedFolder,
 	resetDataDirectory,
 	revealDataDirectory,
 	subscribeToModelProgress,
@@ -257,6 +261,85 @@ function ModelsSection() {
 	);
 }
 
+function WatchedFoldersSection() {
+	const config = useAppSettingsStore((s) => s.config);
+	const [working, setWorking] = useState(false);
+	const folders = config?.watchedFolders ?? [];
+
+	const onAdd = async () => {
+		setWorking(true);
+		try {
+			const updated = await addWatchedFolder();
+			if (updated) useAppSettingsStore.getState().setConfig(updated);
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const onRemove = async (dir: string) => {
+		const updated = await removeWatchedFolder(dir);
+		if (updated) useAppSettingsStore.getState().setConfig(updated);
+	};
+
+	return (
+		<div className="space-y-2">
+			<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+				Watched folders
+			</p>
+			{folders.length === 0 ? (
+				<p className="text-xs text-muted-foreground">
+					No folders are being watched.
+				</p>
+			) : (
+				<ul className="space-y-1.5">
+					{folders.map((dir) => (
+						<li
+							key={dir}
+							className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5"
+						>
+							<FolderOpen
+								className="size-4 shrink-0 text-muted-foreground"
+								aria-hidden
+							/>
+							<span
+								className="min-w-0 flex-1 break-all font-mono text-xs text-foreground/90"
+								title={dir}
+							>
+								{dir}
+							</span>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+								aria-label={`Stop watching ${dir}`}
+								onClick={() => void onRemove(dir)}
+							>
+								<X className="size-4" aria-hidden />
+							</Button>
+						</li>
+					))}
+				</ul>
+			)}
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				className="gap-2 border-border bg-transparent"
+				disabled={working}
+				onClick={() => void onAdd()}
+			>
+				<FolderPlus className="size-4" aria-hidden />
+				Add folder…
+			</Button>
+			<p className="text-[11px] text-muted-foreground">
+				New .epub and .txt files in these folders (and their direct
+				subfolders) are added to your library automatically.
+			</p>
+		</div>
+	);
+}
+
 function StoragePanel() {
 	const config = useAppSettingsStore((s) => s.config);
 	const [pendingRestart, setPendingRestart] = useState(false);
@@ -349,6 +432,10 @@ function StoragePanel() {
 						Use default
 					</Button>
 				) : null}
+			</div>
+
+			<div className="mt-4 border-t border-border/60 pt-4">
+				<WatchedFoldersSection />
 			</div>
 
 			<div className="mt-4 border-t border-border/60 pt-4">

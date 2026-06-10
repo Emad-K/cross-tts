@@ -4,8 +4,10 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
+	addWatchedFolder,
 	appConfigInfo,
 	dataDir,
+	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
 	setCpuThreads,
@@ -46,6 +48,11 @@ import {
 	readDocumentAtPath,
 } from "./documentIo";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
+import {
+	pushWatchedFiles,
+	scanWatchedFolders,
+	setWatchedFilesTarget,
+} from "./watchedFolders";
 import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
@@ -322,6 +329,23 @@ function registerRpcHandlers(): void {
 		app.relaunch();
 		app.exit(0);
 	});
+	ipcMain.handle("addWatchedFolder", async () => {
+		if (!mainWindow) return null;
+		const result = await dialog.showOpenDialog(mainWindow, {
+			title: "Choose a folder to watch for new books",
+			properties: ["openDirectory", "createDirectory"],
+		});
+		if (result.canceled || result.filePaths.length === 0) return null;
+		addWatchedFolder(result.filePaths[0]!);
+		// Surface anything already in the folder right away.
+		pushWatchedFiles();
+		return appConfigInfo();
+	});
+	ipcMain.handle("removeWatchedFolder", (_event, { dir }: { dir: string }) => {
+		removeWatchedFolder(dir);
+		return appConfigInfo();
+	});
+	ipcMain.handle("getWatchedFileCandidates", () => scanWatchedFolders());
 }
 
 function createWindow(): void {
@@ -370,11 +394,13 @@ function createWindow(): void {
 	setLogTarget(mainWindow);
 	setShortcutTarget(mainWindow);
 	setUpdateTarget(mainWindow);
+	setWatchedFilesTarget(mainWindow);
 	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
 		setUpdateTarget(null);
+		setWatchedFilesTarget(null);
 		mainWindow = null;
 	});
 }
