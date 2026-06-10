@@ -3,6 +3,7 @@ import type { AppApi, FoundInPageResult } from "../shared/appRpc";
 import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
+import type { UpdateStatus } from "../shared/updateStatus";
 
 /**
  * Typed RPC bridge between the renderer and the Electron main process.
@@ -46,6 +47,9 @@ const api: AppApi = {
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
 		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
+		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
+		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),
 	},
 	getPathForFile: (file: File) => {
 		try {
@@ -84,6 +88,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:found-in-page", handler);
 		return () => {
 			ipcRenderer.removeListener("app:found-in-page", handler);
+		};
+	},
+	onUpdateStatus: (listener: (status: UpdateStatus) => void) => {
+		const handler = (_event: unknown, status: UpdateStatus) =>
+			listener(status);
+		ipcRenderer.on("app:update-status", handler);
+		return () => {
+			ipcRenderer.removeListener("app:update-status", handler);
 		};
 	},
 };

@@ -37,6 +37,7 @@ const LogPanel = lazy(() =>
 	import("./logging").then((m) => ({ default: m.LogPanel })),
 );
 import { useAppSettingsStore } from "./settings/appSettingsStore";
+import { initUpdateStatusSync } from "./settings/updateStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
 import { SAMPLE_TXT_DOCUMENT } from "./fixtures/sample-document";
 import {
@@ -209,6 +210,9 @@ export function ReaderApp() {
 			useLogStore.getState().add(entry);
 		});
 	}, []);
+
+	// Mirror update state and toast a sticky "restart to update" when ready.
+	useEffect(() => initUpdateStatusSync(), []);
 
 	// Dispatch OS-global shortcut triggers (forwarded from the main process) to
 	// the playback engine.

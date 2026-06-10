@@ -13,6 +13,7 @@ import type {
 	ReadDocumentResult,
 } from "@shared/documentRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
+import type { UpdateStatus } from "@shared/updateStatus";
 
 /**
  * Typed bridge to the Electron main process. The preload script exposes the
@@ -278,6 +279,35 @@ export async function relaunchApp(): Promise<void> {
 }
 
 /** Subscribe to main-process log entries. No-op (returns noop unsubscribe) on web. */
+/** Manually check for updates; null on web. */
+export async function checkForUpdates(): Promise<UpdateStatus | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.checkForUpdates();
+}
+
+/** Current update state; null on web. */
+export async function getUpdateStatus(): Promise<UpdateStatus | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getUpdateStatus();
+}
+
+/** Restart into a downloaded update. */
+export async function quitAndInstallUpdate(): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.quitAndInstallUpdate();
+}
+
+export function subscribeToUpdateStatus(
+	listener: (status: UpdateStatus) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onUpdateStatus) return () => {};
+	return b.onUpdateStatus(listener);
+}
+
 export function subscribeToMainProcessLogs(
 	listener: (entry: ForwardedLogEntry) => void,
 ): () => void {
