@@ -176,6 +176,16 @@ export async function revealPath(path: string): Promise<void> {
 	await b.request.revealPath({ path });
 }
 
+/** Open an https URL in the default browser (web fallback: new tab). */
+export async function openExternal(url: string): Promise<void> {
+	const b = bridge();
+	if (!b) {
+		window.open(url, "_blank", "noopener,noreferrer");
+		return;
+	}
+	await b.request.openExternal({ url });
+}
+
 export async function getGpuInfo(): Promise<{
 	activeRenderer: string;
 	gpus: string[];

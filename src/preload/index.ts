@@ -48,6 +48,7 @@ const api: AppApi = {
 		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
 		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
+		openExternal: (params) => ipcRenderer.invoke("openExternal", params),
 		chooseDataDirectory: () => ipcRenderer.invoke("chooseDataDirectory"),
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
