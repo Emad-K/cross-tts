@@ -48,6 +48,8 @@ export type AppConfigFileV1 = {
 	appearance: Appearance;
 	/** Folders scanned for new .epub/.txt files to auto-add to the library. */
 	watchedFolders: string[];
+	/** "Don't ask again" for the crash-report dialog shown after a crash. */
+	crashPromptDisabled: boolean;
 };
 
 /**
@@ -89,4 +91,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	autoUpdate: null,
 	appearance: defaultAppearance(),
 	watchedFolders: [],
+	crashPromptDisabled: false,
 });

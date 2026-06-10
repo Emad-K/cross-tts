@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppApi, FoundInPageResult } from "../shared/appRpc";
+import type { CrashRecord } from "../shared/crashReport";
 import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
@@ -59,6 +60,10 @@ const api: AppApi = {
 			ipcRenderer.invoke("removeWatchedFolder", params),
 		getWatchedFileCandidates: () =>
 			ipcRenderer.invoke("getWatchedFileCandidates"),
+		getPendingCrashReports: () =>
+			ipcRenderer.invoke("getPendingCrashReports"),
+		resolveCrashReports: (params) =>
+			ipcRenderer.invoke("resolveCrashReports", params),
 	},
 	getPathForFile: (file: File) => {
 		try {
@@ -113,6 +118,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:watched-files", handler);
 		return () => {
 			ipcRenderer.removeListener("app:watched-files", handler);
+		};
+	},
+	onCrashReports: (listener: (records: CrashRecord[]) => void) => {
+		const handler = (_event: unknown, records: CrashRecord[]) =>
+			listener(records);
+		ipcRenderer.on("app:crash-reports", handler);
+		return () => {
+			ipcRenderer.removeListener("app:crash-reports", handler);
 		};
 	},
 };

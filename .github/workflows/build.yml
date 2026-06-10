@@ -77,3 +77,39 @@ jobs:
             release/*.blockmap
             !release/builder-debug.yml
           if-no-files-found: warn
+
+  # Playwright drives the *built* Electron app (out/main/index.js) under Xvfb
+  # and opens a CRLF EPUB fixture — the class of bug that passes happy-dom unit
+  # tests but breaks read-along offsets in real Chromium. Electron ships its own
+  # browser binary, so no `playwright install` is needed; only Xvfb for a display.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build renderer + main + preload
+        run: pnpm run build
+
+      - name: Ensure Xvfb is available
+        run: command -v xvfb-run >/dev/null || (sudo apt-get update && sudo apt-get install -y xvfb)
+
+      - name: E2E smoke (Playwright + Electron)
+        run: xvfb-run --auto-servernum -- pnpm run test:e2e
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore

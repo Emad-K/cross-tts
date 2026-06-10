@@ -9,12 +9,15 @@ import {
 } from "react";
 import {
 	getEpubChapterContent,
+	getPendingCrashReports,
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
+	subscribeToCrashReports,
 	subscribeToMainProcessLogs,
 	subscribeToShortcuts,
 } from "@/lib/desktopBridge";
+import type { CrashRecord } from "@shared/crashReport";
 import { Toaster } from "@/components/toast/Toaster";
 import { showToast } from "@/components/toast/toastStore";
 import { partitionByDocumentSupport } from "@shared/droppedFiles";
@@ -36,6 +39,7 @@ const SettingsDialog = lazy(() =>
 const LogPanel = lazy(() =>
 	import("./logging").then((m) => ({ default: m.LogPanel })),
 );
+const CrashReportDialog = lazy(() => import("./crash/CrashReportDialog"));
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { initUpdateStatusSync } from "./settings/updateStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
@@ -147,6 +151,8 @@ export function ReaderApp() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
+	/** Unreported crashes from previous runs; non-empty shows the crash dialog. */
+	const [crashRecords, setCrashRecords] = useState<CrashRecord[]>([]);
 
 	/** "Library" = close the current book and return to the My-books home grid. */
 	const goToLibrary = useCallback(() => {
@@ -225,6 +231,21 @@ export function ReaderApp() {
 		if (!sessionReady) return;
 		return initWatchedFoldersSync();
 	}, [sessionReady]);
+	// Crashes recorded last run: subscribe first (push on launch), then pull a
+	// snapshot in case the main process sent the event before we mounted.
+	useEffect(() => {
+		let cancelled = false;
+		const unsubscribe = subscribeToCrashReports((records) => {
+			if (records.length > 0) setCrashRecords(records);
+		});
+		void getPendingCrashReports().then((records) => {
+			if (!cancelled && records.length > 0) setCrashRecords(records);
+		});
+		return () => {
+			cancelled = true;
+			unsubscribe();
+		};
+	}, []);
 
 	// Dispatch OS-global shortcut triggers (forwarded from the main process) to
 	// the playback engine.
@@ -706,6 +727,14 @@ export function ReaderApp() {
 						filePath={document.filePath}
 						bookTitle={document.title}
 						chapters={document.chapters}
+					/>
+				</Suspense>
+			) : null}
+			{crashRecords.length > 0 ? (
+				<Suspense fallback={null}>
+					<CrashReportDialog
+						records={crashRecords}
+						onClose={() => setCrashRecords([])}
 					/>
 				</Suspense>
 			) : null}

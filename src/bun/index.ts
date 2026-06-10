@@ -58,6 +58,25 @@ import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
+import {
+	initCrashCapture,
+	notifyCrashReportsOnLoad,
+	pendingCrashReports,
+	resolveCrashReports,
+} from "./crashReports";
+
+// TEST-ONLY HOOK (e2e/): point Electron's userData at a sandbox directory so
+// the Playwright smoke test runs against a clean config/session. Has no effect
+// unless the env var is set, which only the e2e harness does.
+const e2eUserData = process.env["CROSS_TTS_E2E_USER_DATA"];
+if (e2eUserData) {
+	app.setPath("userData", e2eUserData);
+}
+
+// Last-resort crash capture, installed as early as possible: records go to
+// <dataDir>/crashes/ and the user is asked (opt-in) on the next launch whether
+// to report them on GitHub. Nothing is ever sent automatically.
+initCrashCapture();
 
 // Re-enable SharedArrayBuffer without requiring cross-origin isolation. ONNX
 // Runtime's multi-threaded wasm backend needs SAB; without this it silently
@@ -370,6 +389,16 @@ function registerRpcHandlers(): void {
 		return appConfigInfo();
 	});
 	ipcMain.handle("getWatchedFileCandidates", () => scanWatchedFolders());
+	ipcMain.handle("getPendingCrashReports", () => pendingCrashReports());
+	ipcMain.handle(
+		"resolveCrashReports",
+		(
+			_event,
+			params: { action: "report" | "dismiss"; dontAskAgain: boolean },
+		) => {
+			resolveCrashReports(params);
+		},
+	);
 }
 
 function createWindow(): void {
@@ -419,6 +448,7 @@ function createWindow(): void {
 	setShortcutTarget(mainWindow);
 	setUpdateTarget(mainWindow);
 	setWatchedFilesTarget(mainWindow);
+	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
 		setLogTarget(null);

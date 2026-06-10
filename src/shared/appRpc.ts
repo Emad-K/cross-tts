@@ -10,6 +10,7 @@ import type { ShortcutAction } from "./shortcuts";
 import type { UpdateStatus } from "./updateStatus";
 import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
+import type { CrashRecord } from "./crashReport";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -196,6 +197,16 @@ export type AppRpcSchema = {
 			params: void;
 			response: WatchedFileCandidate[];
 		};
+		/** Unreported crashes from previous runs (empty if "don't ask again"). */
+		getPendingCrashReports: {
+			params: void;
+			response: CrashRecord[];
+		};
+		/** User decision on the crash dialog; "report" opens a prefilled GitHub issue. */
+		resolveCrashReports: {
+			params: { action: "report" | "dismiss"; dontAskAgain: boolean };
+			response: void;
+		};
 	};
 };
 
@@ -229,6 +240,8 @@ export type AppApi = {
 	onWatchedFiles: (
 		listener: (candidates: WatchedFileCandidate[]) => void,
 	) => () => void;
+	/** Subscribe to unreported crashes pushed on launch from the main process. */
+	onCrashReports: (listener: (records: CrashRecord[]) => void) => () => void;
 };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */

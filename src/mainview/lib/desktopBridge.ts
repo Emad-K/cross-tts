@@ -15,6 +15,7 @@ import type {
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 import type { UpdateStatus } from "@shared/updateStatus";
 import type { WatchedFileCandidate } from "@shared/watchedFolders";
+import type { CrashRecord } from "@shared/crashReport";
 
 /**
  * Typed bridge to the Electron main process. The preload script exposes the
@@ -367,4 +368,30 @@ export function subscribeToWatchedFiles(
 	const b = bridge();
 	if (!b?.onWatchedFiles) return () => {};
 	return b.onWatchedFiles(listener);
+}
+
+/** Unreported crashes from previous runs; empty on web or when opted out. */
+export async function getPendingCrashReports(): Promise<CrashRecord[]> {
+	const b = bridge();
+	if (!b) return [];
+	return b.request.getPendingCrashReports();
+}
+
+/** Report (opens a prefilled GitHub issue) or dismiss the stored crashes. */
+export async function resolveCrashReports(params: {
+	action: "report" | "dismiss";
+	dontAskAgain: boolean;
+}): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.resolveCrashReports(params);
+}
+
+/** Subscribe to crash reports pushed on launch. No-op on web. */
+export function subscribeToCrashReports(
+	listener: (records: CrashRecord[]) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onCrashReports) return () => {};
+	return b.onCrashReports(listener);
 }

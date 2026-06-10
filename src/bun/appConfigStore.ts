@@ -82,6 +82,9 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.autoUpdate === "boolean") {
 			next.autoUpdate = o.autoUpdate;
 		}
+		if (typeof o.crashPromptDisabled === "boolean") {
+			next.crashPromptDisabled = o.crashPromptDisabled;
+		}
 		next.shortcuts = coerceShortcutBindings(o.shortcuts);
 		next.appearance = coerceAppearance(o.appearance);
 		next.watchedFolders =
@@ -172,6 +175,15 @@ export function removeWatchedFolder(dir: string): void {
 		...config,
 		watchedFolders: config.watchedFolders.filter((d) => d !== dir),
 	});
+}
+
+/** "Don't ask again" for the post-crash report dialog. */
+export function crashPromptDisabled(): boolean {
+	return loadAppConfig().crashPromptDisabled;
+}
+
+export function setCrashPromptDisabled(value: boolean): void {
+	persist({ ...loadAppConfig(), crashPromptDisabled: value });
 }
 
 export function setShortcutBinding(action: ShortcutAction, accel: string): void {
