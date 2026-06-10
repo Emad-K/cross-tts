@@ -81,6 +81,7 @@ export function buildWebSlice(
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
+		sentencePauseMs: t.sentencePauseMs,
 		documentPath: doc?.filePath ?? null,
 		activeChapterId: chapterId,
 		currentChunkIndex: t.currentChunkIndex,
@@ -164,6 +165,9 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 	useTtsStore.getState().setVoice(voice);
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
+	if (typeof web.sentencePauseMs === "number") {
+		useTtsStore.getState().setSentencePauseMs(web.sentencePauseMs);
+	}
 	if (web.ttsTextRules) {
 		useTtsRulesStore.getState().hydrate(web.ttsTextRules);
 	}

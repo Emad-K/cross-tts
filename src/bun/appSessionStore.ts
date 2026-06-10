@@ -42,6 +42,13 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	if (typeof o.speed === "number" && o.speed >= 0.5 && o.speed <= 2) {
 		d.speed = o.speed;
 	}
+	if (
+		typeof o.sentencePauseMs === "number" &&
+		o.sentencePauseMs >= 0 &&
+		o.sentencePauseMs <= 2000
+	) {
+		d.sentencePauseMs = Math.round(o.sentencePauseMs);
+	}
 	if (typeof o.documentPath === "string" && o.documentPath.length > 0) {
 		d.documentPath = o.documentPath;
 	} else if (o.documentPath === null) {
@@ -69,6 +76,7 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 		voice: web.voice,
 		volumePct: web.volumePct,
 		speed: web.speed,
+		sentencePauseMs: web.sentencePauseMs,
 		documentPath:
 			typeof web.documentPath === "string" && web.documentPath.length > 0
 				? web.documentPath

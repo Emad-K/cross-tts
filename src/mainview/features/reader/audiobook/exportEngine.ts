@@ -13,6 +13,7 @@ import {
 	type KokoroVoiceId,
 	stopPlaybackUi,
 	synthesizeChunkPcm,
+	useTtsStore,
 } from "../tts";
 import { createEncoder } from "./audioEncode";
 import {
@@ -96,6 +97,9 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 	});
 	stopPlaybackUi();
 
+	// Snapshot the playback pause setting once so the whole export is uniform.
+	const sentencePauseMs = useTtsStore.getState().sentencePauseMs;
+
 	try {
 		await ensureKokoroLoaded();
 
@@ -149,12 +153,22 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				if (abort) break;
 				const pcm = await synthesizeChunkPcm(chunk.text, opts.voice, opts.speed);
 				if (pcm) {
+					// Match playback's inter-sentence pause: silence before every
+					// chunk except the first one written to an encoder.
+					const gapSamples =
+						sentencePauseMs > 0
+							? new Float32Array(
+									Math.round((pcm.sampleRate * sentencePauseMs) / 1000),
+								)
+							: null;
 					if (opts.combine) {
 						if (!combinedEnc)
 							combinedEnc = createEncoder(opts.format, pcm.sampleRate);
+						else if (gapSamples) combinedEnc.append(gapSamples);
 						combinedEnc.append(pcm.audio);
 					} else {
 						if (!enc) enc = createEncoder(opts.format, pcm.sampleRate);
+						else if (gapSamples) enc.append(gapSamples);
 						enc.append(pcm.audio);
 					}
 				}

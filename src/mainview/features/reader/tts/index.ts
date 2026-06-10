@@ -25,4 +25,4 @@ export {
 	togglePlayPause,
 } from "./ttsEngine";
 export { useMediaSession } from "./mediaSession";
-export { useTtsStore } from "./ttsStore";
+export { MAX_SENTENCE_PAUSE_MS, useTtsStore } from "./ttsStore";

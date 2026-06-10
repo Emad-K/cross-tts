@@ -17,6 +17,8 @@ export type WebPersistedSlice = {
 	voice: string;
 	volumePct: number;
 	speed: number;
+	/** Silence inserted between sentences during playback, in ms (0–2000). */
+	sentencePauseMs: number;
 	/** Absolute path to the open document; content is read on demand, not stored in session. */
 	documentPath: string | null;
 	/** Active EPUB chapter manifest id; null for .txt or unknown. */
@@ -45,6 +47,7 @@ export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
 	voice: "af_heart",
 	volumePct: 80,
 	speed: 1,
+	sentencePauseMs: 0,
 	documentPath: null,
 	activeChapterId: null,
 	currentChunkIndex: 0,

@@ -1,4 +1,5 @@
 import {
+	AudioLines,
 	CheckCircle2,
 	Cpu,
 	Download,
@@ -57,7 +58,12 @@ import {
 } from "@/lib/desktopBridge";
 import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
-import { getActiveDevice, resetKokoroEngine } from "../tts";
+import {
+	getActiveDevice,
+	MAX_SENTENCE_PAUSE_MS,
+	resetKokoroEngine,
+	useTtsStore,
+} from "../tts";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
@@ -66,6 +72,7 @@ import { TtsRulesPanel } from "./TtsRulesPanel";
 
 type SectionId =
 	| "appearance"
+	| "playback"
 	| "storage"
 	| "performance"
 	| "shortcuts"
@@ -74,6 +81,7 @@ type SectionId =
 
 const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
 	{ id: "appearance", label: "Appearance", icon: Palette },
+	{ id: "playback", label: "Playback", icon: AudioLines },
 	{ id: "storage", label: "Storage", icon: FolderCog },
 	{ id: "performance", label: "Performance", icon: Zap },
 	{ id: "shortcuts", label: "Shortcuts", icon: Keyboard },
@@ -799,6 +807,66 @@ function UpdatesPanel() {
 	);
 }
 
+function formatPauseMs(ms: number): string {
+	if (ms === 0) return "Off";
+	if (ms >= 1000) {
+		return `${(ms / 1000).toFixed(2).replace(/\.?0+$/, "")} s`;
+	}
+	return `${ms} ms`;
+}
+
+function PlaybackPanel() {
+	const stored = useTtsStore((s) => s.sentencePauseMs);
+	const setSentencePauseMs = useTtsStore((s) => s.setSentencePauseMs);
+	// `null` while not dragging → show the stored value; a number while dragging.
+	const [draft, setDraft] = useState<number | null>(null);
+	const shown = draft ?? stored;
+
+	return (
+		<SectionPane
+			title="Playback"
+			description="How reading flows from sentence to sentence."
+		>
+			<div className="rounded-lg border border-border bg-muted/20 p-4">
+				<div className="flex items-center justify-between gap-4">
+					<span className="flex items-center gap-2 text-sm font-medium">
+						<AudioLines
+							className="size-4 text-muted-foreground"
+							aria-hidden
+						/>
+						Pause between sentences
+					</span>
+					<span className="text-xs font-medium tabular-nums text-muted-foreground">
+						{formatPauseMs(shown)}
+					</span>
+				</div>
+				<Slider
+					className="mt-4"
+					aria-label="Pause between sentences"
+					min={0}
+					max={MAX_SENTENCE_PAUSE_MS}
+					step={50}
+					value={[Math.min(shown, MAX_SENTENCE_PAUSE_MS)]}
+					onValueChange={(v) => setDraft(v[0] ?? 0)}
+					onValueCommit={(v) => {
+						setDraft(null);
+						setSentencePauseMs(v[0] ?? 0);
+					}}
+				/>
+				<div className="mt-2 flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+					<span>Off</span>
+					<span>{MAX_SENTENCE_PAUSE_MS / 1000} s</span>
+				</div>
+				<p className="mt-3 text-xs text-muted-foreground">
+					Adds a moment of silence after each sentence while listening — a
+					slower, more deliberate pace. Also applied to audiobook exports.
+					Applies from the next sentence; no restart needed.
+				</p>
+			</div>
+		</SectionPane>
+	);
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [section, setSection] = useState<SectionId>("appearance");
 	const hydrate = useAppSettingsStore((s) => s.hydrate);
@@ -855,6 +923,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 				{/* Right content pane. */}
 				<div className="min-h-0 min-w-0 flex-1">
 					{section === "appearance" ? <AppearancePanel /> : null}
+					{section === "playback" ? <PlaybackPanel /> : null}
 					{section === "storage" ? <StoragePanel /> : null}
 					{section === "performance" ? <PerformancePanel /> : null}
 					{section === "shortcuts" ? <ShortcutsPanel /> : null}

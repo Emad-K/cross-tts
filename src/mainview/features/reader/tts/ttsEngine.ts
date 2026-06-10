@@ -13,6 +13,7 @@ import {
 	useTtsRulesStore,
 } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
+import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import { AudioCache, audioCacheKey } from "./ttsAudioCache";
 import { useSweepStore } from "./sweepStore";
 import { useTtsStore } from "./ttsStore";
@@ -586,6 +587,23 @@ export function toggleMute(): void {
 	}
 }
 
+/**
+ * Wait out the configured inter-sentence pause. Counts down only while
+ * actually playing (a user pause freezes the gap too) and returns at once
+ * when the loop is aborted (seek, chapter change, stop).
+ */
+async function waitSentencePause(signal: AbortSignal): Promise<void> {
+	const total = useTtsStore.getState().sentencePauseMs;
+	if (total <= 0) return;
+	const TICK_MS = 50;
+	let remaining = total;
+	while (remaining > 0 && !signal.aborted) {
+		await new Promise((resolve) => setTimeout(resolve, TICK_MS));
+		if (signal.aborted) return;
+		if (useTtsStore.getState().playback === "playing") remaining -= TICK_MS;
+	}
+}
+
 async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	if (useTtsStore.getState().chunks.length === 0) return;
 
@@ -660,6 +678,11 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			continue;
 		}
 
+		// Feed the listen-time estimate with the measured chars→audio rate.
+		useListenEstimateStore
+			.getState()
+			.recordSample(chunk.text.length, buffer.duration, snap.speed);
+
 		// Warm the cache for upcoming chunks so playback never waits on
 		// synthesis, even when the current chunk is short.
 		prefetchChunks(
@@ -679,6 +702,12 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		await playBuffer(ctx, gain, buffer, signal);
 
 		if (signal.aborted) break;
+
+		// Breathing room between sentences (skipped at the chapter's end).
+		if (idx + 1 < useTtsStore.getState().chunks.length) {
+			await waitSentencePause(signal);
+			if (signal.aborted) break;
+		}
 
 		idx += 1;
 		useTtsStore.setState({ currentChunkIndex: idx });
