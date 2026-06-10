@@ -16,20 +16,34 @@ export type BookProgress = {
 	speed?: number;
 	/** Epoch ms of the last update; used for ordering and pruning. */
 	updatedAt: number;
+	/** User-assigned series name (e.g. "Discworld"). */
+	series?: string;
+	/** User-assigned tags for filtering the library. */
+	tags?: string[];
 };
 
-export const MAX_RECENT_BOOKS = 24;
+export const MAX_RECENT_BOOKS = 1000;
 
 /**
  * Insert/replace a book's progress, then keep only the `max` most-recently
  * updated entries. Pure — callers pass `updatedAt` so this stays deterministic.
+ *
+ * User-curated metadata (`tags`/`series`) is preserved from the existing entry
+ * when the incoming one omits it: progress saves rebuild entries from reader
+ * state and must not wipe library edits.
  */
 export function upsertRecentBook(
 	books: Record<string, BookProgress>,
 	entry: BookProgress,
 	max: number = MAX_RECENT_BOOKS,
 ): Record<string, BookProgress> {
-	const next: Record<string, BookProgress> = { ...books, [entry.path]: entry };
+	const existing = books[entry.path];
+	const merged: BookProgress = {
+		...entry,
+		series: entry.series ?? existing?.series,
+		tags: entry.tags ?? existing?.tags,
+	};
+	const next: Record<string, BookProgress> = { ...books, [entry.path]: merged };
 	const paths = Object.keys(next);
 	if (paths.length <= max) return next;
 	const keep = paths
@@ -77,7 +91,21 @@ function coerceBookProgress(raw: unknown): BookProgress | null {
 				: undefined,
 		updatedAt:
 			typeof o.updatedAt === "number" && o.updatedAt >= 0 ? o.updatedAt : 0,
+		series:
+			typeof o.series === "string" && o.series.length > 0
+				? o.series
+				: undefined,
+		tags: coerceTags(o.tags),
 	};
+}
+
+/** Keep only non-empty string tags; missing/empty/malformed → undefined. */
+function coerceTags(raw: unknown): string[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	const tags = raw.filter(
+		(t): t is string => typeof t === "string" && t.length > 0,
+	);
+	return tags.length > 0 ? tags : undefined;
 }
 
 /** Validate a persisted books map, dropping malformed entries and capping size. */
