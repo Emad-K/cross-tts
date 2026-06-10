@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppApi, FoundInPageResult } from "../shared/appRpc";
+import type { CrashRecord } from "../shared/crashReport";
 import type { ForwardedLogEntry } from "../shared/logEntry";
 import type { ModelProgress } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import type { UpdateStatus } from "../shared/updateStatus";
+import type { WatchedFileCandidate } from "../shared/watchedFolders";
 
 /**
  * Typed RPC bridge between the renderer and the Electron main process.
@@ -37,9 +39,12 @@ const api: AppApi = {
 		setAppearance: (params) => ipcRenderer.invoke("setAppearance", params),
 		chooseExportFolder: () => ipcRenderer.invoke("chooseExportFolder"),
 		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
+		appendAudioFile: (params) => ipcRenderer.invoke("appendAudioFile", params),
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
+		getBookCoverBytes: (params) =>
+			ipcRenderer.invoke("getBookCoverBytes", params),
 		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
 		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
@@ -50,6 +55,15 @@ const api: AppApi = {
 		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
 		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
 		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),
+		addWatchedFolder: () => ipcRenderer.invoke("addWatchedFolder"),
+		removeWatchedFolder: (params) =>
+			ipcRenderer.invoke("removeWatchedFolder", params),
+		getWatchedFileCandidates: () =>
+			ipcRenderer.invoke("getWatchedFileCandidates"),
+		getPendingCrashReports: () =>
+			ipcRenderer.invoke("getPendingCrashReports"),
+		resolveCrashReports: (params) =>
+			ipcRenderer.invoke("resolveCrashReports", params),
 	},
 	getPathForFile: (file: File) => {
 		try {
@@ -96,6 +110,22 @@ const api: AppApi = {
 		ipcRenderer.on("app:update-status", handler);
 		return () => {
 			ipcRenderer.removeListener("app:update-status", handler);
+		};
+	},
+	onWatchedFiles: (listener: (candidates: WatchedFileCandidate[]) => void) => {
+		const handler = (_event: unknown, candidates: WatchedFileCandidate[]) =>
+			listener(candidates);
+		ipcRenderer.on("app:watched-files", handler);
+		return () => {
+			ipcRenderer.removeListener("app:watched-files", handler);
+		};
+	},
+	onCrashReports: (listener: (records: CrashRecord[]) => void) => {
+		const handler = (_event: unknown, records: CrashRecord[]) =>
+			listener(records);
+		ipcRenderer.on("app:crash-reports", handler);
+		return () => {
+			ipcRenderer.removeListener("app:crash-reports", handler);
 		};
 	},
 };

@@ -14,6 +14,8 @@ import type {
 } from "@shared/documentRpc";
 import type { AppSessionFileV1, WebPersistedSlice } from "@shared/appSession";
 import type { UpdateStatus } from "@shared/updateStatus";
+import type { WatchedFileCandidate } from "@shared/watchedFolders";
+import type { CrashRecord } from "@shared/crashReport";
 
 /**
  * Typed bridge to the Electron main process. The preload script exposes the
@@ -135,6 +137,16 @@ export async function writeAudioFile(
 	return b.request.writeAudioFile({ dir, fileName, data });
 }
 
+export async function appendAudioFile(
+	dir: string,
+	fileName: string,
+	data: Uint8Array,
+): Promise<{ ok: boolean; path: string | null; error?: string }> {
+	const b = bridge();
+	if (!b) return { ok: false, path: null, error: "Not in desktop app" };
+	return b.request.appendAudioFile({ dir, fileName, data });
+}
+
 export async function audioFileExists(
 	dir: string,
 	fileName: string,
@@ -148,6 +160,14 @@ export async function getBookCover(filePath: string): Promise<string | null> {
 	const b = bridge();
 	if (!b) return null;
 	return b.request.getBookCover({ filePath });
+}
+
+export async function getBookCoverBytes(
+	filePath: string,
+): Promise<{ data: Uint8Array; mime: string } | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.getBookCoverBytes({ filePath });
 }
 
 export async function revealPath(path: string): Promise<void> {
@@ -314,4 +334,64 @@ export function subscribeToMainProcessLogs(
 	const b = bridge();
 	if (!b?.onLog) return () => {};
 	return b.onLog(listener);
+}
+
+/** Pick a folder to watch for new books; null on cancel / web. */
+export async function addWatchedFolder(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.addWatchedFolder();
+}
+
+/** Stop watching a folder; null on web. */
+export async function removeWatchedFolder(
+	dir: string,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.removeWatchedFolder({ dir });
+}
+
+/** Scan watched folders now; empty on web. */
+export async function getWatchedFileCandidates(): Promise<
+	WatchedFileCandidate[]
+> {
+	const b = bridge();
+	if (!b) return [];
+	return b.request.getWatchedFileCandidates();
+}
+
+/** Subscribe to watched-folder scan snapshots. No-op (noop unsubscribe) on web. */
+export function subscribeToWatchedFiles(
+	listener: (candidates: WatchedFileCandidate[]) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onWatchedFiles) return () => {};
+	return b.onWatchedFiles(listener);
+}
+
+/** Unreported crashes from previous runs; empty on web or when opted out. */
+export async function getPendingCrashReports(): Promise<CrashRecord[]> {
+	const b = bridge();
+	if (!b) return [];
+	return b.request.getPendingCrashReports();
+}
+
+/** Report (opens a prefilled GitHub issue) or dismiss the stored crashes. */
+export async function resolveCrashReports(params: {
+	action: "report" | "dismiss";
+	dontAskAgain: boolean;
+}): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.resolveCrashReports(params);
+}
+
+/** Subscribe to crash reports pushed on launch. No-op on web. */
+export function subscribeToCrashReports(
+	listener: (records: CrashRecord[]) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onCrashReports) return () => {};
+	return b.onCrashReports(listener);
 }

@@ -36,6 +36,7 @@ import {
 	useTtsStore,
 } from "./tts";
 import { KOKORO_VOICE_IDS } from "./tts/kokoroVoices";
+import { ListenTimeRemaining } from "./listenEstimate/ListenTimeRemaining";
 import { SleepTimerControl } from "./sleepTimer/SleepTimerControl";
 
 const SPEEDS = ["0.75x", "1x", "1.25x", "1.5x", "2x"] as const;
@@ -160,7 +161,10 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							{statusLabel}
 						</span>
 					) : null}
-					<span id={`${progressId}-total`}>{totalLabel}</span>
+					<span className="inline-flex min-w-0 items-center gap-3">
+						<ListenTimeRemaining />
+						<span id={`${progressId}-total`}>{totalLabel}</span>
+					</span>
 				</div>
 				<div className="mb-4 sm:mb-5">
 					<Slider

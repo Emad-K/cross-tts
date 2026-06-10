@@ -2,6 +2,7 @@ import { Bookmark, BookMarked } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { LoadedDocument } from "./types";
+import { ListenEstimateSync } from "./listenEstimate/ListenEstimateSync";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
@@ -111,6 +112,10 @@ export function ReaderShell({
 			<TtsSettingSync />
 			<TtsRulesSettingSync />
 			<SleepTimerEffect />
+			<ListenEstimateSync
+				document={document}
+				activeChapterId={activeChapterId}
+			/>
 			<div
 				className={cn(
 					"flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background text-foreground",

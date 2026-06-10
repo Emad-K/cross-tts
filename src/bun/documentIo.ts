@@ -77,6 +77,17 @@ export async function getBookCover(filePath: string): Promise<string | null> {
 	}
 }
 
+/**
+ * Full-size raw cover bytes (no thumbnailing), for embedding into exported
+ * audiobooks. Returns null for non-EPUBs or books without a cover.
+ */
+export async function getBookCoverBytes(
+	filePath: string,
+): Promise<{ data: Uint8Array; mime: string } | null> {
+	if (!isEpubPath(filePath)) return null;
+	return readEpubCoverBytes(filePath);
+}
+
 function isEpubPath(path: string): boolean {
 	return path.toLowerCase().endsWith(".epub");
 }

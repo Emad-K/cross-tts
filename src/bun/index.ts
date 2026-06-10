@@ -1,11 +1,13 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
+	addWatchedFolder,
 	appConfigInfo,
 	dataDir,
+	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
 	setCpuThreads,
@@ -41,15 +43,40 @@ import {
 import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getBookCover,
+	getBookCoverBytes,
 	getEpubChapterContent,
 	pickDocument,
 	readDocumentAtPath,
 } from "./documentIo";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
 import {
+	pushWatchedFiles,
+	scanWatchedFolders,
+	setWatchedFilesTarget,
+} from "./watchedFolders";
+import {
 	startKokoroHubServer,
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
+import {
+	initCrashCapture,
+	notifyCrashReportsOnLoad,
+	pendingCrashReports,
+	resolveCrashReports,
+} from "./crashReports";
+
+// TEST-ONLY HOOK (e2e/): point Electron's userData at a sandbox directory so
+// the Playwright smoke test runs against a clean config/session. Has no effect
+// unless the env var is set, which only the e2e harness does.
+const e2eUserData = process.env["CROSS_TTS_E2E_USER_DATA"];
+if (e2eUserData) {
+	app.setPath("userData", e2eUserData);
+}
+
+// Last-resort crash capture, installed as early as possible: records go to
+// <dataDir>/crashes/ and the user is asked (opt-in) on the next launch whether
+// to report them on GitHub. Nothing is ever sent automatically.
+initCrashCapture();
 
 // Re-enable SharedArrayBuffer without requiring cross-origin isolation. ONNX
 // Runtime's multi-threaded wasm backend needs SAB; without this it silently
@@ -191,6 +218,25 @@ function registerRpcHandlers(): void {
 		},
 	);
 	ipcMain.handle(
+		"appendAudioFile",
+		(
+			_event,
+			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
+		) => {
+			try {
+				const path = join(dir, fileName);
+				appendFileSync(path, Buffer.from(data));
+				return { ok: true, path };
+			} catch (e) {
+				return {
+					ok: false,
+					path: null,
+					error: e instanceof Error ? e.message : String(e),
+				};
+			}
+		},
+	);
+	ipcMain.handle(
 		"audioFileExists",
 		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
 			existsSync(join(dir, fileName)),
@@ -198,6 +244,10 @@ function registerRpcHandlers(): void {
 	ipcMain.handle(
 		"getBookCover",
 		(_event, { filePath }: { filePath: string }) => getBookCover(filePath),
+	);
+	ipcMain.handle(
+		"getBookCoverBytes",
+		(_event, { filePath }: { filePath: string }) => getBookCoverBytes(filePath),
 	);
 	ipcMain.handle(
 		"findInPage",
@@ -322,6 +372,33 @@ function registerRpcHandlers(): void {
 		app.relaunch();
 		app.exit(0);
 	});
+	ipcMain.handle("addWatchedFolder", async () => {
+		if (!mainWindow) return null;
+		const result = await dialog.showOpenDialog(mainWindow, {
+			title: "Choose a folder to watch for new books",
+			properties: ["openDirectory", "createDirectory"],
+		});
+		if (result.canceled || result.filePaths.length === 0) return null;
+		addWatchedFolder(result.filePaths[0]!);
+		// Surface anything already in the folder right away.
+		pushWatchedFiles();
+		return appConfigInfo();
+	});
+	ipcMain.handle("removeWatchedFolder", (_event, { dir }: { dir: string }) => {
+		removeWatchedFolder(dir);
+		return appConfigInfo();
+	});
+	ipcMain.handle("getWatchedFileCandidates", () => scanWatchedFolders());
+	ipcMain.handle("getPendingCrashReports", () => pendingCrashReports());
+	ipcMain.handle(
+		"resolveCrashReports",
+		(
+			_event,
+			params: { action: "report" | "dismiss"; dontAskAgain: boolean },
+		) => {
+			resolveCrashReports(params);
+		},
+	);
 }
 
 function createWindow(): void {
@@ -370,11 +447,14 @@ function createWindow(): void {
 	setLogTarget(mainWindow);
 	setShortcutTarget(mainWindow);
 	setUpdateTarget(mainWindow);
+	setWatchedFilesTarget(mainWindow);
+	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
 		setUpdateTarget(null);
+		setWatchedFilesTarget(null);
 		mainWindow = null;
 	});
 }

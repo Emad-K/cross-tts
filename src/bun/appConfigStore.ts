@@ -20,6 +20,7 @@ import {
 	type ShortcutAction,
 	coerceShortcutBindings,
 } from "../shared/shortcuts";
+import { coerceWatchedFolders } from "../shared/watchedFolders";
 
 const CONFIG_NAME = "app-config.json";
 const MODEL_SUBDIR = "kokoro-hf-hub";
@@ -81,8 +82,13 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.autoUpdate === "boolean") {
 			next.autoUpdate = o.autoUpdate;
 		}
+		if (typeof o.crashPromptDisabled === "boolean") {
+			next.crashPromptDisabled = o.crashPromptDisabled;
+		}
 		next.shortcuts = coerceShortcutBindings(o.shortcuts);
 		next.appearance = coerceAppearance(o.appearance);
+		next.watchedFolders =
+			coerceWatchedFolders(o.watchedFolders).filter(isAbsoluteUsableDir);
 		cached = next;
 		return cached;
 	} catch {
@@ -146,6 +152,38 @@ export function autoUpdatePref(): boolean | null {
 
 export function setAutoUpdate(value: boolean): void {
 	persist({ ...loadAppConfig(), autoUpdate: value });
+}
+
+/** Folders scanned for new documents to auto-add to the library. */
+export function watchedFolders(): string[] {
+	return loadAppConfig().watchedFolders;
+}
+
+/** Add one absolute folder to the watched list (no-op if already present). */
+export function addWatchedFolder(dir: string): void {
+	if (!isAbsoluteUsableDir(dir)) return;
+	const config = loadAppConfig();
+	if (config.watchedFolders.includes(dir)) return;
+	persist({ ...config, watchedFolders: [...config.watchedFolders, dir] });
+}
+
+/** Remove one folder from the watched list. */
+export function removeWatchedFolder(dir: string): void {
+	const config = loadAppConfig();
+	if (!config.watchedFolders.includes(dir)) return;
+	persist({
+		...config,
+		watchedFolders: config.watchedFolders.filter((d) => d !== dir),
+	});
+}
+
+/** "Don't ask again" for the post-crash report dialog. */
+export function crashPromptDisabled(): boolean {
+	return loadAppConfig().crashPromptDisabled;
+}
+
+export function setCrashPromptDisabled(value: boolean): void {
+	persist({ ...loadAppConfig(), crashPromptDisabled: value });
 }
 
 export function setShortcutBinding(action: ShortcutAction, accel: string): void {
@@ -214,6 +252,7 @@ export function appConfigInfo(): AppConfigInfo {
 		shortcuts: config.shortcuts,
 		autoUpdate: config.autoUpdate,
 		appearance: config.appearance,
+		watchedFolders: config.watchedFolders,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
 	};

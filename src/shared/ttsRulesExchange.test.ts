@@ -52,10 +52,15 @@ describe("ttsRulesExchange", () => {
 			"replace",
 			(prefix) => `${prefix}-${++id}`,
 		);
-		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(7);
+		const defaults = defaultTtsTextRulesState();
+		expect(merged.regexRules.filter((r) => r.builtIn)).toHaveLength(
+			defaults.regexRules.filter((r) => r.builtIn).length,
+		);
 		expect(merged.regexRules.filter((r) => !r.builtIn)).toHaveLength(0);
-		// 11 builtin pronunciations (qi + the default-off CJK pack) + imported gif.
-		expect(merged.pronunciationRules.filter((r) => r.builtIn)).toHaveLength(11);
+		// All builtin pronunciations (qi + the default-off pinyin pack) + imported gif.
+		expect(merged.pronunciationRules.filter((r) => r.builtIn)).toHaveLength(
+			defaults.pronunciationRules.filter((r) => r.builtIn).length,
+		);
 		expect(merged.pronunciationRules.find((r) => r.word === "gif")).toBeTruthy();
 		expect(merged.pronunciationRules.find((r) => r.id === "builtin-pron-qi")).toBeTruthy();
 	});

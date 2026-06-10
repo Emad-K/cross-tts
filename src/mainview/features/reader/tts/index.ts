@@ -14,6 +14,7 @@ export {
 	resumePlayback,
 	seekProgressPercent,
 	seekToChunkAndMaybePlay,
+	seekToChunkAndPlay,
 	setChapterPlaybackFinishedHandler,
 	setVolumeLive,
 	skipChunk,
@@ -23,4 +24,5 @@ export {
 	toggleMute,
 	togglePlayPause,
 } from "./ttsEngine";
-export { useTtsStore } from "./ttsStore";
+export { useMediaSession } from "./mediaSession";
+export { MAX_SENTENCE_PAUSE_MS, useTtsStore } from "./ttsStore";

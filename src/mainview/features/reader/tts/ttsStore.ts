@@ -22,6 +22,8 @@ type TtsState = {
 	voice: KokoroVoiceId;
 	volumePct: number;
 	speed: number;
+	/** Extra silence inserted between sentences during playback, in ms. */
+	sentencePauseMs: number;
 	modelPhase: ModelPhase;
 	modelError: string | null;
 	modelProgress: number | null;
@@ -42,6 +44,7 @@ type TtsState = {
 	setVoice: (id: KokoroVoiceId) => void;
 	setVolumePct: (v: number) => void;
 	setSpeed: (s: number) => void;
+	setSentencePauseMs: (ms: number) => void;
 	setModelPhase: (p: ModelPhase, err?: string | null) => void;
 	setModelProgress: (v: number | null) => void;
 	setVoiceDownload: (
@@ -69,6 +72,14 @@ type TtsState = {
 
 const initialVoice: KokoroVoiceId = "af_heart";
 
+export const MAX_SENTENCE_PAUSE_MS = 2000;
+
+/** Clamp an inter-sentence pause to the supported 0–2000ms range. */
+export function clampSentencePauseMs(ms: number): number {
+	if (!Number.isFinite(ms)) return 0;
+	return Math.round(Math.min(MAX_SENTENCE_PAUSE_MS, Math.max(0, ms)));
+}
+
 export const useTtsStore = create<TtsState>((set, get) => ({
 	sourceText: "",
 	chunks: [],
@@ -76,6 +87,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	voice: initialVoice,
 	volumePct: 80,
 	speed: 1,
+	sentencePauseMs: 0,
 	modelPhase: "idle",
 	modelError: null,
 	modelProgress: null,
@@ -144,6 +156,8 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	setVolumePct: (v) => set({ volumePct: Math.round(Math.min(100, Math.max(0, v))) }),
 
 	setSpeed: (s) => set({ speed: Math.min(2, Math.max(0.5, s)) }),
+
+	setSentencePauseMs: (ms) => set({ sentencePauseMs: clampSentencePauseMs(ms) }),
 
 	setModelPhase: (modelPhase, err = null) =>
 		set({

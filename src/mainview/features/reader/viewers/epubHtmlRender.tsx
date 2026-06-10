@@ -25,6 +25,7 @@ import {
 import type { TtsChunk } from "@/features/reader/tts/chunkText";
 import { SWEEP_CLASS } from "@/features/reader/tts/sweepStore";
 import { cn } from "@/lib/utils";
+import { isTextSelectionClick } from "./chunkClickGuard";
 
 export type EpubReadAlongProps = {
 	chunks: TtsChunk[];
@@ -119,7 +120,10 @@ function renderTextWithChunks(
 					active && SWEEP_CLASS,
 					!active && "hover:bg-muted/40",
 				)}
-				onClick={() => ctx.onChunkClick?.(chunk.index)}
+				onClick={() => {
+					if (isTextSelectionClick(window.getSelection())) return;
+					ctx.onChunkClick?.(chunk.index);
+				}}
 				onKeyDown={(e) => {
 					if (e.key === "Enter" || e.key === " ") {
 						e.preventDefault();

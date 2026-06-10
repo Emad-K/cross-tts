@@ -8,7 +8,9 @@ import type {
 } from "./modelAssets";
 import type { ShortcutAction } from "./shortcuts";
 import type { UpdateStatus } from "./updateStatus";
+import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
+import type { CrashRecord } from "./crashReport";
 import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
@@ -110,6 +112,11 @@ export type AppRpcSchema = {
 			params: { dir: string; fileName: string; data: Uint8Array };
 			response: { ok: boolean; path: string | null; error?: string };
 		};
+		/** Append bytes to an audiobook file (chunked writes for large files). */
+		appendAudioFile: {
+			params: { dir: string; fileName: string; data: Uint8Array };
+			response: { ok: boolean; path: string | null; error?: string };
+		};
 		/** Whether an audiobook track already exists (used to resume an export). */
 		audioFileExists: {
 			params: { dir: string; fileName: string };
@@ -119,6 +126,11 @@ export type AppRpcSchema = {
 		getBookCover: {
 			params: { filePath: string };
 			response: string | null;
+		};
+		/** Full-size raw cover image bytes (for embedding into audiobooks). */
+		getBookCoverBytes: {
+			params: { filePath: string };
+			response: { data: Uint8Array; mime: string } | null;
 		};
 		/** Find text in the current page; results arrive via onFoundInPage. */
 		findInPage: {
@@ -170,6 +182,31 @@ export type AppRpcSchema = {
 			params: void;
 			response: void;
 		};
+		/** Open a folder picker and add the selection to the watched-folder list. */
+		addWatchedFolder: {
+			params: void;
+			response: AppConfigInfo | null;
+		};
+		/** Remove one folder from the watched-folder list. */
+		removeWatchedFolder: {
+			params: { dir: string };
+			response: AppConfigInfo;
+		};
+		/** Scan all watched folders now; further snapshots arrive via onWatchedFiles. */
+		getWatchedFileCandidates: {
+			params: void;
+			response: WatchedFileCandidate[];
+		};
+		/** Unreported crashes from previous runs (empty if "don't ask again"). */
+		getPendingCrashReports: {
+			params: void;
+			response: CrashRecord[];
+		};
+		/** User decision on the crash dialog; "report" opens a prefilled GitHub issue. */
+		resolveCrashReports: {
+			params: { action: "report" | "dismiss"; dontAskAgain: boolean };
+			response: void;
+		};
 	};
 };
 
@@ -199,6 +236,12 @@ export type AppApi = {
 	onFoundInPage: (listener: (result: FoundInPageResult) => void) => () => void;
 	/** Subscribe to update-status changes from the main process. */
 	onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
+	/** Subscribe to watched-folder scan snapshots from the main process. */
+	onWatchedFiles: (
+		listener: (candidates: WatchedFileCandidate[]) => void,
+	) => () => void;
+	/** Subscribe to unreported crashes pushed on launch from the main process. */
+	onCrashReports: (listener: (records: CrashRecord[]) => void) => () => void;
 };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */

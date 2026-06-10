@@ -1,7 +1,11 @@
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseTtsRulesExport } from "@shared/ttsRulesExchange";
-import type { PronunciationRule, RegexReplaceRule } from "@shared/ttsTextRules";
+import {
+	BUILTIN_GROUP_DESCRIPTIONS,
+	type PronunciationRule,
+	type RegexReplaceRule,
+} from "@shared/ttsTextRules";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -100,6 +104,68 @@ function RuleRow({
 				<div className="flex shrink-0 items-center gap-0.5">{actions}</div>
 			) : null}
 		</li>
+	);
+}
+
+/** Split rules into the flat list and builtin preset groups (insertion order). */
+function splitRuleGroups<T extends { group?: string }>(
+	rules: T[],
+): { ungrouped: T[]; groups: Array<[string, T[]]> } {
+	const ungrouped: T[] = [];
+	const groups = new Map<string, T[]>();
+	for (const rule of rules) {
+		if (!rule.group) {
+			ungrouped.push(rule);
+			continue;
+		}
+		const list = groups.get(rule.group);
+		if (list) list.push(rule);
+		else groups.set(rule.group, [rule]);
+	}
+	return { ungrouped, groups: [...groups.entries()] };
+}
+
+/** Collapsible sub-section for a builtin preset group (default collapsed). */
+function RuleGroupSection({
+	title,
+	enabledCount,
+	totalCount,
+	description,
+	children,
+}: {
+	title: string;
+	enabledCount: number;
+	totalCount: number;
+	description?: string;
+	children: ReactNode;
+}) {
+	return (
+		<Accordion type="multiple" className="mt-1.5 w-full">
+			<AccordionItem
+				value={title}
+				className="rounded-md border border-border bg-muted/10 px-2"
+			>
+				<AccordionTrigger className="py-2 text-sm font-medium hover:no-underline">
+					<span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+						<span>{title}</span>
+						<span
+							className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal tabular-nums text-muted-foreground"
+							aria-hidden
+						>
+							{enabledCount}/{totalCount} on
+						</span>
+					</span>
+				</AccordionTrigger>
+				<AccordionContent className="pb-2">
+					{description ? (
+						<p className="pb-2 text-xs leading-relaxed text-muted-foreground">
+							{description}
+						</p>
+					) : null}
+					<ul className="space-y-1.5">{children}</ul>
+				</AccordionContent>
+			</AccordionItem>
+		</Accordion>
 	);
 }
 
@@ -346,6 +412,11 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 	);
 	const importUserRules = useTtsRulesStore((s) => s.importUserRules);
 
+	const { ungrouped: ungroupedRegexRules, groups: regexGroups } =
+		splitRuleGroups(regexRules);
+	const { ungrouped: ungroupedPronRules, groups: pronGroups } =
+		splitRuleGroups(pronunciationRules);
+
 	const importInputRef = useRef<HTMLInputElement>(null);
 	const [importError, setImportError] = useState<string | null>(null);
 	const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -589,6 +660,133 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 		}
 	};
 
+	const renderRegexRule = (rule: RegexReplaceRule) => (
+		<li key={rule.id} className="space-y-1.5">
+			<RuleRow
+				enabled={rule.enabled}
+				onEnabledChange={(v) => setRegexEnabled(rule.id, v)}
+				checkboxId={`regex-en-${rule.id}`}
+				title={
+					<>
+						{rule.label}
+						{rule.builtIn && !rule.group ? (
+							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
+								(default)
+							</span>
+						) : null}
+						{rule.caseSensitive ? (
+							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
+								(case sensitive)
+							</span>
+						) : null}
+					</>
+				}
+				actions={
+					rule.builtIn ? null : (
+						<>
+							<IconAction
+								label={`Edit ${rule.label}`}
+								onClick={() => openEditRegex(rule)}
+							>
+								<Pencil className="size-4" />
+							</IconAction>
+							<IconAction
+								label={`Remove ${rule.label}`}
+								destructive
+								onClick={() => {
+									if (regexFormKey === rule.id) {
+										closeRegexForm();
+									}
+									removeRegexRule(rule.id);
+								}}
+							>
+								<Trash2 className="size-4" />
+							</IconAction>
+						</>
+					)
+				}
+			/>
+			{regexFormKey === rule.id ? (
+				<div ref={inlineEditRef} className="scroll-mt-2">
+					<InlineRegexForm
+						draft={regexDraft}
+						error={regexError}
+						submitLabel="Save"
+						onDraftChange={(patch) => {
+							setRegexDraft((d) => ({ ...d, ...patch }));
+							setRegexError(null);
+						}}
+						onSubmit={submitRegexEdit}
+						onCancel={closeRegexForm}
+					/>
+				</div>
+			) : null}
+		</li>
+	);
+
+	const renderPronRule = (rule: PronunciationRule) => (
+		<li key={rule.id} className="space-y-1.5">
+			<RuleRow
+				enabled={rule.enabled}
+				onEnabledChange={(v) => setPronunciationEnabled(rule.id, v)}
+				checkboxId={`pron-en-${rule.id}`}
+				title={
+					<>
+						<span>{rule.word}</span>
+						<span className="font-normal text-muted-foreground">
+							{" "}
+							→ {rule.phonetic}
+						</span>
+						{rule.builtIn && !rule.group ? (
+							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
+								(default)
+							</span>
+						) : null}
+					</>
+				}
+				actions={
+					rule.builtIn ? null : (
+						<>
+							<IconAction
+								label={`Edit ${rule.word}`}
+								onClick={() => openEditPron(rule)}
+							>
+								<Pencil className="size-4" />
+							</IconAction>
+							<IconAction
+								label={`Remove ${rule.word}`}
+								destructive
+								onClick={() => {
+									if (pronFormKey === rule.id) {
+										closePronForm();
+									}
+									removePronunciationRule(rule.id);
+								}}
+							>
+								<Trash2 className="size-4" />
+							</IconAction>
+						</>
+					)
+				}
+			/>
+			{pronFormKey === rule.id ? (
+				<div ref={inlineEditRef} className="scroll-mt-2">
+					<InlinePronForm
+						draft={pronDraft}
+						error={pronError}
+						submitLabel="Save"
+						onDraftChange={(patch) => {
+							setPronDraft((d) => ({ ...d, ...patch }));
+							setPronError(null);
+						}}
+						onSubmit={submitPronEdit}
+						onCancel={closePronForm}
+					/>
+				</div>
+			) : null}
+		</li>
+	);
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4">
@@ -663,71 +861,22 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 								regexFormKey === "add" ? closeRegexForm() : openAddRegex()
 							}
 							list={
-								<ul className="space-y-1.5">
-									{regexRules.map((rule) => (
-										<li key={rule.id} className="space-y-1.5">
-											<RuleRow
-												enabled={rule.enabled}
-												onEnabledChange={(v) => setRegexEnabled(rule.id, v)}
-												checkboxId={`regex-en-${rule.id}`}
-												title={
-													<>
-														{rule.label}
-														{rule.builtIn ? (
-															<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-																(default)
-															</span>
-														) : null}
-														{rule.caseSensitive ? (
-															<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-																(case sensitive)
-															</span>
-														) : null}
-													</>
-												}
-												actions={
-													rule.builtIn ? null : (
-														<>
-															<IconAction
-																label={`Edit ${rule.label}`}
-																onClick={() => openEditRegex(rule)}
-															>
-																<Pencil className="size-4" />
-															</IconAction>
-															<IconAction
-																label={`Remove ${rule.label}`}
-																destructive
-																onClick={() => {
-																	if (regexFormKey === rule.id) {
-																		closeRegexForm();
-																	}
-																	removeRegexRule(rule.id);
-																}}
-															>
-																<Trash2 className="size-4" />
-															</IconAction>
-														</>
-													)
-												}
-											/>
-											{regexFormKey === rule.id ? (
-												<div ref={inlineEditRef} className="scroll-mt-2">
-													<InlineRegexForm
-														draft={regexDraft}
-														error={regexError}
-														submitLabel="Save"
-														onDraftChange={(patch) => {
-															setRegexDraft((d) => ({ ...d, ...patch }));
-															setRegexError(null);
-														}}
-														onSubmit={submitRegexEdit}
-														onCancel={closeRegexForm}
-													/>
-												</div>
-											) : null}
-										</li>
+								<>
+									<ul className="space-y-1.5">
+										{ungroupedRegexRules.map(renderRegexRule)}
+									</ul>
+									{regexGroups.map(([group, rules]) => (
+										<RuleGroupSection
+											key={group}
+											title={group}
+											enabledCount={rules.filter((r) => r.enabled).length}
+											totalCount={rules.length}
+											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+										>
+											{rules.map(renderRegexRule)}
+										</RuleGroupSection>
 									))}
-								</ul>
+								</>
 							}
 							footer={
 								regexFormKey === "add" ? (
@@ -758,72 +907,22 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 								pronFormKey === "add" ? closePronForm() : openAddPron()
 							}
 							list={
-								<ul className="space-y-1.5">
-									{pronunciationRules.map((rule) => (
-										<li key={rule.id} className="space-y-1.5">
-											<RuleRow
-												enabled={rule.enabled}
-												onEnabledChange={(v) =>
-													setPronunciationEnabled(rule.id, v)
-												}
-												checkboxId={`pron-en-${rule.id}`}
-												title={
-													<>
-														<span>{rule.word}</span>
-														<span className="font-normal text-muted-foreground">
-															{" "}
-															→ {rule.phonetic}
-														</span>
-														{rule.builtIn ? (
-															<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-																(default)
-															</span>
-														) : null}
-													</>
-												}
-												actions={
-													rule.builtIn ? null : (
-														<>
-															<IconAction
-																label={`Edit ${rule.word}`}
-																onClick={() => openEditPron(rule)}
-															>
-																<Pencil className="size-4" />
-															</IconAction>
-															<IconAction
-																label={`Remove ${rule.word}`}
-																destructive
-																onClick={() => {
-																	if (pronFormKey === rule.id) {
-																		closePronForm();
-																	}
-																	removePronunciationRule(rule.id);
-																}}
-															>
-																<Trash2 className="size-4" />
-															</IconAction>
-														</>
-													)
-												}
-											/>
-											{pronFormKey === rule.id ? (
-												<div ref={inlineEditRef} className="scroll-mt-2">
-													<InlinePronForm
-														draft={pronDraft}
-														error={pronError}
-														submitLabel="Save"
-														onDraftChange={(patch) => {
-															setPronDraft((d) => ({ ...d, ...patch }));
-															setPronError(null);
-														}}
-														onSubmit={submitPronEdit}
-														onCancel={closePronForm}
-													/>
-												</div>
-											) : null}
-										</li>
+								<>
+									<ul className="space-y-1.5">
+										{ungroupedPronRules.map(renderPronRule)}
+									</ul>
+									{pronGroups.map(([group, rules]) => (
+										<RuleGroupSection
+											key={group}
+											title={group}
+											enabledCount={rules.filter((r) => r.enabled).length}
+											totalCount={rules.length}
+											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+										>
+											{rules.map(renderPronRule)}
+										</RuleGroupSection>
 									))}
-								</ul>
+								</>
 							}
 							footer={
 								pronFormKey === "add" ? (

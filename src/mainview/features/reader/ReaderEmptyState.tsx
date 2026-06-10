@@ -1,4 +1,4 @@
-import { ArrowDownUp, BookOpen, FileText, FolderOpen, Search, X } from "lucide-react";
+import { ArrowDownUp, BookOpen, FileText, FolderOpen, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
@@ -13,26 +13,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { type BookDetails, BookCardMenu } from "./library/BookCardMenu";
+import {
+	collectLibraryTags,
+	filterLibrary,
+	LIBRARY_SORT_LABELS,
+	type LibrarySortKey,
+	sortLibrary,
+} from "./library/libraryFilters";
 import { useLibraryStore } from "./library/libraryStore";
 import { touchSessionSave } from "./sessionPersistence";
-
-type SortKey = "recent" | "title" | "progress";
-
-const SORT_LABELS: Record<SortKey, string> = {
-	recent: "Recent",
-	title: "Title",
-	progress: "Progress",
-};
-
-function sortLibrary(list: BookProgress[], sort: SortKey): BookProgress[] {
-	if (sort === "title") {
-		return [...list].sort((a, b) => a.title.localeCompare(b.title));
-	}
-	if (sort === "progress") {
-		return [...list].sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
-	}
-	return list; // recentBooksList is already most-recent-first
-}
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
 const coverCache = new Map<string, string | null>();
@@ -78,10 +68,12 @@ function CoverCard({
 	book,
 	onOpen,
 	onRemove,
+	onSaveDetails,
 }: {
 	book: BookProgress;
 	onOpen: () => void;
 	onRemove: () => void;
+	onSaveDetails: (details: BookDetails) => void;
 }) {
 	const hue = titleHue(book.title);
 	const cover = useBookCover(book);
@@ -141,19 +133,13 @@ function CoverCard({
 				<span className="w-full truncate text-sm font-medium text-foreground">
 					{book.title}
 				</span>
+				{book.series ? (
+					<span className="-mt-1.5 w-full truncate text-xs text-muted-foreground">
+						{book.series}
+					</span>
+				) : null}
 			</button>
-			<button
-				type="button"
-				onClick={(e) => {
-					e.stopPropagation();
-					onRemove();
-				}}
-				aria-label="Remove from library"
-				title="Remove from library"
-				className="absolute right-1.5 top-1.5 rounded-full bg-background/85 p-1 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition hover:bg-destructive hover:text-destructive-foreground focus:opacity-100 group-hover:opacity-100"
-			>
-				<X className="size-3.5" aria-hidden />
-			</button>
+			<BookCardMenu book={book} onRemove={onRemove} onSaveDetails={onSaveDetails} />
 		</div>
 	);
 }
@@ -171,20 +157,25 @@ export function ReaderEmptyState({
 }: ReaderEmptyStateProps) {
 	const books = useLibraryStore((s) => s.books);
 	const removeBook = useLibraryStore((s) => s.removeBook);
+	const setBookDetails = useLibraryStore((s) => s.setBookDetails);
 	const library = recentBooksList(books);
 	const [query, setQuery] = useState("");
-	const [sort, setSort] = useState<SortKey>("recent");
+	const [sort, setSort] = useState<LibrarySortKey>("recent");
+	const [activeTag, setActiveTag] = useState<string | null>(null);
 
+	const allTags = useMemo(() => collectLibraryTags(library), [library]);
 	const shown = useMemo(() => {
-		const q = query.trim().toLowerCase();
-		const filtered = q
-			? library.filter((b) => b.title.toLowerCase().includes(q))
-			: library;
-		return sortLibrary(filtered, sort);
-	}, [library, query, sort]);
+		const tag = activeTag !== null && allTags.includes(activeTag) ? activeTag : null;
+		return sortLibrary(filterLibrary(library, query, tag), sort);
+	}, [library, query, sort, activeTag, allTags]);
 
 	const onRemove = (path: string) => {
 		removeBook(path);
+		touchSessionSave();
+	};
+
+	const onSaveDetails = (path: string, details: BookDetails) => {
+		setBookDetails(path, details);
 		touchSessionSave();
 	};
 
@@ -267,22 +258,22 @@ export function ReaderEmptyState({
 									title="Sort books"
 								>
 									<ArrowDownUp className="size-4" aria-hidden />
-									{SORT_LABELS[sort]}
+									{LIBRARY_SORT_LABELS[sort]}
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
 								<DropdownMenuRadioGroup
 									value={sort}
-									onValueChange={(v) => setSort(v as SortKey)}
+									onValueChange={(v) => setSort(v as LibrarySortKey)}
 								>
 									<DropdownMenuRadioItem value="recent">
-										Recent
+										{LIBRARY_SORT_LABELS.recent}
 									</DropdownMenuRadioItem>
 									<DropdownMenuRadioItem value="title">
-										Title
+										{LIBRARY_SORT_LABELS.title}
 									</DropdownMenuRadioItem>
 									<DropdownMenuRadioItem value="progress">
-										Progress
+										{LIBRARY_SORT_LABELS.progress}
 									</DropdownMenuRadioItem>
 								</DropdownMenuRadioGroup>
 							</DropdownMenuContent>
@@ -290,9 +281,35 @@ export function ReaderEmptyState({
 					</div>
 				</div>
 
+				{allTags.length > 0 ? (
+					<div className="mb-5 flex flex-wrap items-center gap-1.5">
+						{allTags.map((tag) => {
+							const active = tag === activeTag;
+							return (
+								<button
+									key={tag}
+									type="button"
+									aria-pressed={active}
+									onClick={() => setActiveTag(active ? null : tag)}
+									className={cn(
+										"rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+										active
+											? "border-primary bg-primary text-primary-foreground"
+											: "border-border bg-muted/20 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+									)}
+								>
+									{tag}
+								</button>
+							);
+						})}
+					</div>
+				) : null}
+
 				{shown.length === 0 ? (
 					<p className="py-12 text-center text-sm text-muted-foreground">
-						No books match “{query}”.
+						{query.trim()
+							? `No books match “${query}”.`
+							: "No books match the selected filter."}
 					</p>
 				) : (
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-5 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]">
@@ -302,6 +319,7 @@ export function ReaderEmptyState({
 								book={b}
 								onOpen={() => onOpenBook(b.path)}
 								onRemove={() => onRemove(b.path)}
+								onSaveDetails={(details) => onSaveDetails(b.path, details)}
 							/>
 						))}
 					</div>

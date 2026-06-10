@@ -16,3 +16,7 @@ yarn.lock
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# Playwright E2E output
+test-results/
+playwright-report/

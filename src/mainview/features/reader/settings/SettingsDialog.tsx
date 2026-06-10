@@ -1,15 +1,18 @@
 import {
+	AudioLines,
 	CheckCircle2,
 	Cpu,
 	Download,
 	FolderCog,
 	FolderOpen,
+	FolderPlus,
 	Keyboard,
 	Loader2,
 	Palette,
 	RefreshCw,
 	RotateCcw,
 	Wand2,
+	X,
 	Zap,
 } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
@@ -39,6 +42,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
+	addWatchedFolder,
 	checkForUpdates,
 	chooseDataDirectory,
 	downloadModel,
@@ -47,13 +51,19 @@ import {
 	isDesktopApp,
 	quitAndInstallUpdate,
 	relaunchApp,
+	removeWatchedFolder,
 	resetDataDirectory,
 	revealDataDirectory,
 	subscribeToModelProgress,
 } from "@/lib/desktopBridge";
 import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
-import { getActiveDevice, resetKokoroEngine } from "../tts";
+import {
+	getActiveDevice,
+	MAX_SENTENCE_PAUSE_MS,
+	resetKokoroEngine,
+	useTtsStore,
+} from "../tts";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
@@ -62,6 +72,7 @@ import { TtsRulesPanel } from "./TtsRulesPanel";
 
 type SectionId =
 	| "appearance"
+	| "playback"
 	| "storage"
 	| "performance"
 	| "shortcuts"
@@ -70,6 +81,7 @@ type SectionId =
 
 const NAV: { id: SectionId; label: string; icon: typeof FolderCog }[] = [
 	{ id: "appearance", label: "Appearance", icon: Palette },
+	{ id: "playback", label: "Playback", icon: AudioLines },
 	{ id: "storage", label: "Storage", icon: FolderCog },
 	{ id: "performance", label: "Performance", icon: Zap },
 	{ id: "shortcuts", label: "Shortcuts", icon: Keyboard },
@@ -257,6 +269,85 @@ function ModelsSection() {
 	);
 }
 
+function WatchedFoldersSection() {
+	const config = useAppSettingsStore((s) => s.config);
+	const [working, setWorking] = useState(false);
+	const folders = config?.watchedFolders ?? [];
+
+	const onAdd = async () => {
+		setWorking(true);
+		try {
+			const updated = await addWatchedFolder();
+			if (updated) useAppSettingsStore.getState().setConfig(updated);
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const onRemove = async (dir: string) => {
+		const updated = await removeWatchedFolder(dir);
+		if (updated) useAppSettingsStore.getState().setConfig(updated);
+	};
+
+	return (
+		<div className="space-y-2">
+			<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+				Watched folders
+			</p>
+			{folders.length === 0 ? (
+				<p className="text-xs text-muted-foreground">
+					No folders are being watched.
+				</p>
+			) : (
+				<ul className="space-y-1.5">
+					{folders.map((dir) => (
+						<li
+							key={dir}
+							className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5"
+						>
+							<FolderOpen
+								className="size-4 shrink-0 text-muted-foreground"
+								aria-hidden
+							/>
+							<span
+								className="min-w-0 flex-1 break-all font-mono text-xs text-foreground/90"
+								title={dir}
+							>
+								{dir}
+							</span>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+								aria-label={`Stop watching ${dir}`}
+								onClick={() => void onRemove(dir)}
+							>
+								<X className="size-4" aria-hidden />
+							</Button>
+						</li>
+					))}
+				</ul>
+			)}
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				className="gap-2 border-border bg-transparent"
+				disabled={working}
+				onClick={() => void onAdd()}
+			>
+				<FolderPlus className="size-4" aria-hidden />
+				Add folder…
+			</Button>
+			<p className="text-[11px] text-muted-foreground">
+				New .epub and .txt files in these folders (and their direct
+				subfolders) are added to your library automatically.
+			</p>
+		</div>
+	);
+}
+
 function StoragePanel() {
 	const config = useAppSettingsStore((s) => s.config);
 	const [pendingRestart, setPendingRestart] = useState(false);
@@ -349,6 +440,10 @@ function StoragePanel() {
 						Use default
 					</Button>
 				) : null}
+			</div>
+
+			<div className="mt-4 border-t border-border/60 pt-4">
+				<WatchedFoldersSection />
 			</div>
 
 			<div className="mt-4 border-t border-border/60 pt-4">
@@ -712,6 +807,66 @@ function UpdatesPanel() {
 	);
 }
 
+function formatPauseMs(ms: number): string {
+	if (ms === 0) return "Off";
+	if (ms >= 1000) {
+		return `${(ms / 1000).toFixed(2).replace(/\.?0+$/, "")} s`;
+	}
+	return `${ms} ms`;
+}
+
+function PlaybackPanel() {
+	const stored = useTtsStore((s) => s.sentencePauseMs);
+	const setSentencePauseMs = useTtsStore((s) => s.setSentencePauseMs);
+	// `null` while not dragging → show the stored value; a number while dragging.
+	const [draft, setDraft] = useState<number | null>(null);
+	const shown = draft ?? stored;
+
+	return (
+		<SectionPane
+			title="Playback"
+			description="How reading flows from sentence to sentence."
+		>
+			<div className="rounded-lg border border-border bg-muted/20 p-4">
+				<div className="flex items-center justify-between gap-4">
+					<span className="flex items-center gap-2 text-sm font-medium">
+						<AudioLines
+							className="size-4 text-muted-foreground"
+							aria-hidden
+						/>
+						Pause between sentences
+					</span>
+					<span className="text-xs font-medium tabular-nums text-muted-foreground">
+						{formatPauseMs(shown)}
+					</span>
+				</div>
+				<Slider
+					className="mt-4"
+					aria-label="Pause between sentences"
+					min={0}
+					max={MAX_SENTENCE_PAUSE_MS}
+					step={50}
+					value={[Math.min(shown, MAX_SENTENCE_PAUSE_MS)]}
+					onValueChange={(v) => setDraft(v[0] ?? 0)}
+					onValueCommit={(v) => {
+						setDraft(null);
+						setSentencePauseMs(v[0] ?? 0);
+					}}
+				/>
+				<div className="mt-2 flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+					<span>Off</span>
+					<span>{MAX_SENTENCE_PAUSE_MS / 1000} s</span>
+				</div>
+				<p className="mt-3 text-xs text-muted-foreground">
+					Adds a moment of silence after each sentence while listening — a
+					slower, more deliberate pace. Also applied to audiobook exports.
+					Applies from the next sentence; no restart needed.
+				</p>
+			</div>
+		</SectionPane>
+	);
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 	const [section, setSection] = useState<SectionId>("appearance");
 	const hydrate = useAppSettingsStore((s) => s.hydrate);
@@ -768,6 +923,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 				{/* Right content pane. */}
 				<div className="min-h-0 min-w-0 flex-1">
 					{section === "appearance" ? <AppearancePanel /> : null}
+					{section === "playback" ? <PlaybackPanel /> : null}
 					{section === "storage" ? <StoragePanel /> : null}
 					{section === "performance" ? <PerformancePanel /> : null}
 					{section === "shortcuts" ? <ShortcutsPanel /> : null}

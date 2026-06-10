@@ -9,12 +9,15 @@ import {
 } from "react";
 import {
 	getEpubChapterContent,
+	getPendingCrashReports,
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
+	subscribeToCrashReports,
 	subscribeToMainProcessLogs,
 	subscribeToShortcuts,
 } from "@/lib/desktopBridge";
+import type { CrashRecord } from "@shared/crashReport";
 import { Toaster } from "@/components/toast/Toaster";
 import { showToast } from "@/components/toast/toastStore";
 import { partitionByDocumentSupport } from "@shared/droppedFiles";
@@ -36,6 +39,7 @@ const SettingsDialog = lazy(() =>
 const LogPanel = lazy(() =>
 	import("./logging").then((m) => ({ default: m.LogPanel })),
 );
+const CrashReportDialog = lazy(() => import("./crash/CrashReportDialog"));
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { initUpdateStatusSync } from "./settings/updateStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
@@ -49,11 +53,13 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
+import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
 import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
 } from "./bookmarks/bookmarksStore";
+import { useSleepTimerStore } from "./sleepTimer/sleepTimerStore";
 import type { LoadedDocument } from "./types";
 import {
 	adjustVolume,
@@ -65,6 +71,7 @@ import {
 	stopPlaybackUi,
 	toggleMute,
 	togglePlayPause,
+	useMediaSession,
 	useTtsStore,
 } from "./tts";
 
@@ -144,6 +151,8 @@ export function ReaderApp() {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
+	/** Unreported crashes from previous runs; non-empty shows the crash dialog. */
+	const [crashRecords, setCrashRecords] = useState<CrashRecord[]>([]);
 
 	/** "Library" = close the current book and return to the My-books home grid. */
 	const goToLibrary = useCallback(() => {
@@ -154,6 +163,8 @@ export function ReaderApp() {
 		setDocument(null);
 	}, []);
 	useAppearanceSync();
+	// OS media controls (SMTC / MPRIS / Now Playing): metadata + media keys.
+	useMediaSession(document, activeChapterId, setActiveChapterId);
 
 	function isPlaybackActive(
 		playback: ReturnType<typeof useTtsStore.getState>["playback"],
@@ -214,6 +225,28 @@ export function ReaderApp() {
 	// Mirror update state and toast a sticky "restart to update" when ready.
 	useEffect(() => initUpdateStatusSync(), []);
 
+	// Auto-add new books from watched folders. Waits for the session so the
+	// initial scan dedupes against the hydrated library instead of an empty one.
+	useEffect(() => {
+		if (!sessionReady) return;
+		return initWatchedFoldersSync();
+	}, [sessionReady]);
+	// Crashes recorded last run: subscribe first (push on launch), then pull a
+	// snapshot in case the main process sent the event before we mounted.
+	useEffect(() => {
+		let cancelled = false;
+		const unsubscribe = subscribeToCrashReports((records) => {
+			if (records.length > 0) setCrashRecords(records);
+		});
+		void getPendingCrashReports().then((records) => {
+			if (!cancelled && records.length > 0) setCrashRecords(records);
+		});
+		return () => {
+			cancelled = true;
+			unsubscribe();
+		};
+	}, []);
+
 	// Dispatch OS-global shortcut triggers (forwarded from the main process) to
 	// the playback engine.
 	useEffect(() => {
@@ -262,12 +295,28 @@ export function ReaderApp() {
 
 	useEffect(() => {
 		setChapterPlaybackFinishedHandler(() => {
+			// End-of-chapter sleep timer: this chapter just finished, so stop here
+			// instead of rolling into the next one.
+			const sleep = useSleepTimerStore.getState();
+			const sleepAtChapterEnd = sleep.mode === "endOfChapter";
+			if (sleepAtChapterEnd) {
+				sleep.clearTimer();
+				showToast({ title: "Sleep timer — paused at end of chapter" });
+			}
+
 			const doc = documentRef.current;
 			const chapterId = activeChapterIdRef.current;
 			if (!doc || doc.format !== "epub" || !chapterId) return false;
 
 			const idx = doc.chapters.findIndex((c) => c.id === chapterId);
 			if (idx < 0 || idx >= doc.chapters.length - 1) return false;
+
+			if (sleepAtChapterEnd) {
+				// Park at the start of the next chapter without resuming playback.
+				stopPlaybackUi();
+				setActiveChapterId(doc.chapters[idx + 1]!.id);
+				return true;
+			}
 
 			continuePlaybackAfterChapterRef.current = true;
 			setActiveChapterId(doc.chapters[idx + 1]!.id);
@@ -678,6 +727,14 @@ export function ReaderApp() {
 						filePath={document.filePath}
 						bookTitle={document.title}
 						chapters={document.chapters}
+					/>
+				</Suspense>
+			) : null}
+			{crashRecords.length > 0 ? (
+				<Suspense fallback={null}>
+					<CrashReportDialog
+						records={crashRecords}
+						onClose={() => setCrashRecords([])}
 					/>
 				</Suspense>
 			) : null}

@@ -1,3 +1,10 @@
+import {
+	PINYIN_PACK_GROUP,
+	PINYIN_PRONUNCIATION_PACK,
+} from "./ttsPinyinPack";
+
+export { PINYIN_PACK_GROUP, PINYIN_PRONUNCIATION_PACK };
+
 /** Regex find/replace applied to chunk text before Kokoro synthesis. */
 export type RegexReplaceRule = {
 	id: string;
@@ -9,6 +16,8 @@ export type RegexReplaceRule = {
 	caseSensitive: boolean;
 	/** Built-in rules cannot be deleted (pattern may still be edited). */
 	builtIn?: boolean;
+	/** Builtin preset group; grouped rules render under a collapsible section. */
+	group?: string;
 };
 
 /** Maps a word to custom IPA phonemes (injected at kokoro-js phonemize time). */
@@ -21,6 +30,8 @@ export type PronunciationRule = {
 	enabled: boolean;
 	/** Built-in rules cannot be deleted from the UI. */
 	builtIn?: boolean;
+	/** Builtin preset group; grouped rules render under a collapsible section. */
+	group?: string;
 };
 
 /** Case-insensitive line-start chapter / part / volume headings (EPUB styles). */
@@ -34,6 +45,79 @@ export const BUILTIN_CHAPTER_LINE_PATTERN = String.raw`(?:^|\n)[ \t]*(?:\(\s*` +
 	`)`;
 
 export type TtsTextRule = RegexReplaceRule | PronunciationRule;
+
+/** Default-off builtin preset group: chapter-end junk in translated webnovels. */
+export const WEBNOVEL_BOILERPLATE_GROUP = "Webnovel boilerplate";
+
+/** Short blurbs shown under each builtin preset group header in the panel. */
+export const BUILTIN_GROUP_DESCRIPTIONS: Record<string, string> = {
+	[WEBNOVEL_BOILERPLATE_GROUP]:
+		"Skips common chapter-end junk in translated webnovels (notes, sponsor pleas, Discord/Patreon plugs). Off by default — enable the presets you want.",
+	[PINYIN_PACK_GROUP]:
+		"Experimental — enable the terms you want. IPA is best-effort and still needs listening QA.",
+};
+
+/**
+ * Curated skip rules for translated webnovel / cultivation-novel boilerplate.
+ * Each rule deletes the whole matching line; all are case-insensitive and
+ * shipped DISABLED (toggle individually in the rules panel).
+ */
+const WEBNOVEL_BOILERPLATE_PRESETS: RegexReplaceRule[] = (
+	[
+		{
+			id: "builtin-skip-author-note-lines",
+			label: "Skip “Author's note: …” / “Translator's note: …” lines",
+			// Whole line starting with author's/translator's/editor's note(s).
+			pattern:
+				"(?:^|\\n)[ \\t]*(?:author|translator|editor|proofreader)(?:['’]?s)?[ \\t]*notes?[ \\t]*[:\\-–—][^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-note-tag-lines",
+			label: "Skip “A/N:”, “T/N:”, “TL:”, “ED:”, “PR:” lines",
+			// Tag must open the line and be followed by a colon ("A/N" and
+			// "T/N" require the slash so prose words "an"/"tn" never match).
+			pattern: "(?:^|\\n)[ \\t]*(?:a/n|t/n|tl|ed|pr)[ \\t]*:[^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-sponsored-chapter-lines",
+			label: "Skip “Sponsored chapter(s)” lines",
+			pattern: "(?:^|\\n)[^\\n\\r]*\\bsponsored[ \\t]+chapters?\\b[^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-brought-to-you-lines",
+			label: "Skip “Chapter brought to you by …” lines",
+			pattern:
+				"(?:^|\\n)[^\\n\\r]*\\bchapters?[ \\t]+(?:brought[ \\t]+to[ \\t]+you[ \\t]+by|sponsored[ \\t]+by)\\b[^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-patreon-lines",
+			label: "Skip Patreon / Ko-fi support lines",
+			// "ko-fi" requires the hyphen so the name "Kofi" never matches.
+			pattern:
+				"(?:^|\\n)[^\\n\\r]*\\b(?:support[ \\t]+(?:me|us|the[ \\t]+(?:author|translator|team))[ \\t]+on\\b|patreon\\b|ko-fi\\b)[^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-discord-lines",
+			label: "Skip “Join the/our Discord” lines",
+			pattern:
+				"(?:^|\\n)[^\\n\\r]*\\bjoin[ \\t]+(?:(?:the|our|my)[ \\t]+)?discord\\b[^\\n\\r]*",
+		},
+		{
+			id: "builtin-skip-read-ahead-lines",
+			label: "Skip “Read ahead at …” / “Advance chapters …” lines",
+			pattern:
+				"(?:^|\\n)[^\\n\\r]*\\b(?:read[ \\t]+ahead[ \\t]+(?:at|on)\\b|advance(?:d)?[ \\t]+chapters?\\b)[^\\n\\r]*",
+		},
+	] as const
+).map((preset) => ({
+	...preset,
+	kind: "regex" as const,
+	replacement: "",
+	enabled: false,
+	caseSensitive: false,
+	builtIn: true,
+	group: WEBNOVEL_BOILERPLATE_GROUP,
+}));
 
 export type TtsTextRulesState = {
 	regexRules: RegexReplaceRule[];
@@ -121,6 +205,9 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				caseSensitive: false,
 				builtIn: true,
 			},
+			// Default-off "Webnovel boilerplate" preset group (cloned so callers
+			// can safely mutate the returned state).
+			...WEBNOVEL_BOILERPLATE_PRESETS.map((r) => ({ ...r })),
 		],
 		pronunciationRules: [
 			{
@@ -132,37 +219,13 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				builtIn: true,
 			},
-			// Starter pinyin pack for Chinese web novels. Shipped DISABLED — the
-			// IPA is best-effort and some words collide with English homographs
-			// (dan, li). Enable and fine-tune what you need in the rules editor.
-			...CJK_PRONUNCIATION_PACK,
+			// Default-off "Pinyin (xianxia/wuxia)" pack (absorbs the old starter
+			// CJK pack — ids are stable). IPA is best-effort; enable and
+			// fine-tune what you need in the rules editor. Cloned per call.
+			...PINYIN_PRONUNCIATION_PACK.map((r) => ({ ...r })),
 		],
 	};
 }
-
-/** Common cultivation-novel terms → best-effort IPA. Off by default. */
-const CJK_PRONUNCIATION_PACK: PronunciationRule[] = (
-	[
-		["dao", "daʊ"],
-		["jin", "dʒɪn"],
-		["dantian", "dɑːnˈtjɛn"],
-		["qigong", "tʃiːˈɡɒŋ"],
-		["jianghu", "dʒjɑːŋˈhuː"],
-		["wuxia", "wuːˈʃjɑː"],
-		["xianxia", "ʃjɛnˈʃjɑː"],
-		["shifu", "ʃiːˈfuː"],
-		["gongzi", "ɡʊŋˈziː"],
-		["senpai", "sɛnˈpaɪ"],
-	] as const
-).map(([word, phonetic]) => ({
-	id: `builtin-pron-${word}`,
-	kind: "pronunciation" as const,
-	word,
-	phonetic,
-	caseSensitive: false,
-	enabled: false,
-	builtIn: true,
-}));
 
 export function escapeRegexLiteral(word: string): string {
 	return word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -268,8 +331,8 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 		}
 	}
 
-	const builtInRegexIds = new Set(
-		defaults.regexRules.filter((r) => r.builtIn).map((r) => r.id),
+	const builtInRegexById = new Map(
+		defaults.regexRules.filter((r) => r.builtIn).map((r) => [r.id, r]),
 	);
 	for (const builtin of defaults.regexRules) {
 		if (!regexRules.some((r) => r.id === builtin.id)) {
@@ -277,13 +340,17 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 		}
 	}
 	for (const r of regexRules) {
-		if (builtInRegexIds.has(r.id)) r.builtIn = true;
+		const builtin = builtInRegexById.get(r.id);
+		if (builtin) {
+			r.builtIn = true;
+			if (builtin.group) r.group = builtin.group;
+		}
 	}
 
-	const builtInPronIds = new Set(
+	const builtInPronById = new Map(
 		defaults.pronunciationRules
 			.filter((r) => r.builtIn)
-			.map((r) => r.id),
+			.map((r) => [r.id, r]),
 	);
 	for (const builtin of defaults.pronunciationRules) {
 		if (!pronunciationRules.some((r) => r.id === builtin.id)) {
@@ -291,7 +358,11 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 		}
 	}
 	for (const r of pronunciationRules) {
-		if (builtInPronIds.has(r.id)) r.builtIn = true;
+		const builtin = builtInPronById.get(r.id);
+		if (builtin) {
+			r.builtIn = true;
+			if (builtin.group) r.group = builtin.group;
+		}
 	}
 
 	return {
