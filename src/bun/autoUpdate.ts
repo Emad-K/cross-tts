@@ -1,5 +1,6 @@
-import { app, dialog } from "electron";
+import { app, dialog, type BrowserWindow } from "electron";
 import electronUpdater from "electron-updater";
+import { IDLE_UPDATE_STATUS, type UpdateStatus } from "../shared/updateStatus";
 import { autoUpdatePref, setAutoUpdate } from "./appConfigStore";
 import { mainLog } from "./logBridge";
 
@@ -13,42 +14,58 @@ function log(level: "info" | "warn", message: string, detail?: string): void {
 
 let wired = false;
 let timer: ReturnType<typeof setInterval> | null = null;
+let targetWindow: BrowserWindow | null = null;
+let status: UpdateStatus = IDLE_UPDATE_STATUS;
+
+/** Window that receives `app:update-status` events (cleared on close). */
+export function setUpdateTarget(win: BrowserWindow | null): void {
+	targetWindow = win;
+}
+
+/** Current update state, for renderers that mount after events fired. */
+export function getUpdateStatus(): UpdateStatus {
+	return status;
+}
+
+function setStatus(next: UpdateStatus): void {
+	status = next;
+	try {
+		targetWindow?.webContents.send("app:update-status", status);
+	} catch {
+		// Window may be mid-teardown; the renderer re-reads on next mount.
+	}
+}
 
 /** Attach the updater event listeners once (idempotent). */
 function wireOnce(): void {
 	if (wired) return;
 	wired = true;
 
+	autoUpdater.on("checking-for-update", () => {
+		setStatus({ state: "checking" });
+	});
+
 	autoUpdater.on("update-available", (info) => {
 		log("info", `Update ${info.version} available — downloading in the background…`);
+		setStatus({ state: "downloading", version: info.version });
 	});
 
 	autoUpdater.on("update-not-available", () => {
 		log("info", "Cross TTS is up to date.");
+		setStatus({ state: "up-to-date" });
 	});
 
 	autoUpdater.on("update-downloaded", (info) => {
 		log("info", `Update ${info.version} downloaded.`);
-		void dialog
-			.showMessageBox({
-				type: "info",
-				buttons: ["Restart now", "Later"],
-				defaultId: 0,
-				cancelId: 1,
-				title: "Update ready",
-				message: `Cross TTS ${info.version} is ready to install.`,
-				detail: "Restart now to update, or it will install when you next quit.",
-			})
-			.then((result) => {
-				if (result.response === 0) {
-					setImmediate(() => autoUpdater.quitAndInstall());
-				}
-			})
-			.catch(() => {});
+		// No native dialog: the renderer shows an in-app "restart to update"
+		// notification, and the update installs on quit regardless.
+		setStatus({ state: "ready", version: info.version });
 	});
 
 	autoUpdater.on("error", (err) => {
-		log("warn", "Update check failed.", err instanceof Error ? err.message : String(err));
+		const detail = err instanceof Error ? err.message : String(err);
+		log("warn", "Update check failed.", detail);
+		setStatus({ state: "error", error: detail });
 	});
 }
 
@@ -87,6 +104,36 @@ function applyAutoUpdatePref(): void {
 }
 
 /**
+ * User-initiated check from Settings. Works even with automatic updates off:
+ * the user asked for this update, so it downloads and installs on quit (a
+ * one-shot — the background check loop stays off unless the pref is on).
+ */
+export function checkForUpdatesNow(): UpdateStatus {
+	if (!app.isPackaged) {
+		setStatus({
+			state: "error",
+			error: "Update checks only work in the installed desktop app.",
+		});
+		return status;
+	}
+	wireOnce();
+	autoUpdater.autoDownload = true;
+	autoUpdater.autoInstallOnAppQuit = true;
+	setStatus({ state: "checking" });
+	autoUpdater.checkForUpdates().catch((err: unknown) => {
+		const detail = err instanceof Error ? err.message : String(err);
+		log("warn", "Could not check for updates.", detail);
+		setStatus({ state: "error", error: detail });
+	});
+	return status;
+}
+
+/** Restart into the downloaded update (renderer "Restart now" action). */
+export function quitAndInstallUpdate(): void {
+	setImmediate(() => autoUpdater.quitAndInstall());
+}
+
+/**
  * Persist a new auto-update choice and apply it immediately. Called from the
  * Settings toggle so enabling kicks off a check right away and disabling halts
  * the background loop without needing a relaunch.
@@ -100,7 +147,7 @@ export function setAutoUpdateEnabled(enabled: boolean): void {
  * Wire GitHub-based auto-updates. Only runs in a packaged build (no-op in dev).
  * On first launch the user hasn't chosen yet (preference is null) — ask once,
  * persist the answer, then honor it. When enabled, new versions download in the
- * background and offer a restart-to-install. Errors are logged, never thrown.
+ * background and the renderer offers a restart-to-install.
  */
 export async function initAutoUpdate(): Promise<void> {
 	if (!app.isPackaged) return;

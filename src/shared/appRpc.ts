@@ -7,6 +7,7 @@ import type {
 	ModelStatusMap,
 } from "./modelAssets";
 import type { ShortcutAction } from "./shortcuts";
+import type { UpdateStatus } from "./updateStatus";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type {
 	EpubChapterContentResult,
@@ -154,6 +155,21 @@ export type AppRpcSchema = {
 			params: void;
 			response: void;
 		};
+		/** Manually check for updates (downloads if one is found). */
+		checkForUpdates: {
+			params: void;
+			response: UpdateStatus;
+		};
+		/** Current update state, for renderers that mount after events fired. */
+		getUpdateStatus: {
+			params: void;
+			response: UpdateStatus;
+		};
+		/** Restart into a downloaded update. */
+		quitAndInstallUpdate: {
+			params: void;
+			response: void;
+		};
 	};
 };
 
@@ -181,6 +197,8 @@ export type AppApi = {
 	onModelProgress: (listener: (progress: ModelProgress) => void) => () => void;
 	/** Subscribe to in-page find results from the main process. */
 	onFoundInPage: (listener: (result: FoundInPageResult) => void) => () => void;
+	/** Subscribe to update-status changes from the main process. */
+	onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
 };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */

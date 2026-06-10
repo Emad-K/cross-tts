@@ -30,7 +30,14 @@ import {
 	pickInitialWindowFrame,
 	saveAppSessionFile,
 } from "./appSessionStore";
-import { initAutoUpdate, setAutoUpdateEnabled } from "./autoUpdate";
+import {
+	checkForUpdatesNow,
+	getUpdateStatus,
+	initAutoUpdate,
+	quitAndInstallUpdate,
+	setAutoUpdateEnabled,
+	setUpdateTarget,
+} from "./autoUpdate";
 import { mainLog, setLogTarget } from "./logBridge";
 import {
 	getBookCover,
@@ -260,6 +267,11 @@ function registerRpcHandlers(): void {
 			return appConfigInfo();
 		},
 	);
+	ipcMain.handle("checkForUpdates", () => checkForUpdatesNow());
+	ipcMain.handle("getUpdateStatus", () => getUpdateStatus());
+	ipcMain.handle("quitAndInstallUpdate", () => {
+		quitAndInstallUpdate();
+	});
 	ipcMain.handle(
 		"setShortcutBinding",
 		(
@@ -357,10 +369,12 @@ function createWindow(): void {
 
 	setLogTarget(mainWindow);
 	setShortcutTarget(mainWindow);
+	setUpdateTarget(mainWindow);
 	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
+		setUpdateTarget(null);
 		mainWindow = null;
 	});
 }

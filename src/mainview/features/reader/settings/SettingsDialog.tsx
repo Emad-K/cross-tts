@@ -39,19 +39,24 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
+	checkForUpdates,
 	chooseDataDirectory,
 	downloadModel,
 	getGpuInfo,
 	getModelStatus,
+	isDesktopApp,
+	quitAndInstallUpdate,
 	relaunchApp,
 	resetDataDirectory,
 	revealDataDirectory,
 	subscribeToModelProgress,
 } from "@/lib/desktopBridge";
+import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
 import { getActiveDevice, resetKokoroEngine } from "../tts";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
+import { useUpdateStore } from "./updateStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 
@@ -601,12 +606,36 @@ function PerformancePanel() {
 	);
 }
 
+function updateStatusLabel(status: UpdateStatus): string | null {
+	switch (status.state) {
+		case "checking":
+			return "Checking for updates…";
+		case "downloading":
+			return status.version
+				? `Downloading ${status.version}…`
+				: "Downloading update…";
+		case "ready":
+			return status.version
+				? `${status.version} is ready — restart to update.`
+				: "An update is ready — restart to update.";
+		case "up-to-date":
+			return "You're on the latest version.";
+		case "error":
+			return status.error ?? "Update check failed.";
+		default:
+			return null;
+	}
+}
+
 function UpdatesPanel() {
 	const switchId = useId();
 	const config = useAppSettingsStore((s) => s.config);
 	const setAutoUpdate = useAppSettingsStore((s) => s.setAutoUpdate);
+	const status = useUpdateStore((s) => s.status);
 	// `null` = not chosen yet; treat as off until the user opts in.
 	const enabled = config?.autoUpdate === true;
+	const busy = status.state === "checking" || status.state === "downloading";
+	const statusLabel = updateStatusLabel(status);
 
 	return (
 		<SectionPane
@@ -631,9 +660,51 @@ function UpdatesPanel() {
 				<p className="mt-3 text-xs text-muted-foreground">
 					When on, new versions download in the background and install the next
 					time you restart. When off, Cross TTS never checks for updates — grab
-					new releases yourself from GitHub.
+					new releases yourself from GitHub, or use the button below.
 				</p>
 			</div>
+			{isDesktopApp() ? (
+				<div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/20 p-4">
+					{status.state === "ready" ? (
+						<Button
+							type="button"
+							size="sm"
+							onClick={() => void quitAndInstallUpdate()}
+						>
+							<RotateCcw className="mr-2 size-4" aria-hidden />
+							Restart to update
+						</Button>
+					) : (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={busy}
+							onClick={() => void checkForUpdates()}
+						>
+							{busy ? (
+								<Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+							) : (
+								<Download className="mr-2 size-4" aria-hidden />
+							)}
+							Check for updates
+						</Button>
+					)}
+					{statusLabel ? (
+						<p
+							className={cn(
+								"text-xs",
+								status.state === "error"
+									? "text-destructive"
+									: "text-muted-foreground",
+							)}
+							aria-live="polite"
+						>
+							{statusLabel}
+						</p>
+					) : null}
+				</div>
+			) : null}
 			<p className="mt-3 text-[11px] text-muted-foreground">
 				Updates only apply to the installed desktop app.
 			</p>
