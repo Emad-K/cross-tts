@@ -44,13 +44,17 @@ function announceIfReady(status: UpdateStatus): void {
  * Call once at app start; returns an unsubscribe fn. No-op on web.
  */
 export function initUpdateStatusSync(): () => void {
+	// Subscribe first so no event can slip between the snapshot and the listener.
+	const unsubscribe = subscribeToUpdateStatus((status) => {
+		useUpdateStore.getState().setStatus(status);
+		announceIfReady(status);
+	});
 	void getUpdateStatus().then((status) => {
 		if (!status) return;
+		// An event that arrived meanwhile is newer than this snapshot.
+		if (useUpdateStore.getState().status.state !== "idle") return;
 		useUpdateStore.getState().setStatus(status);
 		announceIfReady(status);
 	});
-	return subscribeToUpdateStatus((status) => {
-		useUpdateStore.getState().setStatus(status);
-		announceIfReady(status);
-	});
+	return unsubscribe;
 }

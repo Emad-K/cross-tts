@@ -116,6 +116,9 @@ export function checkForUpdatesNow(): UpdateStatus {
 		});
 		return status;
 	}
+	if (status.state === "checking" || status.state === "downloading") {
+		return status;
+	}
 	wireOnce();
 	autoUpdater.autoDownload = true;
 	autoUpdater.autoInstallOnAppQuit = true;
