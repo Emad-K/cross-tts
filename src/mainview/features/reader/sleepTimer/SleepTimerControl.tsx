@@ -1,5 +1,5 @@
 import { BookOpenCheck, Moon, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -10,12 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import {
 	formatSleepRemaining,
 	parseCustomSleepMinutes,
@@ -24,7 +26,7 @@ import { useSleepTimerStore } from "./sleepTimerStore";
 
 const PRESET_MINUTES = [15, 30, 45, 60] as const;
 
-/** Live `m:ss` countdown for the active time-mode timer (null otherwise). */
+/** Live `hh:mm:ss` countdown for the active time-mode timer (null otherwise). */
 function useSleepCountdown(): string | null {
 	const mode = useSleepTimerStore((s) => s.mode);
 	const endTimeMs = useSleepTimerStore((s) => s.endTimeMs);
@@ -47,24 +49,50 @@ function useSleepCountdown(): string | null {
 
 /**
  * Sleep timer entry point in the transport bar: a Moon button that opens a
- * dialog with presets, a custom duration, and an end-of-chapter mode. While
- * active the button shows the countdown (or "End of chapter") and a small ×
+ * dialog with presets, a custom duration, and a "stop after a chapter" mode
+ * where any chapter at or after the current one can be picked. While active
+ * the button shows the countdown (or "Until: <chapter>") and a small ×
  * cancels without opening the dialog.
  */
 export function SleepTimerControl() {
 	const mode = useSleepTimerStore((s) => s.mode);
+	const targetChapterId = useSleepTimerStore((s) => s.targetChapterId);
 	const startTimer = useSleepTimerStore((s) => s.startTimer);
 	const startEndOfChapter = useSleepTimerStore((s) => s.startEndOfChapter);
 	const clearTimer = useSleepTimerStore((s) => s.clearTimer);
 
+	const chapters = useListenEstimateStore((s) => s.chapters);
+	const activeChapterId = useListenEstimateStore((s) => s.activeChapterId);
+
 	const [open, setOpen] = useState(false);
 	const [customMinutes, setCustomMinutes] = useState("45");
 	const [customError, setCustomError] = useState<string | null>(null);
+	const [selectedChapterId, setSelectedChapterId] = useState<string | null>(
+		null,
+	);
+
+	// Earlier chapters are hidden: sleeping at a chapter already played makes
+	// no sense. With no active chapter the full list stays selectable.
+	const selectableChapters = useMemo(() => {
+		const idx = activeChapterId
+			? chapters.findIndex((c) => c.id === activeChapterId)
+			: -1;
+		return idx >= 0 ? chapters.slice(idx) : chapters;
+	}, [chapters, activeChapterId]);
+	const hasChapterList = selectableChapters.length > 0;
 
 	const countdown = useSleepCountdown();
 	const active = mode !== null;
+	const targetChapterTitle =
+		mode === "endOfChapter" && targetChapterId != null
+			? (chapters.find((c) => c.id === targetChapterId)?.title ?? null)
+			: null;
 	const barLabel =
-		mode === "endOfChapter" ? "End of chapter" : (countdown ?? null);
+		mode === "endOfChapter"
+			? targetChapterTitle != null
+				? `Until: ${targetChapterTitle}`
+				: "End of chapter"
+			: (countdown ?? null);
 
 	const applyMinutes = (minutes: number) => {
 		startTimer(minutes);
@@ -80,9 +108,33 @@ export function SleepTimerControl() {
 		applyMinutes(minutes);
 	};
 
+	const openDialog = () => {
+		setCustomError(null);
+		// Preselect the active sleep target when one is set and still ahead,
+		// otherwise the current chapter.
+		const preferred =
+			mode === "endOfChapter" &&
+			targetChapterId != null &&
+			selectableChapters.some((c) => c.id === targetChapterId)
+				? targetChapterId
+				: activeChapterId != null &&
+						selectableChapters.some((c) => c.id === activeChapterId)
+					? activeChapterId
+					: (selectableChapters[0]?.id ?? null);
+		setSelectedChapterId(preferred);
+		setOpen(true);
+	};
+
+	const submitChapter = () => {
+		startEndOfChapter(hasChapterList ? selectedChapterId : null);
+		setOpen(false);
+	};
+
 	const statusLabel =
 		mode === "endOfChapter"
-			? "Pausing at the end of this chapter"
+			? targetChapterTitle != null
+				? `Pausing at the end of “${targetChapterTitle}”`
+				: "Pausing at the end of this chapter"
 			: countdown != null
 				? `Pausing in ${countdown}`
 				: null;
@@ -104,14 +156,13 @@ export function SleepTimerControl() {
 							aria-label={
 								active ? `Sleep timer, ${barLabel}` : "Sleep timer"
 							}
-							onClick={() => {
-								setCustomError(null);
-								setOpen(true);
-							}}
+							onClick={openDialog}
 						>
 							<Moon className="size-5 shrink-0" aria-hidden />
 							{active ? (
-								<span className="text-xs font-medium">{barLabel}</span>
+								<span className="max-w-[10rem] truncate text-xs font-medium">
+									{barLabel}
+								</span>
 							) : null}
 						</Button>
 					</TooltipTrigger>
@@ -155,7 +206,7 @@ export function SleepTimerControl() {
 					{active ? (
 						<div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
 							<div className="min-w-0">
-								<p className="text-sm font-medium">{statusLabel}</p>
+								<p className="truncate text-sm font-medium">{statusLabel}</p>
 								<p className="text-xs text-muted-foreground">
 									Picking a new option replaces the current timer.
 								</p>
@@ -220,31 +271,79 @@ export function SleepTimerControl() {
 						) : null}
 					</div>
 
-					<div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-4">
-						<div className="min-w-0">
-							<p className="flex items-center gap-2 text-sm font-medium">
-								<BookOpenCheck
-									className="size-4 text-muted-foreground"
-									aria-hidden
-								/>
-								End of chapter
-							</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								Pause when the current chapter finishes playing.
-							</p>
-						</div>
-						<Button
-							type="button"
-							variant={mode === "endOfChapter" ? "secondary" : "outline"}
-							size="sm"
-							className="shrink-0"
-							onClick={() => {
-								startEndOfChapter();
-								setOpen(false);
-							}}
-						>
-							{mode === "endOfChapter" ? "Active" : "Set"}
-						</Button>
+					<div className="rounded-lg border border-border bg-muted/20 p-4">
+						<p className="flex items-center gap-2 text-sm font-medium">
+							<BookOpenCheck
+								className="size-4 text-muted-foreground"
+								aria-hidden
+							/>
+							Stop after a chapter
+						</p>
+						{hasChapterList ? (
+							<>
+								<p className="mt-1 text-xs text-muted-foreground">
+									Pause when the selected chapter finishes playing.
+								</p>
+								<ScrollArea className="mt-3 h-44 rounded-md border border-border/60 bg-background/40">
+									<div
+										className="p-1"
+										role="listbox"
+										aria-label="Sleep after chapter"
+									>
+										{selectableChapters.map((c) => {
+											const selected = selectedChapterId === c.id;
+											return (
+												<button
+													key={c.id}
+													type="button"
+													role="option"
+													aria-selected={selected}
+													className={cn(
+														"flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+														selected
+															? "bg-secondary text-foreground"
+															: "text-muted-foreground hover:bg-accent hover:text-foreground",
+													)}
+													onClick={() => setSelectedChapterId(c.id)}
+												>
+													<span className="min-w-0 flex-1 truncate">
+														{c.title}
+													</span>
+													{c.id === activeChapterId ? (
+														<span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+															Current
+														</span>
+													) : null}
+												</button>
+											);
+										})}
+									</div>
+								</ScrollArea>
+								<Button
+									type="button"
+									className="mt-3 w-full"
+									disabled={selectedChapterId == null}
+									onClick={submitChapter}
+								>
+									Pause after selected chapter
+								</Button>
+							</>
+						) : (
+							<div className="mt-1 flex items-center justify-between gap-3">
+								<p className="text-xs text-muted-foreground">
+									Pause when the current chapter finishes playing.
+								</p>
+								<Button
+									type="button"
+									variant={mode === "endOfChapter" ? "secondary" : "outline"}
+									size="sm"
+									className="shrink-0"
+									onClick={submitChapter}
+								>
+									{mode === "endOfChapter" ? "Active" : "Set"}
+								</Button>
+							</div>
+						)}
 					</div>
 				</DialogContent>
 			</Dialog>

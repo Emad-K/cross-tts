@@ -11,16 +11,27 @@ import { cn } from "@/lib/utils";
 /**
  * In-chapter find bar. Uses Electron's native findInPage (highlight + scroll)
  * via IPC; the match counter comes back over the found-in-page event.
+ *
+ * `initialQuery` pre-fills the input and runs the search on mount (used by
+ * the viewer context menu); remount (new `key`) to apply a new one.
  */
-export function FindBar({ onClose }: { onClose: () => void }) {
-	const [text, setText] = useState("");
+export function FindBar({
+	onClose,
+	initialQuery = "",
+}: {
+	onClose: () => void;
+	initialQuery?: string;
+}) {
+	const [text, setText] = useState(initialQuery);
 	const [matches, setMatches] = useState(0);
 	const [active, setActive] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
 
+	// Mount-only: focus, select any pre-filled text and start that search.
 	useEffect(() => {
 		inputRef.current?.focus();
 		inputRef.current?.select();
+		if (initialQuery) findInPage(initialQuery, { findNext: false });
 	}, []);
 
 	useEffect(

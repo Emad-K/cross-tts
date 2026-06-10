@@ -9,6 +9,7 @@ import { TtsSettingSync } from "./tts";
 import { bookmarkCurrentSpot } from "./bookmarks/bookmarksStore";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { FindBar } from "./find/FindBar";
+import { useFindStore } from "./find/findStore";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
 import { ReaderLoadingOverlay } from "./ReaderLoadingOverlay";
@@ -57,7 +58,9 @@ export function ReaderShell({
 		document?.format === "epub" || Boolean(document?.chapters?.length);
 	const [chapterSidebarOpen, setChapterSidebarOpen] = useState(false);
 	const [bookmarkSidebarOpen, setBookmarkSidebarOpen] = useState(false);
-	const [findOpen, setFindOpen] = useState(false);
+	const findOpen = useFindStore((s) => s.open);
+	const findInitialQuery = useFindStore((s) => s.initialQuery);
+	const findRequestId = useFindStore((s) => s.requestId);
 
 	useEffect(() => {
 		const hasChapters =
@@ -65,7 +68,7 @@ export function ReaderShell({
 			Boolean(document?.chapters?.length);
 		setChapterSidebarOpen(hasChapters);
 		setBookmarkSidebarOpen(false);
-		setFindOpen(false);
+		useFindStore.getState().closeFind();
 	}, [document]);
 
 	// Single-key reader shortcuts (ignored while typing): [ chapters, ] bookmarks,
@@ -75,7 +78,7 @@ export function ReaderShell({
 		const onKey = (e: KeyboardEvent) => {
 			// Ctrl/Cmd+F opens the in-chapter find bar (works while typing too).
 			if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
-				setFindOpen(true);
+				useFindStore.getState().openFind();
 				e.preventDefault();
 				return;
 			}
@@ -136,7 +139,11 @@ export function ReaderShell({
 						<ReaderLoadingOverlay message={loadingMessage} />
 					) : null}
 					{hasDoc && findOpen ? (
-						<FindBar onClose={() => setFindOpen(false)} />
+						<FindBar
+							key={findRequestId}
+							initialQuery={findInitialQuery}
+							onClose={() => useFindStore.getState().closeFind()}
+						/>
 					) : null}
 					{hasDoc ? (
 						<ReaderDocumentLayout

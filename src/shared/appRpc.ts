@@ -147,6 +147,11 @@ export type AppRpcSchema = {
 			params: { path: string };
 			response: void;
 		};
+		/** Open an https URL in the user's default browser (non-https is ignored). */
+		openExternal: {
+			params: { url: string };
+			response: void;
+		};
 		/** Open a folder picker; on selection persists the new data dir (needs relaunch to apply). */
 		chooseDataDirectory: {
 			params: void;

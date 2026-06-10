@@ -4,9 +4,7 @@ import {
 	baseSecondsPerChar,
 	EMPTY_LISTEN_RATE,
 	estimateSecondsForChars,
-	formatListenRemaining,
 	MIN_MEASURED_CHARS,
-	remainingBookChars,
 	remainingChapterChars,
 } from "./listenTimeEstimate";
 
@@ -97,74 +95,3 @@ describe("remainingChapterChars", () => {
 	});
 });
 
-describe("remainingBookChars", () => {
-	test("current chapter remainder plus later chapters", () => {
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [500, 800, 300, 200],
-				currentChapterIndex: 1,
-				remainingCurrentChapterChars: 100,
-			}),
-		).toBe(600);
-	});
-
-	test("last chapter uses only the chapter remainder", () => {
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [500, 800],
-				currentChapterIndex: 1,
-				remainingCurrentChapterChars: 42,
-			}),
-		).toBe(42);
-	});
-
-	test("null when a later chapter's length is unknown", () => {
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [500, 800, null, 200],
-				currentChapterIndex: 1,
-				remainingCurrentChapterChars: 100,
-			}),
-		).toBeNull();
-		// Unknown lengths *before* the current chapter don't matter.
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [null, 800, 200],
-				currentChapterIndex: 1,
-				remainingCurrentChapterChars: 100,
-			}),
-		).toBe(300);
-	});
-
-	test("null when the chapter index is out of range", () => {
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [500],
-				currentChapterIndex: -1,
-				remainingCurrentChapterChars: 0,
-			}),
-		).toBeNull();
-		expect(
-			remainingBookChars({
-				chapterCharCounts: [500],
-				currentChapterIndex: 1,
-				remainingCurrentChapterChars: 0,
-			}),
-		).toBeNull();
-	});
-});
-
-describe("formatListenRemaining", () => {
-	test("rounds up to whole minutes with a 1m floor", () => {
-		expect(formatListenRemaining(0)).toBe("1m");
-		expect(formatListenRemaining(30)).toBe("1m");
-		expect(formatListenRemaining(61)).toBe("2m");
-		expect(formatListenRemaining(59 * 60)).toBe("59m");
-	});
-
-	test("splits hours out", () => {
-		expect(formatListenRemaining(60 * 60)).toBe("1h");
-		expect(formatListenRemaining(72 * 60)).toBe("1h 12m");
-		expect(formatListenRemaining(2 * 60 * 60)).toBe("2h");
-	});
-});

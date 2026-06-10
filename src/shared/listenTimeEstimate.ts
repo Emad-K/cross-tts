@@ -92,42 +92,6 @@ export function remainingChapterChars(
 	return total;
 }
 
-/**
- * Characters left in the whole book: the current chapter's remaining chars
- * plus every later chapter's full text length. Returns null when any later
- * chapter's length is unknown (no estimate is better than a wrong one) or
- * when the current chapter index is out of range.
- */
-export function remainingBookChars(opts: {
-	/** Per-chapter character counts in reading order; null/undefined = unknown. */
-	chapterCharCounts: (number | null | undefined)[];
-	currentChapterIndex: number;
-	remainingCurrentChapterChars: number;
-}): number | null {
-	const { chapterCharCounts, currentChapterIndex } = opts;
-	if (
-		currentChapterIndex < 0 ||
-		currentChapterIndex >= chapterCharCounts.length
-	) {
-		return null;
-	}
-	let total = Math.max(0, opts.remainingCurrentChapterChars);
-	for (let i = currentChapterIndex + 1; i < chapterCharCounts.length; i++) {
-		const n = chapterCharCounts[i];
-		if (n == null || !Number.isFinite(n) || n < 0) return null;
-		total += n;
-	}
-	return total;
-}
-
-/**
- * Compact duration for estimate labels: minutes rounded up, hours split out.
- * Examples: 30s → "1m", 4.2min → "5m", 72min → "1h 12m", exactly 2h → "2h".
- */
-export function formatListenRemaining(seconds: number): string {
-	const totalMin = Math.max(1, Math.ceil(Math.max(0, seconds) / 60));
-	if (totalMin < 60) return `${totalMin}m`;
-	const h = Math.floor(totalMin / 60);
-	const m = totalMin % 60;
-	return m === 0 ? `${h}h` : `${h}h ${m}m`;
-}
+// Estimate labels are formatted with the shared hh:mm:ss formatter
+// (src/shared/formatHms.ts); book-level estimates were removed with the
+// playback-bar rework — the bar shows the chapter ETA only.

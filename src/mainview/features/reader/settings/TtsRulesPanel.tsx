@@ -131,12 +131,15 @@ function RuleGroupSection({
 	enabledCount,
 	totalCount,
 	description,
+	onSetAllEnabled,
 	children,
 }: {
 	title: string;
 	enabledCount: number;
 	totalCount: number;
 	description?: string;
+	/** Bulk-toggle every rule in this group (true = all on, false = all off). */
+	onSetAllEnabled?: (enabled: boolean) => void;
 	children: ReactNode;
 }) {
 	return (
@@ -161,6 +164,33 @@ function RuleGroupSection({
 						<p className="pb-2 text-xs leading-relaxed text-muted-foreground">
 							{description}
 						</p>
+					) : null}
+					{onSetAllEnabled ? (
+						<div className="flex items-center gap-1 pb-1.5">
+							<span className="text-xs text-muted-foreground">Select:</span>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="h-6 px-1.5 text-xs text-muted-foreground"
+								aria-label={`Enable all ${title} rules`}
+								disabled={enabledCount === totalCount}
+								onClick={() => onSetAllEnabled(true)}
+							>
+								All
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="h-6 px-1.5 text-xs text-muted-foreground"
+								aria-label={`Disable all ${title} rules`}
+								disabled={enabledCount === 0}
+								onClick={() => onSetAllEnabled(false)}
+							>
+								None
+							</Button>
+						</div>
 					) : null}
 					<ul className="space-y-1.5">{children}</ul>
 				</AccordionContent>
@@ -397,11 +427,15 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 	const regexRules = useTtsRulesStore((s) => s.regexRules);
 	const pronunciationRules = useTtsRulesStore((s) => s.pronunciationRules);
 	const setRegexEnabled = useTtsRulesStore((s) => s.setRegexEnabled);
+	const setRegexGroupEnabled = useTtsRulesStore((s) => s.setRegexGroupEnabled);
 	const updateRegexRule = useTtsRulesStore((s) => s.updateRegexRule);
 	const addRegexRule = useTtsRulesStore((s) => s.addRegexRule);
 	const removeRegexRule = useTtsRulesStore((s) => s.removeRegexRule);
 	const setPronunciationEnabled = useTtsRulesStore(
 		(s) => s.setPronunciationEnabled,
+	);
+	const setPronunciationGroupEnabled = useTtsRulesStore(
+		(s) => s.setPronunciationGroupEnabled,
 	);
 	const updatePronunciationRule = useTtsRulesStore(
 		(s) => s.updatePronunciationRule,
@@ -669,11 +703,6 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 				title={
 					<>
 						{rule.label}
-						{rule.builtIn && !rule.group ? (
-							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-								(default)
-							</span>
-						) : null}
 						{rule.caseSensitive ? (
 							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
 								(case sensitive)
@@ -737,11 +766,6 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 							{" "}
 							→ {rule.phonetic}
 						</span>
-						{rule.builtIn && !rule.group ? (
-							<span className="ml-1.5 text-xs font-normal text-muted-foreground">
-								(default)
-							</span>
-						) : null}
 					</>
 				}
 				actions={
@@ -872,6 +896,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 											enabledCount={rules.filter((r) => r.enabled).length}
 											totalCount={rules.length}
 											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+											onSetAllEnabled={(enabled) =>
+												setRegexGroupEnabled(group, enabled)
+											}
 										>
 											{rules.map(renderRegexRule)}
 										</RuleGroupSection>
@@ -918,6 +945,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 											enabledCount={rules.filter((r) => r.enabled).length}
 											totalCount={rules.length}
 											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+											onSetAllEnabled={(enabled) =>
+												setPronunciationGroupEnabled(group, enabled)
+											}
 										>
 											{rules.map(renderPronRule)}
 										</RuleGroupSection>

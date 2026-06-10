@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+	ESSENTIALS_GROUP,
 	PINYIN_PACK_GROUP,
 	PINYIN_PRONUNCIATION_PACK,
 	WEBNOVEL_BOILERPLATE_GROUP,
 	applyRegexReplaceRule,
 	applyTtsTextRules,
+	coerceTtsTextRulesState,
 	defaultTtsTextRulesState,
 	isValidRegexPattern,
 } from "./ttsTextRules";
@@ -95,6 +97,119 @@ describe("webnovel boilerplate presets", () => {
 				expect(applyRegexReplaceRule(sentence, enabled)).toBe(sentence);
 			}
 		}
+	});
+});
+
+describe("chapter-title heading skip preset", () => {
+	function chapterTitleRule() {
+		const rule = webnovelPresets().find(
+			(r) => r.id === "builtin-skip-chapter-title-lines",
+		);
+		if (!rule) throw new Error("chapter-title preset missing");
+		return { ...rule, enabled: true };
+	}
+
+	const headingLines = [
+		"A Record of a Mortal's Journey to Immortality - Chapter 2",
+		"A Record of a Mortal’s Journey to Immortality – Chapter 2 – The Awakening",
+		"Reverend Insanity — chapter 1024",
+		"Lord of the Mysteries - CHAPTER 7: Fog",
+		"Keyboard Immortal - Chapter 12.5 - Interlude",
+		"  My Disciple Died Yet Again - Chapter 33  ",
+	];
+
+	test("matches whole title-dash-chapter heading lines", () => {
+		const rule = chapterTitleRule();
+		for (const line of headingLines) {
+			expect(applyRegexReplaceRule(line, rule).trim()).toBe("");
+		}
+	});
+
+	const proseLines = [
+		"In this chapter we learn about qi.",
+		"Chapter 2 begins",
+		"Chapter 2: The Awakening",
+		"My Book - Chapter 2 begins now and the story continues.",
+		"He paused - the chapter was over.",
+		"She wrote chapter 9 - then deleted it.",
+		"It was a long journey to immortality, chapter after chapter.",
+	];
+
+	test("never matches prose that merely mentions chapters", () => {
+		const rule = chapterTitleRule();
+		for (const line of proseLines) {
+			expect(applyRegexReplaceRule(line, rule)).toBe(line);
+		}
+	});
+
+	test("removes only the heading line from multi-line chunk text", () => {
+		const state = defaultTtsTextRulesState();
+		for (const rule of state.regexRules) {
+			if (rule.id === "builtin-skip-chapter-title-lines") rule.enabled = true;
+		}
+		const story = "Han Li opened his eyes inside the cave.";
+		const out = applyTtsTextRules(
+			`A Record of a Mortal's Journey to Immortality - Chapter 2\n${story}`,
+			state,
+		);
+		expect(out).toBe(story);
+	});
+});
+
+describe("essentials group", () => {
+	test("all builtin rules belong to a named group", () => {
+		const state = defaultTtsTextRulesState();
+		for (const rule of [...state.regexRules, ...state.pronunciationRules]) {
+			if (rule.builtIn) {
+				expect(typeof rule.group).toBe("string");
+				expect(rule.group?.length).toBeGreaterThan(0);
+			}
+		}
+		// The original always-on defaults sit in the Essentials group.
+		const essentials = state.regexRules.filter(
+			(r) => r.group === ESSENTIALS_GROUP,
+		);
+		expect(essentials.length).toBeGreaterThanOrEqual(5);
+		for (const rule of essentials) expect(rule.enabled).toBe(true);
+		expect(
+			state.pronunciationRules.find((r) => r.id === "builtin-pron-qi")?.group,
+		).toBe(ESSENTIALS_GROUP);
+	});
+
+	test("coercion re-stamps groups on old saves and keeps user toggles", () => {
+		// Simulate a pre-grouping save: no `group` fields, one essential rule
+		// disabled by the user and one webnovel preset enabled.
+		const saved = defaultTtsTextRulesState();
+		const rawRegex = saved.regexRules.map(({ group: _g, ...r }) => ({
+			...r,
+			enabled:
+				r.id === "builtin-urls"
+					? false
+					: r.id === "builtin-skip-patreon-lines"
+						? true
+						: r.enabled,
+		}));
+		const rawPron = saved.pronunciationRules.map(
+			({ group: _g, ...r }) => ({ ...r }),
+		);
+		const out = coerceTtsTextRulesState({
+			regexRules: rawRegex,
+			pronunciationRules: rawPron,
+		});
+
+		const urls = out.regexRules.find((r) => r.id === "builtin-urls");
+		expect(urls?.enabled).toBe(false);
+		expect(urls?.group).toBe(ESSENTIALS_GROUP);
+		const patreon = out.regexRules.find(
+			(r) => r.id === "builtin-skip-patreon-lines",
+		);
+		expect(patreon?.enabled).toBe(true);
+		expect(patreon?.group).toBe(WEBNOVEL_BOILERPLATE_GROUP);
+		const qi = out.pronunciationRules.find(
+			(r) => r.id === "builtin-pron-qi",
+		);
+		expect(qi?.group).toBe(ESSENTIALS_GROUP);
+		expect(qi?.builtIn).toBe(true);
 	});
 });
 

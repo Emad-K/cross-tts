@@ -53,7 +53,6 @@ export type PlaybackControlsProps = {
  * Media-style footer wired to Kokoro TTS and zustand playback state.
  */
 export function PlaybackControls({ className }: PlaybackControlsProps) {
-	const progressId = useId();
 	const volumeId = useId();
 	const [progress, setProgress] = useState([0]);
 	const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -117,11 +116,10 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const canSpeedDown = speedIndex > 0;
 	const canSpeedUp = speedIndex < SPEEDS.length - 1;
 
-	const elapsedLabel =
+	const chunkLabel =
 		chunks.length === 0
-			? "Chunk —"
-			: `Chunk ${Math.min(chunks.length, currentChunkIndex + 1)}`;
-	const totalLabel = chunks.length === 0 ? "of —" : `of ${chunks.length}`;
+			? "Chunk — of —"
+			: `Chunk ${Math.min(chunks.length, currentChunkIndex + 1)} of ${chunks.length}`;
 
 	const displayProgress =
 		isDraggingProgress ? progress[0]! : Math.round(progressPct);
@@ -151,7 +149,9 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 		>
 			<div className="min-w-0 px-4 py-3 sm:py-4">
 				<div className="mb-3 flex items-end justify-between gap-2 text-[11px] tabular-nums text-muted-foreground sm:text-xs">
-					<span id={`${progressId}-elapsed`}>{elapsedLabel}</span>
+					<span className="shrink-0">
+						{chunkLabel}
+					</span>
 					{statusLabel ? (
 						<span
 							className="inline-flex items-center gap-1.5 truncate text-foreground/80"
@@ -161,14 +161,13 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							{statusLabel}
 						</span>
 					) : null}
-					<span className="inline-flex min-w-0 items-center gap-3">
+					<span className="inline-flex min-w-0 items-center justify-end">
 						<ListenTimeRemaining />
-						<span id={`${progressId}-total`}>{totalLabel}</span>
 					</span>
 				</div>
 				<div className="mb-4 sm:mb-5">
 					<Slider
-						aria-labelledby={`${progressId}-elapsed ${progressId}-total`}
+						aria-label="Chapter progress"
 						value={[displayProgress]}
 						max={100}
 						step={1}

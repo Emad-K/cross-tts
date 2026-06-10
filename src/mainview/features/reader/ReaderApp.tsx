@@ -60,6 +60,7 @@ import {
 	useBookmarksStore,
 } from "./bookmarks/bookmarksStore";
 import { useSleepTimerStore } from "./sleepTimer/sleepTimerStore";
+import { shouldSleepAtChapterEnd } from "./sleepTimer/sleepTimerUtils";
 import type { LoadedDocument } from "./types";
 import {
 	adjustVolume,
@@ -295,17 +296,26 @@ export function ReaderApp() {
 
 	useEffect(() => {
 		setChapterPlaybackFinishedHandler(() => {
-			// End-of-chapter sleep timer: this chapter just finished, so stop here
-			// instead of rolling into the next one.
+			const doc = documentRef.current;
+			const chapterId = activeChapterIdRef.current;
+
+			// End-of-chapter sleep timer: stop here instead of rolling into the
+			// next chapter once the target chapter (or the current one, when no
+			// target was picked) has finished.
 			const sleep = useSleepTimerStore.getState();
-			const sleepAtChapterEnd = sleep.mode === "endOfChapter";
+			const sleepAtChapterEnd =
+				sleep.mode === "endOfChapter" &&
+				shouldSleepAtChapterEnd({
+					targetChapterId: sleep.targetChapterId,
+					chapterIds:
+						doc?.format === "epub" ? doc.chapters.map((c) => c.id) : [],
+					finishedChapterId: chapterId,
+				});
 			if (sleepAtChapterEnd) {
 				sleep.clearTimer();
 				showToast({ title: "Sleep timer — paused at end of chapter" });
 			}
 
-			const doc = documentRef.current;
-			const chapterId = activeChapterIdRef.current;
 			if (!doc || doc.format !== "epub" || !chapterId) return false;
 
 			const idx = doc.chapters.findIndex((c) => c.id === chapterId);

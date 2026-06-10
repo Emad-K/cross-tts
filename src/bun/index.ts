@@ -269,6 +269,18 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
 		void shell.openPath(path);
 	});
+	// Open a link in the user's default browser. Restricted to https so the
+	// renderer can never use this to launch file:/protocol handlers.
+	ipcMain.handle("openExternal", (_event, { url }: { url: string }) => {
+		let parsed: URL;
+		try {
+			parsed = new URL(url);
+		} catch {
+			return;
+		}
+		if (parsed.protocol !== "https:") return;
+		void shell.openExternal(parsed.toString());
+	});
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
 	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {

@@ -49,8 +49,13 @@ export type TtsTextRule = RegexReplaceRule | PronunciationRule;
 /** Default-off builtin preset group: chapter-end junk in translated webnovels. */
 export const WEBNOVEL_BOILERPLATE_GROUP = "Webnovel boilerplate";
 
+/** Always-shipped default rules (the original ungrouped builtins). */
+export const ESSENTIALS_GROUP = "Essentials";
+
 /** Short blurbs shown under each builtin preset group header in the panel. */
 export const BUILTIN_GROUP_DESCRIPTIONS: Record<string, string> = {
+	[ESSENTIALS_GROUP]:
+		"Core defaults that help most books — on out of the box. Toggle off anything your book doesn't need.",
 	[WEBNOVEL_BOILERPLATE_GROUP]:
 		"Skips common chapter-end junk in translated webnovels (notes, sponsor pleas, Discord/Patreon plugs). Off by default — enable the presets you want.",
 	[PINYIN_PACK_GROUP]:
@@ -103,6 +108,17 @@ const WEBNOVEL_BOILERPLATE_PRESETS: RegexReplaceRule[] = (
 				"(?:^|\\n)[^\\n\\r]*\\bjoin[ \\t]+(?:(?:the|our|my)[ \\t]+)?discord\\b[^\\n\\r]*",
 		},
 		{
+			id: "builtin-skip-chapter-title-lines",
+			label: "Skip “Book Title - Chapter 12” heading lines",
+			// Whole line shaped "<book/series title> <dash> Chapter <n>", with an
+			// optional dash/colon-separated trailing subtitle. Both the dash before
+			// "Chapter" and the full-line anchoring are required so prose that
+			// merely mentions a chapter ("in this chapter we…", "Chapter 2 begins")
+			// never matches.
+			pattern:
+				"(?:^|\\n)[ \\t]*[a-z0-9][a-z0-9 ,'’&]*[ \\t]*[\\-–—][ \\t]*chapters?[ \\t]+\\d{1,5}(?:\\.\\d{1,4})?[ \\t]*(?:[\\-–—:][ \\t]*[^\\n\\r]*)?(?=\\r?\\n|$)",
+		},
+		{
 			id: "builtin-skip-read-ahead-lines",
 			label: "Skip “Read ahead at …” / “Advance chapters …” lines",
 			pattern:
@@ -137,6 +153,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				id: "builtin-separators",
@@ -147,6 +164,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				id: "builtin-urls",
@@ -157,6 +175,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				id: "builtin-chapter-lines",
@@ -168,6 +187,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				id: "builtin-translator-editor-lines",
@@ -179,6 +199,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				// Must run before the inline note rule below so the whole
@@ -192,6 +213,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			{
 				id: "builtin-tl-note-inline",
@@ -204,6 +226,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				enabled: true,
 				caseSensitive: false,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			// Default-off "Webnovel boilerplate" preset group (cloned so callers
 			// can safely mutate the returned state).
@@ -218,6 +241,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				caseSensitive: false,
 				enabled: true,
 				builtIn: true,
+				group: ESSENTIALS_GROUP,
 			},
 			// Default-off "Pinyin (xianxia/wuxia)" pack (absorbs the old starter
 			// CJK pack — ids are stable). IPA is best-effort; enable and

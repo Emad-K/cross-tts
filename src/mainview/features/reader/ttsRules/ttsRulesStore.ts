@@ -17,6 +17,8 @@ type TtsRulesStore = TtsTextRulesState & {
 	signature: string;
 	hydrate: (raw: unknown) => void;
 	setRegexEnabled: (id: string, enabled: boolean) => void;
+	/** Enable/disable every regex rule in a builtin preset group (single update). */
+	setRegexGroupEnabled: (group: string, enabled: boolean) => void;
 	updateRegexRule: (
 		id: string,
 		patch: Partial<Pick<RegexReplaceRule, "label" | "pattern" | "replacement" | "caseSensitive">>,
@@ -24,6 +26,8 @@ type TtsRulesStore = TtsTextRulesState & {
 	addRegexRule: (rule: Omit<RegexReplaceRule, "kind" | "builtIn">) => void;
 	removeRegexRule: (id: string) => void;
 	setPronunciationEnabled: (id: string, enabled: boolean) => void;
+	/** Enable/disable every pronunciation rule in a builtin preset group (single update). */
+	setPronunciationGroupEnabled: (group: string, enabled: boolean) => void;
 	updatePronunciationRule: (
 		id: string,
 		patch: Partial<
@@ -57,6 +61,17 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 					...s,
 					regexRules: s.regexRules.map((r) =>
 						r.id === id ? { ...r, enabled } : r,
+					),
+				}),
+			),
+		setRegexGroupEnabled: (group, enabled) =>
+			set((s) =>
+				withSignature({
+					...s,
+					regexRules: s.regexRules.map((r) =>
+						r.group === group && r.enabled !== enabled
+							? { ...r, enabled }
+							: r,
 					),
 				}),
 			),
@@ -95,6 +110,17 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 					...s,
 					pronunciationRules: s.pronunciationRules.map((r) =>
 						r.id === id ? { ...r, enabled } : r,
+					),
+				}),
+			),
+		setPronunciationGroupEnabled: (group, enabled) =>
+			set((s) =>
+				withSignature({
+					...s,
+					pronunciationRules: s.pronunciationRules.map((r) =>
+						r.group === group && r.enabled !== enabled
+							? { ...r, enabled }
+							: r,
 					),
 				}),
 			),
