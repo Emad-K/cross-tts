@@ -148,7 +148,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 				className,
 			)}
 		>
-			<div className="mx-auto max-w-6xl min-w-0 px-4 py-3 sm:py-4">
+			<div className="min-w-0 px-4 py-3 sm:py-4">
 				<div className="mb-3 flex items-end justify-between gap-2 text-[11px] tabular-nums text-muted-foreground sm:text-xs">
 					<span id={`${progressId}-elapsed`}>{elapsedLabel}</span>
 					{statusLabel ? (
