@@ -53,7 +53,6 @@ export type PlaybackControlsProps = {
  * Media-style footer wired to Kokoro TTS and zustand playback state.
  */
 export function PlaybackControls({ className }: PlaybackControlsProps) {
-	const progressId = useId();
 	const volumeId = useId();
 	const [progress, setProgress] = useState([0]);
 	const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -150,7 +149,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 		>
 			<div className="min-w-0 px-4 py-3 sm:py-4">
 				<div className="mb-3 flex items-end justify-between gap-2 text-[11px] tabular-nums text-muted-foreground sm:text-xs">
-					<span id={`${progressId}-chunks`} className="shrink-0">
+					<span className="shrink-0">
 						{chunkLabel}
 					</span>
 					{statusLabel ? (
@@ -168,7 +167,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 				</div>
 				<div className="mb-4 sm:mb-5">
 					<Slider
-						aria-labelledby={`${progressId}-chunks`}
+						aria-label="Chapter progress"
 						value={[displayProgress]}
 						max={100}
 						step={1}
