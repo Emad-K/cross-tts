@@ -65,6 +65,7 @@ import {
 	stopPlaybackUi,
 	toggleMute,
 	togglePlayPause,
+	useMediaSession,
 	useTtsStore,
 } from "./tts";
 
@@ -154,6 +155,8 @@ export function ReaderApp() {
 		setDocument(null);
 	}, []);
 	useAppearanceSync();
+	// OS media controls (SMTC / MPRIS / Now Playing): metadata + media keys.
+	useMediaSession(document, activeChapterId, setActiveChapterId);
 
 	function isPlaybackActive(
 		playback: ReturnType<typeof useTtsStore.getState>["playback"],

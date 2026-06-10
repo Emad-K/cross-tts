@@ -24,4 +24,5 @@ export {
 	toggleMute,
 	togglePlayPause,
 } from "./ttsEngine";
+export { useMediaSession } from "./mediaSession";
 export { useTtsStore } from "./ttsStore";
