@@ -54,6 +54,14 @@ export async function pickDocument(): Promise<ReadDocumentResult | null> {
 	return b.request.pickDocument();
 }
 
+/** Absolute OS path of a dropped/picked File, or null on web / unknown path. */
+export function pathForFile(file: File): string | null {
+	const b = bridge();
+	if (!b) return null;
+	const path = b.getPathForFile(file);
+	return path.length > 0 ? path : null;
+}
+
 export async function readDocumentAtPath(
 	filePath: string,
 ): Promise<ReadDocumentResult | null> {
