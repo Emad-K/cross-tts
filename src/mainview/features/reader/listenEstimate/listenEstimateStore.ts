@@ -4,51 +4,34 @@ import {
 	EMPTY_LISTEN_RATE,
 	type ListenRateState,
 } from "@shared/listenTimeEstimate";
+import type { ReaderChapter } from "@shared/readerTypes";
 
 type ListenEstimateState = {
 	/** Measured chars→audio-seconds rate; survives book/chapter switches. */
 	rate: ListenRateState;
-	/** Path of the open book the chapter data below belongs to. */
-	bookPath: string | null;
-	/** Chapter ids in reading order (EPUB spine); empty for plain text. */
-	chapterIds: string[];
+	/**
+	 * Chapters of the open book in reading order (empty for chapterless
+	 * documents) and which one is active. Synced by ListenEstimateSync and
+	 * consumed by the sleep timer's chapter targeting.
+	 */
+	chapters: ReaderChapter[];
 	activeChapterId: string | null;
-	/** Known plain-text length per chapter id (filled lazily in the background). */
-	chapterChars: Record<string, number>;
 	recordSample: (chars: number, seconds: number, speed: number) => void;
-	setBook: (path: string | null, chapterIds: string[]) => void;
+	setChapters: (chapters: ReaderChapter[]) => void;
 	setActiveChapter: (id: string | null) => void;
-	setChapterChars: (id: string, chars: number) => void;
 };
 
-export const useListenEstimateStore = create<ListenEstimateState>(
-	(set, get) => ({
-		rate: EMPTY_LISTEN_RATE,
-		bookPath: null,
-		chapterIds: [],
-		activeChapterId: null,
-		chapterChars: {},
+export const useListenEstimateStore = create<ListenEstimateState>((set) => ({
+	rate: EMPTY_LISTEN_RATE,
+	chapters: [],
+	activeChapterId: null,
 
-		recordSample: (chars, seconds, speed) =>
-			set((s) => ({
-				rate: addListenRateSample(s.rate, { chars, seconds, speed }),
-			})),
+	recordSample: (chars, seconds, speed) =>
+		set((s) => ({
+			rate: addListenRateSample(s.rate, { chars, seconds, speed }),
+		})),
 
-		setBook: (path, chapterIds) => {
-			if (get().bookPath === path) {
-				set({ chapterIds });
-				return;
-			}
-			set({ bookPath: path, chapterIds, chapterChars: {} });
-		},
+	setChapters: (chapters) => set({ chapters }),
 
-		setActiveChapter: (activeChapterId) => set({ activeChapterId }),
-
-		setChapterChars: (id, chars) =>
-			set((s) =>
-				s.chapterChars[id] === chars
-					? s
-					: { chapterChars: { ...s.chapterChars, [id]: chars } },
-			),
-	}),
-);
+	setActiveChapter: (activeChapterId) => set({ activeChapterId }),
+}));
