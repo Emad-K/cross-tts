@@ -2,6 +2,7 @@
 	"name": "cross-tts",
 	"version": "1.11.0",
 	"description": "Listen to your books and documents with offline, natural text-to-speech.",
+	"license": "MIT",
 	"author": {
 		"name": "Emad Kazemi",
 		"email": "emadkazemi310@gmail.com"
