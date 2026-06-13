@@ -6,6 +6,11 @@ Status of recommended improvements. **Done** items shipped in this branch/releas
 
 ## ✅ Done (this release)
 
+### Releases auto-fire on a version bump
+- **What:** `release.yml` now triggers on `push` to `main` (not on `v*` tags). A `detect` job releases only when `package.json`'s version has no matching `v<version>` tag yet; `publish` creates the tag via `gh release create --target <sha>`.
+- **Why:** the old flow needed a separate manual `git tag` step. PR #75 merged to `main` and went green but shipped to no users because the tag was never cut. Now bumping the version in a merged PR *is* the release; no tag step to forget.
+- **See the effect:** merge a PR that bumps `package.json` → a new GitHub Release appears within ~15 min. Merge one that doesn't → no release (tag already exists). Manual re-run: **Release** workflow → `workflow_dispatch`.
+
 ### CI runs the test suite
 - **What:** `package.json` gains a `test` script; `.github/workflows/build.yml` and `release.yml` run `bun test` before building.
 - **Why:** CI previously ran only `typecheck` + `build`. A failing assertion shipped in v1.7.5 and the CRLF highlight bug had no Chromium guard. Tests now gate every PR and release.

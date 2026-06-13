@@ -68,9 +68,14 @@ e2e/            # Playwright tests against the packaged app
 
 ### Releasing
 
-1. Bump `version` in `package.json` and commit.
-2. Tag it `v<version>` (annotated) and push the tag.
-3. The **Release** workflow verifies the tag matches `package.json`, builds all three OSes, and publishes the artifacts.
+Releasing is automatic and driven by `package.json` — **bump the version in a PR and merge it.** When a push to `main` carries a version with no matching `v<version>` tag, the **Release** workflow builds all three OSes, creates the tag, and publishes the GitHub Release. Pushes that don't change the version are a no-op (the tag already exists), so feature PRs that aren't meant to ship just leave the version alone.
+
+```bash
+pnpm version minor   # or patch / major — bumps package.json, commits
+# open a PR, merge to main → Release publishes v<new-version>
+```
+
+To re-run a release for the current version, trigger the **Release** workflow manually (`workflow_dispatch`).
 
 ## Contributing
 

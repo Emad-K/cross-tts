@@ -1,19 +1,57 @@
 name: Release
 
+# Releases are driven entirely by package.json's version: when a push to main
+# carries a version that has no matching `v<version>` tag yet, this workflow
+# builds all three OSes and publishes a GitHub Release (creating the tag in the
+# process). There is no separate manual `git tag` step to forget — bumping the
+# version in a merged PR *is* the release action. `workflow_dispatch` is the
+# manual escape hatch (re-run a release for the current version).
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   # Silence the Node 20 deprecation; run JS actions on Node 24.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # Gate every release on "package.json version is not yet tagged". Unchanged
+  # version -> tag exists -> no-op, so ordinary pushes to main cost one cheap
+  # job and nothing more.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$VERSION is already tagged — nothing to release."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "v$VERSION has no tag yet — building and publishing."
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -64,23 +102,13 @@ jobs:
           if-no-files-found: warn
 
   publish:
-    needs: build
+    needs: [detect, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-
-      - name: Verify tag matches package.json version
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG=$(node -p "require('./package.json').version")
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::Git tag version ($TAG) does not match package.json version ($PKG). Bump package.json first, commit, then tag v$PKG."
-            exit 1
-          fi
-          echo "Release version $PKG matches tag."
 
       - uses: actions/download-artifact@v4
         with:
@@ -94,18 +122,19 @@ jobs:
       # Pick the previous release by version order, not git ancestry. Release
       # tags have historically landed off main's lineage (squash-merges), so
       # GitHub's auto "previous tag" detection walks back to v1.0.0 and dumps
-      # every PR into the notes. Selecting the prior tag explicitly keeps the
-      # changelog scoped to changes since the last release.
+      # every PR into the notes. The current version isn't tagged yet, so the
+      # newest existing tag *is* the prior release.
       - name: Compute previous release tag
         id: prev
         run: |
-          PREV=$(git tag --sort=-v:refname | grep -vx "${GITHUB_REF_NAME}" | head -1)
+          PREV=$(git tag --sort=-v:refname | head -1)
           echo "tag=$PREV" >> "$GITHUB_OUTPUT"
           echo "Previous release tag: ${PREV:-<none>}"
 
-      - name: Publish release
+      - name: Create tag and publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
         shell: bash
         run: |
           shopt -s globstar nullglob
@@ -117,8 +146,10 @@ jobs:
             echo "::error::No release assets found under release-assets/"
             exit 1
           fi
-          ARGS=(--title "${GITHUB_REF_NAME}" --generate-notes)
+          # gh creates the v$VERSION tag at the pushed commit when it does not
+          # already exist, so no separate `git tag && git push` is needed.
+          ARGS=(--title "v$VERSION" --target "$GITHUB_SHA" --generate-notes)
           if [ -n "${{ steps.prev.outputs.tag }}" ]; then
             ARGS+=(--notes-start-tag "${{ steps.prev.outputs.tag }}")
           fi
-          gh release create "${GITHUB_REF_NAME}" "${ARGS[@]}" "${assets[@]}"
+          gh release create "v$VERSION" "${ARGS[@]}" "${assets[@]}"
