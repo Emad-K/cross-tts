@@ -12,6 +12,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { type BookDetails, BookCardMenu } from "./library/BookCardMenu";
 import {
@@ -227,8 +228,8 @@ export function ReaderEmptyState({
 	}
 
 	return (
-		<div className={cn("flex-1 overflow-y-auto px-6 py-8", className)}>
-			<div className="mx-auto w-full max-w-6xl">
+		<ScrollArea className={cn("min-h-0 flex-1", className)}>
+			<div className="mx-auto w-full max-w-6xl px-6 py-8">
 				<div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
 						My books
@@ -325,6 +326,6 @@ export function ReaderEmptyState({
 					</div>
 				)}
 			</div>
-		</div>
+		</ScrollArea>
 	);
 }

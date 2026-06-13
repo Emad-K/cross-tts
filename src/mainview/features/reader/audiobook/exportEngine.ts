@@ -1,5 +1,5 @@
 import type { AudioFormat } from "@shared/audiobook";
-import { trackFileName } from "@shared/audiobook";
+import { sanitizeFileName, trackFileName } from "@shared/audiobook";
 import {
 	appendAudioFile,
 	audioFileExists,
@@ -87,10 +87,6 @@ export type StartExportOpts = {
 	/** Book title, used to name the combined file. */
 	bookTitle?: string;
 };
-
-function sanitizeFileName(name: string): string {
-	return name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "audiobook";
-}
 
 /** ~16 MiB per IPC message keeps large single-file books off one giant payload. */
 const WRITE_CHUNK_BYTES = 16 * 1024 * 1024;

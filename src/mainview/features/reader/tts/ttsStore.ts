@@ -34,8 +34,12 @@ type TtsState = {
 	playbackError: string | null;
 	currentChunkIndex: number;
 	highlightRange: { start: number; end: number } | null;
-	elapsedSec: number;
-	totalSec: number | null;
+	/**
+	 * Measured audio length per chunk index, normalized to 1x speed (seconds ×
+	 * synthesis speed). Sparse: filled in as chunks play; reset with `chunks`.
+	 * Powers the exact part of the playback bar's elapsed/total clock.
+	 */
+	chunkBaseSec: (number | undefined)[];
 	progressPct: number;
 	setSourceText: (raw: string, opts?: { chunkIndex?: number }) => void;
 	/** Rebuild chunks from the current text (e.g. after max-chunk-size changed). */
@@ -61,12 +65,12 @@ type TtsState = {
 				| "playbackError"
 				| "currentChunkIndex"
 				| "highlightRange"
-				| "elapsedSec"
-				| "totalSec"
 				| "progressPct"
 			>
 		>,
 	) => void;
+	/** Record one chunk's measured audio length, normalized to 1x speed. */
+	recordChunkBaseSec: (index: number, baseSec: number) => void;
 	seekToChunk: (index: number) => void;
 };
 
@@ -98,8 +102,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	playbackError: null,
 	currentChunkIndex: 0,
 	highlightRange: null,
-	elapsedSec: 0,
-	totalSec: null,
+	chunkBaseSec: [],
 	progressPct: 0,
 
 	setSourceText: (raw, opts) => {
@@ -123,8 +126,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 			chunks,
 			currentChunkIndex: idx,
 			highlightRange: ch ? { start: ch.start, end: ch.end } : null,
-			elapsedSec: 0,
-			totalSec: null,
+			chunkBaseSec: [],
 			progressPct,
 			playback: "idle",
 			playbackError: null,
@@ -139,8 +141,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 			chunks,
 			currentChunkIndex: 0,
 			highlightRange: ch ? { start: ch.start, end: ch.end } : null,
-			elapsedSec: 0,
-			totalSec: null,
+			chunkBaseSec: [],
 			progressPct: chunks.length <= 1 ? 100 : 0,
 			playback: "idle",
 			playbackError: null,
@@ -175,6 +176,16 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 		}),
 
 	setPlayback: (patch) => set(patch),
+
+	recordChunkBaseSec: (index, baseSec) => {
+		if (!Number.isFinite(baseSec) || baseSec <= 0) return;
+		const { chunks, chunkBaseSec } = get();
+		if (index < 0 || index >= chunks.length) return;
+		if (chunkBaseSec[index] === baseSec) return;
+		const next = chunkBaseSec.slice();
+		next[index] = baseSec;
+		set({ chunkBaseSec: next });
+	},
 
 	seekToChunk: (index) => {
 		const { chunks } = get();

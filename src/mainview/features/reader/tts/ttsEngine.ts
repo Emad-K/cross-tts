@@ -648,8 +648,6 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			currentChunkIndex: idx,
 			highlightRange: { start: chunk.start, end: chunk.end },
 			progressPct: chunkProgressPct(idx, total),
-			elapsedSec: idx,
-			totalSec: total,
 		});
 
 		let buffer: AudioBuffer | null = null;
@@ -678,10 +676,14 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			continue;
 		}
 
-		// Feed the listen-time estimate with the measured chars→audio rate.
+		// Feed the listen-time estimate with the measured chars→audio rate, and
+		// pin this chunk's exact length for the elapsed/total chapter clock.
 		useListenEstimateStore
 			.getState()
 			.recordSample(chunk.text.length, buffer.duration, snap.speed);
+		useTtsStore
+			.getState()
+			.recordChunkBaseSec(idx, buffer.duration * snap.speed);
 
 		// Warm the cache for upcoming chunks so playback never waits on
 		// synthesis, even when the current chunk is short.
@@ -727,8 +729,6 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			playback: "idle",
 			currentChunkIndex: 0,
 			highlightRange: null,
-			elapsedSec: 0,
-			totalSec: null,
 			progressPct: 100,
 		});
 	} else if (!signal.aborted) {
