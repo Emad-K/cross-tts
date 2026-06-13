@@ -1,12 +1,36 @@
+<div align="center">
+
 # Cross TTS
 
-**Turn any book into an audiobook — fully offline, on your own machine.**
+**Turn any book into an audiobook — natural neural voices, fully offline, free.**
 
-Cross TTS is a free desktop reader that speaks your EPUB and TXT files with natural, neural text-to-speech ([Kokoro](https://github.com/hexgrad/kokoro)). No account, no cloud, no subscription: the voice model runs locally, so nothing you read ever leaves your computer.
+[![Latest release](https://img.shields.io/github/v/release/Emad-K/cross-tts?label=download&sort=semver)](https://github.com/Emad-K/cross-tts/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Emad-K/cross-tts/total)](https://github.com/Emad-K/cross-tts/releases)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-555)
 
-[**⬇ Download the latest release**](https://github.com/Emad-K/cross-tts/releases/latest) — Windows · macOS · Linux
+Cross TTS is a free desktop reader that speaks your EPUB and TXT files with natural, neural text-to-speech ([Kokoro](https://github.com/hexgrad/kokoro)). No account, no cloud, no subscription — the voice model runs locally, so nothing you read ever leaves your computer.
 
----
+[**⬇ Download for Windows · macOS · Linux**](https://github.com/Emad-K/cross-tts/releases/latest)
+
+<img src="docs/media/04-reader-dark.png" alt="Cross TTS reader with sentence-by-sentence read-along highlighting" width="860">
+
+</div>
+
+## 🎬 Demo
+
+<!--
+  Add a real demo VIDEO here so people can hear the voice (a GIF can't carry audio):
+  1. Record a ~20–40s clip — open a book, hit play, show the highlight following along.
+     Capture WITH system audio so the Kokoro voice is in the clip. (OBS, ShareX, or
+     macOS Cmd-Shift-5 all work; export MP4, keep it under 100 MB.)
+  2. Edit this README on github.com (the ✏️ button), then drag the .mp4 into the editor.
+     GitHub uploads it and drops in a player URL like
+     https://github.com/user-attachments/assets/<id> — commit, done.
+  A silent GIF of the UI flow is a fine secondary option; put it in docs/media/ and
+  reference it as ![demo](docs/media/demo.gif).
+-->
+
+> ▶️ _Demo video coming soon — drag an `.mp4` in here on github.com to embed a player with sound._
 
 ## Why you might like it
 
@@ -30,6 +54,14 @@ Cross TTS is a free desktop reader that speaks your EPUB and TXT files with natu
 | Export | M4B (chapters + cover), MP3 |
 | Platforms | Windows (installer + portable), macOS (x64 / Apple Silicon), Linux (AppImage / deb / rpm) |
 | Privacy | 100% local synthesis, no telemetry of your content |
+
+## Screenshots
+
+| Reading with read-along | Settings |
+|---|---|
+| <img src="docs/media/02-reader.png" alt="Reader view with the current sentence highlighted, chapters sidebar, and playback bar" width="420"> | <img src="docs/media/03-settings.png" alt="Appearance settings: color mode, theme, reading font and size" width="420"> |
+
+The current sentence is highlighted as it's read; the chapters sidebar, playback bar, speed control, and voice picker stay one click away.
 
 ## Installation
 
