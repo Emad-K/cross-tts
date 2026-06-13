@@ -3,9 +3,9 @@
  *
  * The TTS engine reports how long each synthesized chunk's audio is. From
  * (characters, audio seconds, speed) samples we derive a speed-normalized
- * seconds-per-character rate, then multiply by the characters still to be
- * read to estimate the remaining listen time. Kept in shared (no DOM/audio
- * types) so it is unit-testable with bun.
+ * seconds-per-character rate, then build a chapter timeline: exact durations
+ * for chunks already synthesized, rate-based estimates for the rest. Kept in
+ * shared (no DOM/audio types) so it is unit-testable with bun.
  */
 
 export type ListenRateSample = {
@@ -60,38 +60,41 @@ export function baseSecondsPerChar(state: ListenRateState): number | null {
 	return state.baseSeconds / state.chars;
 }
 
-/**
- * Estimated seconds to listen to `chars` characters at `speed`, or null when
- * the rate is not yet known (or inputs are invalid).
- */
-export function estimateSecondsForChars(
-	state: ListenRateState,
-	chars: number,
-	speed: number,
-): number | null {
-	const rate = baseSecondsPerChar(state);
-	if (rate == null || !Number.isFinite(chars) || chars < 0) return null;
-	if (!Number.isFinite(speed) || speed <= 0) return null;
-	return (chars * rate) / speed;
-}
+export type ChapterTimeline = {
+	/** Start offset of each chunk, in listening seconds at the playback speed. */
+	starts: number[];
+	/** Full chapter length in listening seconds at the playback speed. */
+	totalSec: number;
+};
 
 /**
- * Characters left in the current chapter, counting the current chunk in full
- * (estimates are minute-granular, so sub-chunk progress is noise).
+ * Per-chunk start offsets and the chapter total, in seconds at `speed`.
+ *
+ * Chunks whose synthesized audio was measured use the exact duration
+ * (`measuredBaseSec[i]`, normalized to 1x speed); unmeasured chunks fall back
+ * to the chars→seconds rate. Returns null while the rate is unknown and any
+ * chunk is still unmeasured — a partial timeline would mislabel the total.
  */
-export function remainingChapterChars(
+export function chapterTimeline(
 	chunkCharLengths: number[],
-	currentChunkIndex: number,
-): number {
-	let total = 0;
-	const from = Math.max(0, currentChunkIndex);
-	for (let i = from; i < chunkCharLengths.length; i++) {
-		const n = chunkCharLengths[i];
-		if (Number.isFinite(n) && n! > 0) total += n!;
+	measuredBaseSec: ReadonlyArray<number | undefined>,
+	state: ListenRateState,
+	speed: number,
+): ChapterTimeline | null {
+	if (!Number.isFinite(speed) || speed <= 0) return null;
+	const rate = baseSecondsPerChar(state);
+	const starts: number[] = [];
+	let acc = 0;
+	for (let i = 0; i < chunkCharLengths.length; i++) {
+		starts.push(acc);
+		const measured = measuredBaseSec[i];
+		if (measured !== undefined && Number.isFinite(measured) && measured > 0) {
+			acc += measured / speed;
+		} else {
+			if (rate == null) return null;
+			const chars = chunkCharLengths[i];
+			if (Number.isFinite(chars) && chars! > 0) acc += (chars! * rate) / speed;
+		}
 	}
-	return total;
+	return { starts, totalSec: acc };
 }
-
-// Estimate labels are formatted with the shared hh:mm:ss formatter
-// (src/shared/formatHms.ts); book-level estimates were removed with the
-// playback-bar rework — the bar shows the chapter ETA only.

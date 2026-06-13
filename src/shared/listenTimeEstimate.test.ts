@@ -2,10 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
 	addListenRateSample,
 	baseSecondsPerChar,
+	chapterTimeline,
 	EMPTY_LISTEN_RATE,
-	estimateSecondsForChars,
 	MIN_MEASURED_CHARS,
-	remainingChapterChars,
 } from "./listenTimeEstimate";
 
 describe("addListenRateSample", () => {
@@ -58,40 +57,63 @@ describe("baseSecondsPerChar", () => {
 	});
 });
 
-describe("estimateSecondsForChars", () => {
+describe("chapterTimeline", () => {
 	const rate = addListenRateSample(EMPTY_LISTEN_RATE, {
 		chars: 1000,
 		seconds: 100,
 		speed: 1,
 	}); // 0.1 s/char at 1x
 
-	test("scales with chars and divides by playback speed", () => {
-		expect(estimateSecondsForChars(rate, 600, 1)).toBeCloseTo(60);
-		expect(estimateSecondsForChars(rate, 600, 2)).toBeCloseTo(30);
-		expect(estimateSecondsForChars(rate, 600, 0.75)).toBeCloseTo(80);
+	test("estimates every chunk from the rate when nothing is measured", () => {
+		const t = chapterTimeline([100, 200, 300], [], rate, 1);
+		expect(t).not.toBeNull();
+		expect(t!.starts).toEqual([0, 10, 30]);
+		expect(t!.totalSec).toBeCloseTo(60);
 	});
 
-	test("zero chars estimates zero", () => {
-		expect(estimateSecondsForChars(rate, 0, 1)).toBe(0);
+	test("measured durations override the estimate", () => {
+		// Chunk 1 measured at 25s (1x) vs the 20s estimate.
+		const t = chapterTimeline([100, 200, 300], [undefined, 25], rate, 1);
+		expect(t!.starts).toEqual([0, 10, 35]);
+		expect(t!.totalSec).toBeCloseTo(65);
 	});
 
-	test("null without a usable rate or with bad inputs", () => {
-		expect(estimateSecondsForChars(EMPTY_LISTEN_RATE, 600, 1)).toBeNull();
-		expect(estimateSecondsForChars(rate, -5, 1)).toBeNull();
-		expect(estimateSecondsForChars(rate, 600, 0)).toBeNull();
-	});
-});
-
-describe("remainingChapterChars", () => {
-	test("sums from the current chunk (inclusive)", () => {
-		expect(remainingChapterChars([10, 20, 30, 40], 2)).toBe(70);
-		expect(remainingChapterChars([10, 20, 30, 40], 0)).toBe(100);
+	test("divides by playback speed", () => {
+		const t = chapterTimeline([100, 200], [10, 20], rate, 2);
+		expect(t!.starts).toEqual([0, 5]);
+		expect(t!.totalSec).toBeCloseTo(15);
 	});
 
-	test("clamps a negative index and handles past-the-end", () => {
-		expect(remainingChapterChars([10, 20], -1)).toBe(30);
-		expect(remainingChapterChars([10, 20], 5)).toBe(0);
-		expect(remainingChapterChars([], 0)).toBe(0);
+	test("fully measured chapter needs no rate", () => {
+		const t = chapterTimeline([100, 200], [10, 20], EMPTY_LISTEN_RATE, 1);
+		expect(t!.starts).toEqual([0, 10]);
+		expect(t!.totalSec).toBeCloseTo(30);
+	});
+
+	test("null while the rate is unknown and a chunk is unmeasured", () => {
+		expect(chapterTimeline([100, 200], [10], EMPTY_LISTEN_RATE, 1)).toBeNull();
+	});
+
+	test("null for an invalid speed", () => {
+		expect(chapterTimeline([100], [10], rate, 0)).toBeNull();
+		expect(chapterTimeline([100], [10], rate, Number.NaN)).toBeNull();
+	});
+
+	test("empty chapter yields an empty timeline", () => {
+		const t = chapterTimeline([], [], rate, 1);
+		expect(t!.starts).toEqual([]);
+		expect(t!.totalSec).toBe(0);
+	});
+
+	test("skips invalid char counts and invalid measurements", () => {
+		const t = chapterTimeline(
+			[100, Number.NaN, 100],
+			[undefined, -5, 0],
+			rate,
+			1,
+		);
+		expect(t!.starts).toEqual([0, 10, 10]);
+		expect(t!.totalSec).toBeCloseTo(20);
 	});
 });
 
