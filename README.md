@@ -88,6 +88,12 @@ Synthesis settings (use GPU, CPU thread count) live in **Settings → Performanc
 
 ---
 
+## License
+
+MIT © Emad Kazemi — see [LICENSE](LICENSE).
+
+---
+
 <details>
 <summary><strong>For developers</strong></summary>
 
