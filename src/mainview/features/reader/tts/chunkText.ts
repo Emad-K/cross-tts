@@ -1,3 +1,8 @@
+import {
+	MAX_CHUNK_CHARS_DEFAULT,
+	MAX_CHUNK_CHARS_MAX,
+	MAX_CHUNK_CHARS_MIN,
+} from "@shared/appearance";
 import { getWinkNlp, tokenCharBounds } from "./winkNlp";
 import { isSpeakableChunkText } from "./ttsChunkText";
 
@@ -10,11 +15,6 @@ export type TtsChunk = {
 	/** Exclusive end index in {@link normalizedReaderText}. */
 	end: number;
 };
-
-/** Default max characters per chunk; overridable via settings. */
-export const DEFAULT_MAX_CHUNK_CHARS = 300;
-export const MIN_MAX_CHUNK_CHARS = 120;
-export const MAX_MAX_CHUNK_CHARS = 600;
 
 /** Match TxtViewer: normalize newlines only (no trim) so indices line up. */
 export function normalizedReaderText(raw: string): string {
@@ -180,13 +180,16 @@ function mergeUndersizedChunks(
  */
 export function buildTtsChunks(
 	raw: string,
-	maxChars: number = DEFAULT_MAX_CHUNK_CHARS,
+	maxChars: number = MAX_CHUNK_CHARS_DEFAULT,
 ): TtsChunk[] {
 	const full = normalizedReaderText(raw);
 	if (!full.trim()) return [];
 	const cap = Math.max(
-		MIN_MAX_CHUNK_CHARS,
-		Math.min(MAX_MAX_CHUNK_CHARS, Math.floor(maxChars) || DEFAULT_MAX_CHUNK_CHARS),
+		MAX_CHUNK_CHARS_MIN,
+		Math.min(
+			MAX_CHUNK_CHARS_MAX,
+			Math.floor(maxChars) || MAX_CHUNK_CHARS_DEFAULT,
+		),
 	);
 
 	const merged: Omit<TtsChunk, "index">[] = [];

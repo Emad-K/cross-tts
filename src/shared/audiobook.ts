@@ -7,7 +7,7 @@ export const AUDIO_FORMATS: { id: AudioFormat; label: string; ext: string }[] = 
 	{ id: "m4b", label: "M4B audiobook (single file)", ext: "m4b" },
 ];
 
-export function formatExt(format: AudioFormat): string {
+function formatExt(format: AudioFormat): string {
 	return AUDIO_FORMATS.find((f) => f.id === format)?.ext ?? "mp3";
 }
 
