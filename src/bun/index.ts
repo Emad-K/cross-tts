@@ -1,6 +1,11 @@
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import {
+	APP_INDEX_URL,
+	handleAppRequests,
+	registerAppScheme,
+} from "./appProtocol";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
@@ -78,11 +83,17 @@ if (e2eUserData) {
 // to report them on GitHub. Nothing is ever sent automatically.
 initCrashCapture();
 
-// Re-enable SharedArrayBuffer without requiring cross-origin isolation. ONNX
-// Runtime's multi-threaded wasm backend needs SAB; without this it silently
-// runs single-threaded and CPU synthesis is painfully slow. Must be set before
-// the app is ready.
+// SharedArrayBuffer (needed by ONNX Runtime's multi-threaded wasm backend, or
+// CPU synthesis runs single-threaded and playback lags) is enabled two ways:
+//   1. Cross-origin isolation — the renderer is served from the `app://` scheme
+//      with COOP/COEP headers (see appProtocol.ts), which guarantees SAB on
+//      every platform. This is the reliable path.
+//   2. The Chromium feature flag below, as a belt-and-suspenders fallback. It
+//      is a deprecated escape hatch that no longer works everywhere, so it can't
+//      be relied on alone.
+// Both must be set before the app is ready.
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+registerAppScheme();
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
@@ -446,7 +457,7 @@ function createWindow(): void {
 	if (!app.isPackaged && devUrl) {
 		void mainWindow.loadURL(devUrl);
 	} else {
-		void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+		void mainWindow.loadURL(APP_INDEX_URL);
 	}
 
 	// Restore maximized / fullscreen state on top of the normal bounds.
@@ -475,6 +486,10 @@ app.whenReady().then(async () => {
 	// Remove the default application menu (File / Edit / View / …). This app
 	// has no menu commands; keyboard accelerators are handled in the renderer.
 	Menu.setApplicationMenu(null);
+
+	// Serve the built renderer over app:// (with cross-origin-isolation headers)
+	// before the window loads it.
+	handleAppRequests(join(__dirname, "../renderer"));
 
 	registerRpcHandlers();
 	createWindow();

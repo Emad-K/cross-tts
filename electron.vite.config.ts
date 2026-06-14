@@ -38,6 +38,12 @@ export default defineConfig({
 		server: {
 			port: 5173,
 			strictPort: true,
+			// Match the production app:// scheme: cross-origin isolation in dev so
+			// SharedArrayBuffer (ONNX Runtime wasm threads) is available there too.
+			headers: {
+				"Cross-Origin-Opener-Policy": "same-origin",
+				"Cross-Origin-Embedder-Policy": "credentialless",
+			},
 		},
 	},
 });
