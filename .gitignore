@@ -20,3 +20,6 @@ yarn.lock
 # Playwright E2E output
 test-results/
 playwright-report/
+
+# Personal launch/marketing notes (not part of the product)
+docs/launch-playbook.md
