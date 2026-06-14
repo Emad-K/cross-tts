@@ -134,6 +134,9 @@ export function startKokoroHubServer(): Promise<string> {
 			}
 			const headers: Record<string, string> = {
 				"Access-Control-Allow-Origin": "*",
+				// The renderer is cross-origin isolated (COEP), so this cross-origin
+				// model fetch needs an explicit resource policy to be allowed.
+				"Cross-Origin-Resource-Policy": "cross-origin",
 				"Cache-Control": "public, max-age=31536000, immutable",
 			};
 			const ct = contentTypeFor(dest);
