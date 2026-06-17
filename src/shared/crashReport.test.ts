@@ -7,6 +7,7 @@ import {
 	buildIssueBody,
 	crashRecordToJson,
 	parseCrashRecord,
+	redactUserPaths,
 	type CrashRecord,
 } from "./crashReport";
 
@@ -74,6 +75,27 @@ describe("buildCrashRecord", () => {
 		expect(r.message).toBe("[object Object]");
 	});
 
+	test("redacts the username from home-dir paths in stack and message", () => {
+		const err = new Error(
+			"Renderer gone at C:\\Users\\emad\\AppData\\Local\\Programs\\Cross TTS\\resources\\app.asar\\out\\main\\index.js",
+		);
+		err.stack =
+			"Error: boom\n    at App.<anonymous> (C:\\Users\\emad\\AppData\\Local\\Programs\\Cross TTS\\resources\\app.asar\\out\\main\\index.js:2186:7)";
+		const r = buildCrashRecord({
+			kind: "render-process-gone",
+			error: err,
+			appVersion: "1.12.0",
+			platform: "win32 x64",
+			now: NOW,
+		});
+		expect(r.message).not.toContain("emad");
+		expect(r.message).toContain("C:\\Users\\<user>\\AppData");
+		expect(r.stack ?? "").not.toContain("emad");
+		expect(r.stack ?? "").toContain("C:\\Users\\<user>\\AppData");
+		// Keeps the app-relative path after the home root for debugging.
+		expect(r.stack ?? "").toContain("app.asar\\out\\main\\index.js");
+	});
+
 	test("truncates oversized message and stack", () => {
 		const err = new Error("m".repeat(5000));
 		err.stack = "s".repeat(20_000);
@@ -87,6 +109,22 @@ describe("buildCrashRecord", () => {
 		expect(r.message.length).toBeLessThan(1100);
 		expect(r.message.endsWith("… [truncated]")).toBe(true);
 		expect((r.stack ?? "").length).toBeLessThan(4100);
+	});
+});
+
+describe("redactUserPaths", () => {
+	test("redacts Windows, macOS, and Linux home paths", () => {
+		expect(redactUserPaths("C:\\Users\\emad\\AppData\\x")).toBe(
+			"C:\\Users\\<user>\\AppData\\x",
+		);
+		expect(redactUserPaths("D:/Users/Jane Doe/app")).toBe("D:/Users/<user>/app");
+		expect(redactUserPaths("/Users/emad/Library/x")).toBe("/Users/<user>/Library/x");
+		expect(redactUserPaths("/home/emad/.config/x")).toBe("/home/<user>/.config/x");
+	});
+
+	test("leaves paths without a home root untouched", () => {
+		expect(redactUserPaths("at main (index.js:1:1)")).toBe("at main (index.js:1:1)");
+		expect(redactUserPaths("/var/log/app/out.js")).toBe("/var/log/app/out.js");
 	});
 });
 
