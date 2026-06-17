@@ -3,9 +3,10 @@
  *
  * Privacy by construction: a record only ever contains the crash kind, error
  * name/message/stack, timestamps, and app/platform versions — never document
- * text, file paths the user opened, or any other user content. Nothing is sent
- * anywhere automatically; the renderer shows the exact JSON to the user, who
- * may choose to open a prefilled GitHub issue with it.
+ * text or file paths the user opened. The username embedded in home-directory
+ * paths inside stack traces is redacted to `<user>` (see {@link redactUserPaths}).
+ * Nothing is sent anywhere automatically; the renderer shows the exact JSON to
+ * the user, who may choose to open a prefilled GitHub issue with it.
  */
 
 /** Where a crash was caught in the main process. */
@@ -28,7 +29,7 @@ export type CrashRecord = {
 	/** Error class name, or a reason label for process-gone events. */
 	name: string;
 	message: string;
-	/** Stack trace when available (never contains user content). */
+	/** Stack trace when available; home-dir paths have the username redacted. */
 	stack: string | null;
 };
 
@@ -47,6 +48,24 @@ export const CRASH_ISSUE_BASE_URL =
 
 function truncate(s: string, max: number): string {
 	return s.length <= max ? s : `${s.slice(0, max)}… [truncated]`;
+}
+
+/**
+ * Strip the username out of home-directory paths that leak into stack traces
+ * and error messages. The bundled code lives under the user's home, so Electron
+ * stack frames embed absolute paths like `C:\Users\jane\AppData\…`. The first
+ * segment under a known home root is replaced with `<user>`; everything after
+ * (the app's own asar path) is kept — it's identical for every install and
+ * useful for debugging.
+ */
+export function redactUserPaths(s: string): string {
+	return (
+		s
+			// Windows: C:\Users\<name>\…  (also matches forward-slash variants)
+			.replace(/([A-Za-z]:[\\/]Users[\\/])[^\\/]+/gi, "$1<user>")
+			// macOS: /Users/<name>/…  and Linux: /home/<name>/…
+			.replace(/(\/(?:Users|home)\/)[^/]+/g, "$1<user>")
+	);
 }
 
 /**
@@ -83,8 +102,8 @@ export function buildCrashRecord(input: {
 		platform: input.platform,
 		kind: input.kind,
 		name,
-		message: truncate(message, MAX_MESSAGE_CHARS),
-		stack: stack === null ? null : truncate(stack, MAX_STACK_CHARS),
+		message: truncate(redactUserPaths(message), MAX_MESSAGE_CHARS),
+		stack: stack === null ? null : truncate(redactUserPaths(stack), MAX_STACK_CHARS),
 	};
 }
 
