@@ -1,4 +1,8 @@
-import { env } from "@huggingface/transformers";
+import {
+	AutoTokenizer,
+	StyleTextToSpeech2Model,
+	env,
+} from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { phonemizeForKokoro } from "../mainview/features/reader/tts/kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "../mainview/features/reader/tts/phonemeTokenSplit";
@@ -27,7 +31,7 @@ const DTYPE = "fp32";
 const MAX_PHONEME_TOKENS = 500;
 
 type InMessage =
-	| { type: "init"; hubBaseUrl: string | null }
+	| { type: "init"; hubBaseUrl: string | null; numThreads: number }
 	| ({ type: "generate"; id: number } & TtsNodeGenerateParams);
 
 const parentPort = process.parentPort;
@@ -35,7 +39,10 @@ const parentPort = process.parentPort;
 let tts: KokoroTTS | null = null;
 let loadPromise: Promise<KokoroTTS> | null = null;
 
-function load(hubBaseUrl: string | null): Promise<KokoroTTS> {
+function load(
+	hubBaseUrl: string | null,
+	numThreads: number,
+): Promise<KokoroTTS> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
 		if (hubBaseUrl) {
@@ -46,18 +53,29 @@ function load(hubBaseUrl: string | null): Promise<KokoroTTS> {
 			env.useFSCache = false;
 			env.allowLocalModels = false;
 		}
-		loadPromise = KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-			dtype: DTYPE,
-			device: "cpu",
-			progress_callback: (info) => {
-				if (info.status === "progress") {
-					parentPort.postMessage({ type: "progress", value: info.progress / 100 });
-				}
-			},
-		})
-			.then((model) => {
-				tts = model;
-				return model;
+		// Not KokoroTTS.from_pretrained: it doesn't forward session_options, and
+		// the user's thread preference (Settings → Performance) must reach the
+		// native ORT session. 0 = auto (ORT's default: one per physical core).
+		loadPromise = Promise.all([
+			StyleTextToSpeech2Model.from_pretrained(KOKORO_MODEL_ID, {
+				dtype: DTYPE,
+				device: "cpu",
+				session_options:
+					numThreads > 0 ? { intraOpNumThreads: numThreads } : {},
+				progress_callback: (info) => {
+					if (info.status === "progress") {
+						parentPort.postMessage({
+							type: "progress",
+							value: info.progress / 100,
+						});
+					}
+				},
+			}),
+			AutoTokenizer.from_pretrained(KOKORO_MODEL_ID),
+		])
+			.then(([model, tokenizer]) => {
+				tts = new KokoroTTS(model, tokenizer);
+				return tts;
 			})
 			.catch((e) => {
 				loadPromise = null;
@@ -84,7 +102,7 @@ parentPort.on("message", (event) => {
 
 	if (msg.type === "init") {
 		const startedAt = performance.now();
-		void load(msg.hubBaseUrl)
+		void load(msg.hubBaseUrl, msg.numThreads)
 			.then((model) => {
 				parentPort.postMessage({
 					type: "ready",

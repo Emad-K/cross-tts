@@ -1,7 +1,9 @@
 /**
- * Kokoro ONNX model assets, split by the device that uses them. The CPU (wasm)
- * path loads the quantized q8 weights; the GPU (WebGPU) path loads full-precision
- * fp32 weights. transformers.js resolves these exact file names from the dtype.
+ * Kokoro ONNX model assets, split by dtype. Full-precision fp32 weights serve
+ * both main paths — WebGPU *and* the native CPU engine (q8 is slower than fp32
+ * on the native CPU EP). The quantized q8 weights are only loaded by the
+ * last-resort in-app (wasm) fallback. transformers.js resolves these exact
+ * file names from the dtype. Kind keys keep their historical names.
  */
 export type ModelKind = "cpu" | "gpu";
 
@@ -14,8 +16,8 @@ export const MODEL_ONNX: Record<ModelKind, string> = {
 };
 
 export const MODEL_LABEL: Record<ModelKind, string> = {
-	cpu: "CPU model",
-	gpu: "GPU model",
+	cpu: "Fallback model (compatibility)",
+	gpu: "Voice model (GPU & CPU)",
 };
 
 export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu"];

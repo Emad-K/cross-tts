@@ -12,6 +12,7 @@ import {
 	addWatchedFolder,
 	appConfigInfo,
 	dataDir,
+	loadAppConfig,
 	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
@@ -168,7 +169,9 @@ function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
-	ipcMain.handle("ttsNodeInit", async () => ttsNodeInit(await kokoroHubReady));
+	ipcMain.handle("ttsNodeInit", async () =>
+		ttsNodeInit(await kokoroHubReady, loadAppConfig().cpuThreads ?? 0),
+	);
 	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
 		ttsNodeGenerate(params),
 	);

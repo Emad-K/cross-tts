@@ -45,6 +45,7 @@ export function stopTtsNode(): void {
 
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
+	numThreads: number,
 ): Promise<TtsNodeInitResult> {
 	if (initPromise) return initPromise;
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
@@ -100,7 +101,7 @@ export function ttsNodeInit(
 			}
 			resolve({ ok: false, error: `Native TTS process exited (code ${code})` });
 		});
-		proc.postMessage({ type: "init", hubBaseUrl });
+		proc.postMessage({ type: "init", hubBaseUrl, numThreads });
 	});
 	return initPromise;
 }
