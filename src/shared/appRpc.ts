@@ -12,6 +12,11 @@ import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type { CrashRecord } from "./crashReport";
 import type {
+	TtsNodeGenerateParams,
+	TtsNodeGenerateResult,
+	TtsNodeInitResult,
+} from "./ttsNodeRpc";
+import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
 } from "./documentRpc";
@@ -212,6 +217,21 @@ export type AppRpcSchema = {
 			params: { action: "report" | "dismiss"; dontAskAgain: boolean };
 			response: void;
 		};
+		/** Start the native (onnxruntime-node) CPU TTS backend; loads the model. */
+		ttsNodeInit: {
+			params: void;
+			response: TtsNodeInitResult;
+		};
+		/** Synthesize one chunk on the native CPU backend. */
+		ttsNodeGenerate: {
+			params: TtsNodeGenerateParams;
+			response: TtsNodeGenerateResult;
+		};
+		/** Stop the native CPU TTS backend and free its model. */
+		ttsNodeStop: {
+			params: void;
+			response: void;
+		};
 	};
 };
 
@@ -247,6 +267,8 @@ export type AppApi = {
 	) => () => void;
 	/** Subscribe to unreported crashes pushed on launch from the main process. */
 	onCrashReports: (listener: (records: CrashRecord[]) => void) => () => void;
+	/** Subscribe to native-TTS model-load progress (0..1) from the main process. */
+	onTtsNodeProgress: (listener: (value: number) => void) => () => void;
 };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */

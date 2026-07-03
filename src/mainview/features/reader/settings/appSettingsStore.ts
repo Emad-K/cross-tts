@@ -3,6 +3,7 @@ import type { AppConfigInfo } from "@shared/appConfig";
 import type { GpuPowerPreference } from "@shared/appConfig";
 import type { Appearance } from "@shared/appearance";
 import { MAX_CHUNK_CHARS_DEFAULT } from "@shared/appearance";
+import { autoCpuThreads, maxSelectableCpuThreads } from "./cpuThreads";
 import type { ShortcutAction } from "@shared/shortcuts";
 import {
 	getAppConfig,
@@ -190,16 +191,18 @@ export function getMaxChunkChars(): number {
 export function maxCpuThreads(): number {
 	const cores =
 		typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
-	return Math.max(1, (cores || 2) - 1);
+	return maxSelectableCpuThreads(cores);
 }
 
 /**
- * Effective CPU (wasm) thread count. 0/undefined preference = auto (cores − 1,
- * matching the slider max). Any explicit value is clamped to that max.
+ * Effective CPU (wasm) thread count. 0/undefined preference = auto, which caps
+ * at 4 (see cpuThreads.ts — more wasm threads hurt this small model). Any
+ * explicit slider value is clamped to the selectable max, not the auto cap.
  */
 export function effectiveCpuThreads(): number {
-	const max = maxCpuThreads();
+	const cores =
+		typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 0;
 	const pref = useAppSettingsStore.getState().config?.cpuThreads ?? 0;
-	if (pref && pref > 0) return Math.min(pref, max);
-	return max;
+	if (pref && pref > 0) return Math.min(pref, maxCpuThreads());
+	return autoCpuThreads(cores);
 }

@@ -5,9 +5,18 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 export default defineConfig({
 	main: {
 		plugins: [externalizeDepsPlugin()],
+		resolve: {
+			alias: {
+				"@shared": resolve(__dirname, "src/shared"),
+			},
+		},
 		build: {
 			rollupOptions: {
-				input: { index: resolve(__dirname, "src/bun/index.ts") },
+				input: {
+					index: resolve(__dirname, "src/bun/index.ts"),
+					// Utility-process entry: native CPU synthesis on onnxruntime-node.
+					ttsNodeWorker: resolve(__dirname, "src/bun/ttsNodeWorker.ts"),
+				},
 			},
 		},
 	},

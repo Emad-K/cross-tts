@@ -62,10 +62,16 @@ jobs:
           # No code-signing configured; don't try to discover certificates.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      # Packaging above stays on every run to catch electron-builder breakage,
+      # but installers only get stored when requested manually — release.yml
+      # handles real releases, and 90-day default retention on ~3 GB per run
+      # was burning the Actions storage quota.
       - name: Upload artifacts
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.os }}
+          retention-days: 3
           path: |
             release/*.AppImage
             release/*.deb
@@ -111,5 +117,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-traces
+          retention-days: 7
           path: test-results/
           if-no-files-found: ignore

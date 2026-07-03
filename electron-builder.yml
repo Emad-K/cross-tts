@@ -18,6 +18,10 @@ files:
 asar: true
 npmRebuild: false
 
+# onnxruntime-node's native libraries can't be loaded from inside the asar.
+asarUnpack:
+  - "**/node_modules/onnxruntime-node/**"
+
 # Tells electron-updater where to look for new versions (embedded as
 # app-update.yml). CI still uploads assets manually (--publish never); this only
 # configures the update feed, it does not publish.
@@ -29,7 +33,11 @@ publish:
 # Consistent, space-free names with version + arch for every target.
 artifactName: ${name}-${version}-${arch}.${ext}
 
+# onnxruntime-node ships native binaries for every OS (~100+ MB each); keep
+# only the target platform's out of each installer.
 win:
+  files:
+    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{darwin,linux}/**"
   icon: assets/windows/icon_256x256.png
   target:
     - target: nsis
@@ -49,6 +57,8 @@ portable:
   artifactName: ${name}-${version}-portable-${arch}.${ext}
 
 mac:
+  files:
+    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{win32,linux}/**"
   icon: assets/icon.iconset
   category: public.app-category.productivity
   target:
@@ -58,6 +68,8 @@ mac:
         - arm64
 
 linux:
+  files:
+    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{darwin,win32}/**"
   icon: assets/linux/icon_256x256.png
   category: AudioVideo
   maintainer: Emad Kazemi <emadkazemi310@gmail.com>

@@ -1,4 +1,9 @@
 import type { AppApi, FoundInPageResult } from "@shared/appRpc";
+import type {
+	TtsNodeGenerateParams,
+	TtsNodeGenerateResult,
+	TtsNodeInitResult,
+} from "@shared/ttsNodeRpc";
 import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
 import type { Appearance } from "@shared/appearance";
 import type { ForwardedLogEntry } from "@shared/logEntry";
@@ -404,4 +409,34 @@ export function subscribeToCrashReports(
 	const b = bridge();
 	if (!b?.onCrashReports) return () => {};
 	return b.onCrashReports(listener);
+}
+
+/** Start the native (onnxruntime-node) CPU TTS backend. Null on web (no bridge). */
+export async function ttsNodeInit(): Promise<TtsNodeInitResult | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.ttsNodeInit();
+}
+
+/** Synthesize one chunk on the native CPU backend. Null on web (no bridge). */
+export async function ttsNodeGenerate(
+	params: TtsNodeGenerateParams,
+): Promise<TtsNodeGenerateResult | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.ttsNodeGenerate(params);
+}
+
+/** Stop the native CPU TTS backend. No-op on web. */
+export async function ttsNodeStop(): Promise<void> {
+	const b = bridge();
+	if (!b) return;
+	await b.request.ttsNodeStop();
+}
+
+/** Subscribe to native-TTS model-load progress (0..1). No-op on web. */
+export function onTtsNodeProgress(listener: (value: number) => void): () => void {
+	const b = bridge();
+	if (!b?.onTtsNodeProgress) return () => {};
+	return b.onTtsNodeProgress(listener);
 }

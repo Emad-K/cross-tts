@@ -78,7 +78,7 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 **For a lag-free experience:**
 
 - **Best (instant, never waits):** any computer with a graphics card the app can use for acceleration — this is **on by default** and covers most laptops and desktops from roughly the last 6 years, including **Apple Silicon Macs** and built-in Intel/AMD graphics.
-- **No supported GPU? Still smooth on CPU:** a modern **4-core (or better) processor** generates speech faster than you listen, so playback keeps up. Older or 2-core machines may pause for a second before the very first sentence, then run fine.
+- **No supported GPU? The CPU keeps up:** the app falls back to a native CPU engine that generates speech faster than you listen on a modern multi-core processor (measured 3–4× realtime on a recent desktop CPU). Expect a few seconds of model loading per session and a brief pause before the first sentence; very old or busy machines may occasionally pause between sentences.
 - **Memory:** 4 GB RAM minimum, 8 GB comfortable.
 - **Disk:** roughly a few hundred MB — the app plus the voice files, downloaded once and cached.
 - **OS:** Windows 10/11, macOS 11+, or a current 64-bit Linux desktop.
@@ -97,7 +97,7 @@ MIT © Emad Kazemi — see [LICENSE](LICENSE).
 <details>
 <summary><strong>For developers</strong></summary>
 
-Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [kokoro-js](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) running on ONNX Runtime in a Web Worker — WebGPU when available, CPU (wasm) otherwise.
+Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [kokoro-js](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) on ONNX Runtime — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback.
 
 ```bash
 pnpm install
@@ -108,6 +108,18 @@ pnpm run test:e2e   # Playwright smoke tests against the built app
 pnpm run build      # production build
 pnpm run dist       # package installers (or dist:win / dist:mac / dist:linux)
 ```
+
+> **Linux / Node version notes** (handled automatically, but FYI):
+> - **Node 22 is the supported version** (CI uses it). On Node 23+, Electron's
+>   bundled zip extractor silently fails to unpack its binary; a `postinstall`
+>   step (`scripts/ensure-electron.mjs`) re-extracts it with the system `unzip`,
+>   so installs still work — but install `unzip` if you don't have it.
+> - On **Ubuntu 24.04+/26.04**, AppArmor restricts unprivileged user namespaces,
+>   which breaks Chromium's sandbox for source/dev runs. `pnpm dev` / `pnpm start`
+>   go through `scripts/run-electron-vite.mjs`, which detects this and launches
+>   with `--no-sandbox` *only when the sandbox can't otherwise work*. Installed
+>   `.deb`/`.rpm` packages keep the sandbox on (their post-install sets the
+>   `chrome-sandbox` setuid bit); the AppImage and source runs use the fallback.
 
 ### Project layout
 

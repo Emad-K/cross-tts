@@ -12,6 +12,7 @@ import {
 	addWatchedFolder,
 	appConfigInfo,
 	dataDir,
+	loadAppConfig,
 	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
@@ -64,6 +65,13 @@ import {
 	stopKokoroHubServer,
 } from "./kokoroHubServer";
 import {
+	setTtsNodeProgressTarget,
+	stopTtsNode,
+	ttsNodeGenerate,
+	ttsNodeInit,
+} from "./ttsNode";
+import type { TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
+import {
 	initCrashCapture,
 	notifyCrashReportsOnLoad,
 	pendingCrashReports,
@@ -93,6 +101,18 @@ initCrashCapture();
 //      be relied on alone.
 // Both must be set before the app is ready.
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
+// Linux only: Chromium ships WebGPU off here (navigator.gpu is absent and the
+// GPU process falls back to software), so CPU/wasm is the only path unless we
+// force it on. These flags bring up hardware WebGPU (Vulkan) — verified on
+// Wayland + NVIDIA. Windows/macOS already expose WebGPU without them, and
+// `ignore-gpu-blocklist` there could force GPU onto genuinely-broken drivers,
+// so scope it to Linux.
+if (process.platform === "linux") {
+	app.commandLine.appendSwitch("enable-features", "Vulkan");
+	app.commandLine.appendSwitch("enable-unsafe-webgpu");
+	app.commandLine.appendSwitch("ignore-gpu-blocklist");
+	app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+}
 registerAppScheme();
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
@@ -149,6 +169,13 @@ function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
+	ipcMain.handle("ttsNodeInit", async () =>
+		ttsNodeInit(await kokoroHubReady, loadAppConfig().cpuThreads ?? 0),
+	);
+	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
+		ttsNodeGenerate(params),
+	);
+	ipcMain.handle("ttsNodeStop", () => stopTtsNode());
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
 	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
 		if (!mainWindow) return;
@@ -471,6 +498,7 @@ function createWindow(): void {
 	setShortcutTarget(mainWindow);
 	setUpdateTarget(mainWindow);
 	setWatchedFilesTarget(mainWindow);
+	setTtsNodeProgressTarget(mainWindow);
 	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
 	mainWindow.on("closed", () => {
@@ -478,6 +506,7 @@ function createWindow(): void {
 		setShortcutTarget(null);
 		setUpdateTarget(null);
 		setWatchedFilesTarget(null);
+		setTtsNodeProgressTarget(null);
 		mainWindow = null;
 	});
 }
@@ -520,6 +549,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+	stopTtsNode();
 	stopKokoroHubServer();
 	unregisterGlobalShortcuts();
 });

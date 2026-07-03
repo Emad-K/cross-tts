@@ -29,7 +29,7 @@ export function kokoroNormalizeText(text: string): string {
 		.replace(/；/g, "; ")
 		.replace(/？/g, "? ")
 		.replace(/[^\S \n]/g, " ")
-		.replace(/  +/, " ")
+		.replace(/  +/g, " ")
 		.replace(/(?<=\n) +(?=\n)/g, "")
 		.replace(/\bD[Rr]\.(?= [A-Z])/g, "Doctor")
 		.replace(/\b(?:Mr\.|MR\.(?= [A-Z]))/g, "Mister")

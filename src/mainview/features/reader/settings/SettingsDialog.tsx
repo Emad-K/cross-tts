@@ -495,7 +495,7 @@ function CpuThreadsControl() {
 					CPU threads
 				</span>
 				<span className="text-xs font-medium tabular-nums text-muted-foreground">
-					{shown === 0 ? `Auto (${max})` : shown}
+					{shown === 0 ? "Auto" : shown}
 				</span>
 			</div>
 			<Slider
@@ -513,9 +513,9 @@ function CpuThreadsControl() {
 				<span>{max} (max)</span>
 			</div>
 			<p className="mt-3 text-xs text-muted-foreground">
-				Threads used for CPU synthesis. Max is one less than your{" "}
-				{max + 1} logical cores. Auto uses {max}. Only applies when running on
-				the CPU.
+				Threads used for CPU synthesis; Auto picks a sensible count for the
+				active engine. Max is one less than your {max + 1} logical cores. Only
+				applies when running on the CPU.
 			</p>
 		</div>
 	);

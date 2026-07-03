@@ -3,7 +3,15 @@ import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import type { PronunciationRule } from "@shared/ttsTextRules";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
+import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
+
+/**
+ * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
+ * end of the sentence AND the EOS token (garbled tail). One phoneme char is at
+ * most one token, so pieces this long always fit, with room for BOS/EOS.
+ */
+const MAX_PHONEME_TOKENS = 500;
 
 /**
  * TTS runs entirely in this worker so the synchronous ONNX Runtime inference
@@ -162,26 +170,43 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 					ctx.postMessage({ type: "result", id: msg.id, empty: true });
 					return;
 				}
-				const { input_ids } = tts.tokenizer(phonemes, { truncation: true });
-				const raw = await tts.generate_from_ids(input_ids, {
-					voice: msg.voice,
-					speed: msg.speed,
-				});
-				const src = raw.audio as Float32Array;
-				// Copy into a fresh, exact-size buffer we can transfer (zero-copy).
-				const buffer = src.buffer.slice(
-					src.byteOffset,
-					src.byteOffset + src.byteLength,
-				);
+				// Chunks whose phonemes exceed the tokenizer limit are synthesized in
+				// punctuation-aligned pieces and the audio concatenated — otherwise the
+				// tokenizer would silently truncate and the tail would go unspoken.
+				const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
+				const audios: Float32Array[] = [];
+				let samplingRate = 24000;
+				for (const piece of pieces) {
+					if (piece.trim() === "") continue;
+					const { input_ids } = tts.tokenizer(piece, { truncation: true });
+					const raw = await tts.generate_from_ids(input_ids, {
+						voice: msg.voice,
+						speed: msg.speed,
+					});
+					samplingRate = raw.sampling_rate;
+					audios.push(raw.audio as Float32Array);
+				}
+				if (audios.length === 0) {
+					ctx.postMessage({ type: "result", id: msg.id, empty: true });
+					return;
+				}
+				// Join into a fresh, exact-size buffer we can transfer (zero-copy).
+				const totalLength = audios.reduce((n, a) => n + a.length, 0);
+				const joined = new Float32Array(totalLength);
+				let offset = 0;
+				for (const a of audios) {
+					joined.set(a, offset);
+					offset += a.length;
+				}
 				ctx.postMessage(
 					{
 						type: "result",
 						id: msg.id,
-						audio: new Float32Array(buffer),
-						samplingRate: raw.sampling_rate,
+						audio: joined,
+						samplingRate,
 						synthMs: Math.round(performance.now() - startedAt),
 					},
-					[buffer],
+					[joined.buffer],
 				);
 			} catch (e) {
 				ctx.postMessage({

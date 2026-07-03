@@ -85,7 +85,7 @@ export const READER_PADDING_VALUES: Record<
 export const MAX_CHUNK_CHARS_MIN = 120;
 export const MAX_CHUNK_CHARS_MAX = 600;
 export const MAX_CHUNK_CHARS_STEP = 20;
-export const MAX_CHUNK_CHARS_DEFAULT = 300;
+export const MAX_CHUNK_CHARS_DEFAULT = 240;
 
 export const defaultAppearance = (): Appearance => ({
 	mode: "system",
