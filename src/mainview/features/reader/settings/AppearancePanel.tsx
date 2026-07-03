@@ -205,7 +205,9 @@ export function AppearancePanel() {
 						/>
 						<p className="mt-2 text-xs text-muted-foreground">
 							Longest text the engine speaks at once. Shorter = snappier start
-							and finer highlighting; longer = fewer breaks.
+							and finer highlighting; longer = fewer breaks. On Linux, raising
+							this can make very long segments sound slightly off — keep it
+							lower if you notice it.
 						</p>
 					</Field>
 				</div>

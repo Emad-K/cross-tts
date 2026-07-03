@@ -65,6 +65,9 @@ const api: AppApi = {
 			ipcRenderer.invoke("getPendingCrashReports"),
 		resolveCrashReports: (params) =>
 			ipcRenderer.invoke("resolveCrashReports", params),
+		ttsNodeInit: () => ipcRenderer.invoke("ttsNodeInit"),
+		ttsNodeGenerate: (params) => ipcRenderer.invoke("ttsNodeGenerate", params),
+		ttsNodeStop: () => ipcRenderer.invoke("ttsNodeStop"),
 	},
 	getPathForFile: (file: File) => {
 		try {
@@ -127,6 +130,13 @@ const api: AppApi = {
 		ipcRenderer.on("app:crash-reports", handler);
 		return () => {
 			ipcRenderer.removeListener("app:crash-reports", handler);
+		};
+	},
+	onTtsNodeProgress: (listener: (value: number) => void) => {
+		const handler = (_event: unknown, value: number) => listener(value);
+		ipcRenderer.on("app:tts-node-progress", handler);
+		return () => {
+			ipcRenderer.removeListener("app:tts-node-progress", handler);
 		};
 	},
 };

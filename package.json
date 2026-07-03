@@ -1,6 +1,6 @@
 {
 	"name": "cross-tts",
-	"version": "1.12.1",
+	"version": "1.13.0",
 	"description": "Listen to your books and documents with offline, natural text-to-speech.",
 	"license": "MIT",
 	"author": {
@@ -10,18 +10,10 @@
 	"homepage": "https://github.com/Emad-K/cross-tts",
 	"main": "./out/main/index.js",
 	"packageManager": "pnpm@10.26.2",
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"electron",
-			"esbuild",
-			"onnxruntime-node",
-			"protobufjs",
-			"sharp"
-		]
-	},
 	"scripts": {
-		"dev": "electron-vite dev",
-		"start": "electron-vite preview",
+		"postinstall": "node scripts/ensure-electron.mjs",
+		"dev": "node scripts/run-electron-vite.mjs dev",
+		"start": "node scripts/run-electron-vite.mjs preview",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test src",
 		"test:e2e": "playwright test --config e2e/playwright.config.ts",

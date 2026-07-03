@@ -61,16 +61,20 @@ function collectSentenceSpans(full: string): { start: number; end: number }[] {
 function clauseBreakWithin(s: string, maxChars: number): number {
 	const hard = Math.min(s.length, maxChars);
 	const win = s.slice(0, hard);
-	const candidates = [
+	const min = win.length * 0.22;
+	// Prefer the latest punctuation break that fits. Only fall back to a plain
+	// space when no clause punctuation qualifies — otherwise a later space always
+	// out-ranks an earlier comma and the sentence splits mid-clause.
+	const punct = Math.max(
 		win.lastIndexOf("; "),
 		win.lastIndexOf(": "),
 		win.lastIndexOf(", "),
 		win.lastIndexOf("—"),
 		win.lastIndexOf("–"),
-		win.lastIndexOf(" "),
-	];
-	const best = Math.max(...candidates);
-	return best > win.length * 0.22 ? best + 1 : 0;
+	);
+	if (punct > min) return punct + 1;
+	const space = win.lastIndexOf(" ");
+	return space > min ? space + 1 : 0;
 }
 
 /**

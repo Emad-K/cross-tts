@@ -86,9 +86,13 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      # Artifact only ferries files to the publish job below; the GitHub
+      # Release holds the durable copies. Minimum retention keeps ~3 GB per
+      # release from sitting in Actions storage for the default 90 days.
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.os }}
+          retention-days: 1
           path: |
             release/*.AppImage
             release/*.deb

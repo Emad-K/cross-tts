@@ -1,0 +1,13 @@
+# pnpm 10.26+ no longer reads `pnpm.onlyBuiltDependencies` from package.json;
+# its new home is here. Without this, the build/postinstall scripts for these
+# native packages are skipped on `pnpm install` — most visibly Electron, whose
+# postinstall downloads/extracts the platform binary (and the chrome-sandbox
+# helper). A missing binary means `pnpm dev`/`pnpm build` can't launch Electron
+# at all. (This list previously lived under the `pnpm` key in package.json,
+# which pnpm 10.26+ no longer reads.)
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - onnxruntime-node
+  - protobufjs
+  - sharp

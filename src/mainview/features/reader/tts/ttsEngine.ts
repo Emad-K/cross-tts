@@ -1,4 +1,11 @@
-import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
+import { resampleSinc } from "@shared/resampleSinc";
+import {
+	getKokoroHubBaseUrl,
+	onTtsNodeProgress,
+	ttsNodeGenerate,
+	ttsNodeInit,
+	ttsNodeStop,
+} from "@/lib/desktopBridge";
 import { logError, logInfo, logWarn } from "../logging";
 import {
 	effectiveCpuThreads,
@@ -30,6 +37,12 @@ function rulesSignature(): string {
 
 type KokoroDevice = "webgpu" | "wasm";
 type KokoroDtype = "fp32" | "q8";
+/**
+ * Where synthesis actually runs: the renderer worker (webgpu/wasm) or the
+ * native onnxruntime-node utility process ("node" — the preferred CPU path,
+ * ~2.5× faster than wasm; see src/bun/ttsNodeWorker.ts).
+ */
+type KokoroBackend = KokoroDevice | "node";
 
 /** Raw audio handed back from the worker, ready to wrap in an AudioBuffer. */
 type RawTtsAudio = { audio: Float32Array; sampling_rate: number };
@@ -88,12 +101,12 @@ let onWorkerInitError: ((err: Error) => void) | null = null;
 let lastLoadMs = 0;
 /** Log the first synthesis duration after each (re)load to explain warm-up. */
 let loggedFirstSynth = false;
-/** Device of the currently loaded model, or null when nothing is loaded. */
-let activeDevice: KokoroDevice | null = null;
+/** Backend of the currently loaded model, or null when nothing is loaded. */
+let activeDevice: KokoroBackend | null = null;
 
-/** Device of the loaded model (null if not loaded). Lets the UI avoid an
+/** Backend of the loaded model (null if not loaded). Lets the UI avoid an
  * unnecessary GPU reload when only a CPU-only setting changed. */
-export function getActiveDevice(): KokoroDevice | null {
+export function getActiveDevice(): KokoroBackend | null {
 	return activeDevice;
 }
 
@@ -147,6 +160,7 @@ function spawnWorker(): Worker {
 }
 
 function teardownWorker(): void {
+	if (activeDevice === "node") void ttsNodeStop();
 	worker?.terminate();
 	worker = null;
 	workerReady = null;
@@ -187,7 +201,7 @@ function initWorker(device: KokoroDevice, dtype: KokoroDtype): Promise<void> {
 
 let audioContext: AudioContext | null = null;
 let gainNode: GainNode | null = null;
-let activeSource: AudioBufferSourceNode | null = null;
+let activeSources: AudioBufferSourceNode[] = [];
 
 let playbackAbort: AbortController | null = null;
 let playbackLoopPromise: Promise<void> | null = null;
@@ -262,19 +276,70 @@ function applyVolumeFromStore(): void {
 }
 
 function rawToBuffer(ctx: AudioContext, raw: RawTtsAudio): AudioBuffer {
-	const buf = ctx.createBuffer(1, raw.audio.length, raw.sampling_rate);
-	const data = new Float32Array(raw.audio.length);
-	data.set(raw.audio);
+	// Resample to the context's own rate ourselves so Chromium never resamples
+	// the AudioBufferSource. On Linux its per-buffer resampler is broken — a
+	// 24 kHz buffer in a 48 kHz context plays at 2× (chipmunk), and matching the
+	// context to 24 kHz instead pushes a whistly artifact into the device output
+	// resampler. Creating the buffer already at ctx.sampleRate avoids both.
+	// Windowed sinc, not linear: linear interpolation leaves audible spectral
+	// images above 12 kHz (a faint metallic sheen on every Linux sentence).
+	const resampled =
+		raw.sampling_rate === ctx.sampleRate
+			? raw.audio
+			: resampleSinc(raw.audio, raw.sampling_rate, ctx.sampleRate);
+	// Copy into a fresh ArrayBuffer-backed array: copyToChannel rejects the
+	// SharedArrayBuffer-backed view the worker hands back under cross-origin isolation.
+	const data = new Float32Array(resampled.length);
+	data.set(resampled);
+	const buf = ctx.createBuffer(1, data.length, ctx.sampleRate);
 	buf.copyToChannel(data, 0, 0);
 	return buf;
 }
 
-/** Ask the worker to synthesize one chunk's audio. */
+/** Synthesize one chunk on the native (onnxruntime-node) CPU backend. */
+async function requestGenerateNode(
+	chunkText: string,
+	voice: KokoroVoiceId,
+	speed: number,
+): Promise<GenerateResult> {
+	const text = textForTtsSynthesis(chunkText);
+	const { pronunciationRules } = getTtsRulesForEngine();
+	const result = await ttsNodeGenerate({
+		text,
+		voice,
+		speed,
+		pronunciationRules,
+	});
+	if (!result) {
+		return { kind: "error", message: "Native TTS bridge unavailable" };
+	}
+	if (result.kind === "audio") {
+		if (!loggedFirstSynth) {
+			loggedFirstSynth = true;
+			logInfo(
+				`First sentence synthesized in ${(result.synthMs / 1000).toFixed(1)}s ` +
+					"(later sentences are prefetched while one plays).",
+				{ source: "tts" },
+			);
+		}
+		return {
+			kind: "audio",
+			audio: result.audio,
+			samplingRate: result.samplingRate,
+		};
+	}
+	return result;
+}
+
+/** Ask the active backend to synthesize one chunk's audio. */
 function requestGenerate(
 	chunkText: string,
 	voice: KokoroVoiceId,
 	speed: number,
 ): Promise<GenerateResult> {
+	if (activeDevice === "node") {
+		return requestGenerateNode(chunkText, voice, speed);
+	}
 	const w = worker;
 	if (!w) return Promise.resolve({ kind: "error", message: "Engine not ready" });
 	const text = textForTtsSynthesis(chunkText);
@@ -360,6 +425,41 @@ export async function synthesizeChunkPcm(
 	return { audio: result.audio, sampleRate: result.samplingRate };
 }
 
+/**
+ * Chromium on Linux plays an AudioBufferSourceNode whose buffer exceeds ~2^19
+ * samples at 2× (chipmunk). Keep each scheduled source comfortably under that.
+ */
+const SAFE_SOURCE_SAMPLES = 1 << 18;
+/**
+ * Adjacent segments overlap by this many samples and linear-crossfade. The
+ * overlap region is the SAME source samples in both buffers, so gains summing
+ * to 1 reconstruct the original waveform exactly — no boundary click/whistle.
+ */
+const SEGMENT_XFADE_SAMPLES = 256;
+/**
+ * Split playback schedules against a clock captured slightly in the future.
+ * A start time captured before the sliceBuffer copies is already in the past
+ * when the audio thread dequeues segment 0's start(); the spec clamps it to
+ * "now", sliding segment 0 a few ms off the absolute timeline its own gain
+ * envelope and every other segment still follow. The misaligned overlap then
+ * blends two time-shifted copies — a comb/whistle at the first seam.
+ */
+const SCHEDULE_HEADROOM_S = 0.05;
+
+/** Copy a [start, start+len) slice of `buffer`'s channel 0 into a new AudioBuffer. */
+function sliceBuffer(
+	ctx: AudioContext,
+	buffer: AudioBuffer,
+	start: number,
+	len: number,
+): AudioBuffer {
+	const seg = ctx.createBuffer(1, len, buffer.sampleRate);
+	const tmp = new Float32Array(len);
+	buffer.copyFromChannel(tmp, 0, start);
+	seg.copyToChannel(tmp, 0, 0);
+	return seg;
+}
+
 function playBuffer(
 	ctx: AudioContext,
 	gain: GainNode,
@@ -371,15 +471,13 @@ function playBuffer(
 			resolve();
 			return;
 		}
-		const src = ctx.createBufferSource();
-		activeSource = src;
-		src.buffer = buffer;
-		src.connect(gain);
 
 		// Drive the in-sentence progress sweep from the audio clock. ctx.currentTime
 		// freezes while suspended (pause), so the sweep pauses for free. No real
 		// per-token timing exists, so this is a duration-proportional estimate.
-		const startTime = ctx.currentTime;
+		// Assigned below, after the segment slices are built (see
+		// SCHEDULE_HEADROOM_S); the sweep only starts once scheduling is done.
+		let startTime = 0;
 		const duration = buffer.duration || 0;
 		let raf = 0;
 		const tick = () => {
@@ -392,16 +490,69 @@ function playBuffer(
 			raf = requestAnimationFrame(tick);
 		};
 
-		src.onended = () => {
-			if (activeSource === src) activeSource = null;
-			cancelAnimationFrame(raf);
-			resolve();
-		};
+		// Split overlong buffers into sub-buffer sources, each under the Chromium
+		// limit, overlapping + crossfading at the seams. Resolve when the final
+		// segment ends; stopActiveSource() stops every scheduled source.
 		try {
-			src.start();
+			const total = buffer.length;
+			const rate = buffer.sampleRate;
+			const xf = SEGMENT_XFADE_SAMPLES;
+			// Segment i covers source [bound_i - xf, bound_{i+1}); the leading xf
+			// samples (i>0) overlap the previous segment's trailing xf.
+			const segments: { start: number; end: number }[] = [];
+			for (let b = 0; b < total; b += SAFE_SOURCE_SAMPLES) {
+				segments.push({
+					start: b === 0 ? 0 : b - xf,
+					end: Math.min(b + SAFE_SOURCE_SAMPLES, total),
+				});
+			}
+			const single = segments.length === 1;
+			activeSources = [];
+			// Build every slice BEFORE capturing the clock so segment 0's start
+			// time is never already in the past (clamped ≠ aligned — see
+			// SCHEDULE_HEADROOM_S). Single-segment playback needs no alignment,
+			// so it keeps the zero-latency start.
+			const nodes = segments.map((seg) => {
+				const src = ctx.createBufferSource();
+				src.buffer = single
+					? buffer
+					: sliceBuffer(ctx, buffer, seg.start, seg.end - seg.start);
+				return { seg, src };
+			});
+			startTime = ctx.currentTime + (single ? 0 : SCHEDULE_HEADROOM_S);
+			nodes.forEach(({ seg, src }, i) => {
+				const segStart = startTime + seg.start / rate;
+				if (single) {
+					src.connect(gain);
+				} else {
+					const g = ctx.createGain();
+					src.connect(g);
+					g.connect(gain);
+					if (i > 0) {
+						// Fade in across the leading overlap.
+						g.gain.setValueAtTime(0, segStart);
+						g.gain.linearRampToValueAtTime(1, segStart + xf / rate);
+					}
+					if (i < segments.length - 1) {
+						// Fade out across the trailing overlap.
+						const fadeOut = startTime + (seg.end - xf) / rate;
+						g.gain.setValueAtTime(1, fadeOut);
+						g.gain.linearRampToValueAtTime(0, fadeOut + xf / rate);
+					}
+				}
+				if (i === segments.length - 1) {
+					src.onended = () => {
+						activeSources = [];
+						cancelAnimationFrame(raf);
+						resolve();
+					};
+				}
+				src.start(segStart);
+				activeSources.push(src);
+			});
 			raf = requestAnimationFrame(tick);
 		} catch (e) {
-			activeSource = null;
+			activeSources = [];
 			cancelAnimationFrame(raf);
 			reject(e);
 		}
@@ -409,18 +560,60 @@ function playBuffer(
 }
 
 function stopActiveSource(): void {
-	try {
-		activeSource?.stop();
-	} catch {
-		// already stopped
+	for (const src of activeSources) {
+		try {
+			src.stop();
+		} catch {
+			// already stopped
+		}
 	}
-	activeSource = null;
+	activeSources = [];
 }
 
 /**
- * Ensure the TTS worker is up and the model is loaded. Loads on the GPU when
- * the preference is enabled and an adapter is present; if GPU initialization
- * fails it automatically retries once on the CPU so playback still works.
+ * Load the model on the preferred CPU backend: the native onnxruntime-node
+ * utility process (~2.5× faster than the wasm worker — fp32 native measures
+ * 3.5–4× realtime where wasm q8 hovers near 1×). Returns null when the bridge
+ * is unavailable (web build) or the process failed, so the caller can fall
+ * back to the wasm worker.
+ */
+async function initNodeBackend(): Promise<"node" | null> {
+	const { setModelProgress } = useTtsStore.getState();
+	const unsubscribe = onTtsNodeProgress((value) => setModelProgress(value));
+	try {
+		logInfo("Loading voice model (CPU, native)…", { source: "models" });
+		loggedFirstSynth = false;
+		const result = await ttsNodeInit();
+		if (!result) return null;
+		if (!result.ok) {
+			logWarn(
+				"Native CPU synthesis failed to start; falling back to in-app CPU.",
+				{ source: "models", detail: result.error },
+			);
+			return null;
+		}
+		// The utility process reports voice ids as plain strings (it can't see the
+		// renderer's KokoroVoiceId union); they come from the same model metadata.
+		useTtsStore
+			.getState()
+			.setVoiceOptions(result.voices as { id: KokoroVoiceId; label: string }[]);
+		lastLoadMs = result.loadMs;
+		return "node";
+	} catch (e) {
+		logWarn(
+			"Native CPU synthesis failed to start; falling back to in-app CPU.",
+			{ source: "models", detail: e instanceof Error ? e.message : String(e) },
+		);
+		return null;
+	} finally {
+		unsubscribe();
+	}
+}
+
+/**
+ * Ensure a TTS backend is up and the model is loaded. Preference order:
+ * WebGPU (when enabled and present) → native CPU utility process → wasm
+ * worker. Each step falls through to the next on failure so playback works.
  */
 export async function ensureKokoroLoaded(): Promise<void> {
 	if (worker && workerReady) return workerReady;
@@ -431,34 +624,40 @@ export async function ensureKokoroLoaded(): Promise<void> {
 
 		workerReady = (async () => {
 			await ensureKokoroHubEnv();
-			let { device, dtype } = await resolveKokoroLoadOptions();
-			logInfo(`Loading voice model (${device === "webgpu" ? "GPU" : "CPU"})…`, {
-				source: "models",
-			});
-			try {
-				await initWorker(device, dtype);
-			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				if (device === "webgpu") {
-					// GPU failed — fall back to CPU so the app still speaks.
-					logWarn(
-						"GPU synthesis failed to initialize; falling back to CPU.",
-						{ source: "models", detail: msg },
-					);
+			const { device, dtype } = await resolveKokoroLoadOptions();
+			let backend: KokoroBackend | null = null;
+			if (device === "webgpu") {
+				logInfo("Loading voice model (GPU)…", { source: "models" });
+				try {
+					await initWorker(device, dtype);
+					backend = "webgpu";
+				} catch (e) {
+					// GPU failed — fall through to the CPU paths so the app still speaks.
+					logWarn("GPU synthesis failed to initialize; falling back to CPU.", {
+						source: "models",
+						detail: e instanceof Error ? e.message : String(e),
+					});
 					worker?.terminate();
 					worker = null;
-					device = "wasm";
-					dtype = "q8";
-					await initWorker(device, dtype);
-				} else {
-					throw e;
 				}
 			}
-			activeDevice = device;
+			if (!backend) backend = await initNodeBackend();
+			if (!backend) {
+				logInfo("Loading voice model (CPU)…", { source: "models" });
+				await initWorker("wasm", "q8");
+				backend = "wasm";
+			}
+			activeDevice = backend;
 			setModelPhase("ready");
 			setModelProgress(1);
+			const label =
+				backend === "webgpu"
+					? "GPU"
+					: backend === "node"
+						? "CPU, native"
+						: "CPU, in-app";
 			logInfo(
-				`Voice model ready (${device === "webgpu" ? "GPU" : "CPU"}) — ` +
+				`Voice model ready (${label}) — ` +
 					`loaded in ${(lastLoadMs / 1000).toFixed(1)}s.`,
 				{ source: "models" },
 			);
