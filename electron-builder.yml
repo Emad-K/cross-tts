@@ -86,3 +86,12 @@ linux:
       arch:
         - x64
         - arm64
+
+# Custom deb maintainer scripts. These REPLACE electron-builder's default
+# after-install/after-remove templates (so the scripts reproduce that default
+# work) and add an AppArmor profile granting user namespaces — without it the
+# app fails to launch on Ubuntu 24.04+, where unprivileged userns is restricted
+# and Electron's sandbox needs it. See assets/linux/deb-after-install.sh.
+deb:
+  afterInstall: assets/linux/deb-after-install.sh
+  afterRemove: assets/linux/deb-after-remove.sh
