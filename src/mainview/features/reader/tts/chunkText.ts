@@ -77,6 +77,25 @@ function clauseBreakWithin(s: string, maxChars: number): number {
 	return space > min ? space + 1 : 0;
 }
 
+/** Target length of the first piece spoken after play or a seek. */
+const FAST_START_CHARS = 120;
+
+/**
+ * Split a chunk at its first clause (~80-120 chars) so playback can start
+ * after a short synthesis while the rest is made. Returns [text] when the
+ * chunk is already short or has no usable break. Costs one prosody seam.
+ */
+export function splitForFastStart(text: string): string[] {
+	if (text.length <= FAST_START_CHARS + 40) return [text];
+	const br = clauseBreakWithin(text, FAST_START_CHARS);
+	if (br === 0) return [text];
+	const head = text.slice(0, br).trim();
+	const tail = text.slice(br).trim();
+	return isSpeakableChunkText(head) && isSpeakableChunkText(tail)
+		? [head, tail]
+		: [text];
+}
+
 /**
  * Turn an absolute [absStart, absEnd) slice of `full` into one or more trimmed TTS chunks.
  */

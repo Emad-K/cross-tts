@@ -51,6 +51,11 @@ export class SynthCore<V> {
 		return this.cache.has(this.key(chunkText, voice, speed));
 	}
 
+	/** True while this chunk is being synthesized for playback or prefetch. */
+	inFlight(chunkText: string, voice: string, speed: number): boolean {
+		return this.cache.isInFlight(this.key(chunkText, voice, speed));
+	}
+
 	clear(): void {
 		this.cache.clear();
 	}

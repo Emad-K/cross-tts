@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { htmlToPlainText } from "@shared/htmlPlainText";
 import { isSpeakableChunkText } from "./ttsChunkText";
-import { buildTtsChunks, chunkIndexAtOffset } from "./chunkText";
+import { buildTtsChunks, chunkIndexAtOffset, splitForFastStart } from "./chunkText";
 
 describe("chunkIndexAtOffset", () => {
 	test("keeps the reading position across a re-chunk", () => {
@@ -68,5 +68,25 @@ describe("buildTtsChunks", () => {
 		expect(chunks[0]!.text).toContain("U.S.A.");
 		expect(chunks[0]!.text).not.toMatch(/U\.\s*$/);
 		expect(chunks[1]!.text).toMatch(/^Then he left home/);
+	});
+});
+
+describe("splitForFastStart", () => {
+	test("splits a long chunk at its first clause", () => {
+		const text =
+			"He had promised the village council, after a long and stubborn debate, that he would map every bend of the water before winter came; nobody believed him, but he kept walking.";
+		const parts = splitForFastStart(text);
+		expect(parts).toEqual([
+			"He had promised the village council, after a long and stubborn debate,",
+			"that he would map every bend of the water before winter came; nobody believed him, but he kept walking.",
+		]);
+	});
+
+	test("leaves short chunks and chunks without a break alone", () => {
+		expect(splitForFastStart("A short sentence, really.")).toEqual([
+			"A short sentence, really.",
+		]);
+		const noBreak = "x".repeat(300);
+		expect(splitForFastStart(noBreak)).toEqual([noBreak]);
 	});
 });
