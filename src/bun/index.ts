@@ -28,7 +28,7 @@ import {
 	urlOrigin,
 } from "./securityGuards";
 import { APP_SESSION_VERSION } from "../shared/appSession";
-import type { WebPersistedSlice } from "../shared/appSession";
+import type { AppSessionFileV1, WebPersistedSlice } from "../shared/appSession";
 import {
 	addWatchedFolder,
 	appConfigInfo,
@@ -216,6 +216,22 @@ let mainWindow: BrowserWindow | null = null;
  * persisted (the dialog starts empty each time), so in-memory is enough.
  */
 const exportRoots = new Set<string>();
+
+type WindowState = Pick<AppSessionFileV1, "window" | "maximized" | "fullScreen">;
+/** Last window geometry seen, kept so saves during teardown still have it. */
+let lastWindowState: WindowState | null = null;
+function snapshotWindowState(): WindowState | null {
+	if (!mainWindow || mainWindow.isDestroyed()) return null;
+	// Store the *normal* (restored) bounds — getBounds() on a maximized window
+	// returns the maximized rect, which restores a few px off-screen.
+	const f = mainWindow.getNormalBounds();
+	lastWindowState = {
+		window: { x: f.x, y: f.y, width: f.width, height: f.height },
+		maximized: mainWindow.isMaximized(),
+		fullScreen: mainWindow.isFullScreen(),
+	};
+	return lastWindowState;
+}
 const EXPORT_DENIED = {
 	ok: false,
 	path: null,
@@ -234,16 +250,16 @@ function registerRpcHandlers(): void {
 	);
 	ipcMain.handle("ttsNodeStop", () => stopTtsNode());
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
-	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
-		if (!mainWindow) return;
-		// Store the *normal* (restored) bounds — getBounds() on a maximized window
-		// returns the maximized rect, which restores a few px off-screen.
-		const f = mainWindow.getNormalBounds();
+	// Must work while the window is tearing down: the renderer flushes a final
+	// save on beforeunload/pagehide, which can land after mainWindow is gone.
+	// Window geometry then comes from the snapshot taken on "close".
+	ipcMain.handle("saveAppSession", (event, web: WebPersistedSlice) => {
+		const url = event.senderFrame?.url;
+		if (url !== undefined && !isAllowedOrigin(url, TRUSTED_ORIGINS)) return;
 		saveAppSessionFile({
 			version: APP_SESSION_VERSION,
-			window: { x: f.x, y: f.y, width: f.width, height: f.height },
-			maximized: mainWindow.isMaximized(),
-			fullScreen: mainWindow.isFullScreen(),
+			...(snapshotWindowState() ??
+				lastWindowState ?? { window: null, maximized: false, fullScreen: false }),
 			web,
 		});
 	});
@@ -571,6 +587,7 @@ function createWindow(): void {
 	setTtsNodeProgressTarget(mainWindow);
 	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
+	mainWindow.on("close", () => snapshotWindowState());
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
