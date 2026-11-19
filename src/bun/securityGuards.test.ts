@@ -1,5 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { isAllowedOrigin } from "./securityGuards";
+import { join, resolve } from "node:path";
+import { audioExportPath, isAllowedOrigin, isInsideRoot } from "./securityGuards";
+
+describe("isInsideRoot", () => {
+	const roots = [resolve("/home/u/Audiobooks")];
+	test("root itself and children", () => {
+		expect(isInsideRoot("/home/u/Audiobooks", roots)).toBe(true);
+		expect(isInsideRoot("/home/u/Audiobooks/Book/", roots)).toBe(true);
+	});
+	test("escapes and siblings", () => {
+		expect(isInsideRoot("/home/u/Audiobooks/../.config", roots)).toBe(false);
+		expect(isInsideRoot("/home/u/AudiobooksEvil", roots)).toBe(false);
+		expect(isInsideRoot("/home/u", roots)).toBe(false);
+		expect(isInsideRoot("", roots)).toBe(false);
+		expect(isInsideRoot("/home/u/Audiobooks\0", roots)).toBe(false);
+		expect(isInsideRoot("/home/u/Audiobooks", [])).toBe(false);
+	});
+});
+
+describe("audioExportPath", () => {
+	const root = resolve("/home/u/Audiobooks");
+	test("accepts a plain audio file name in a root", () => {
+		expect(audioExportPath(root, "01 - Intro.mp3", [root])).toBe(
+			join(root, "01 - Intro.mp3"),
+		);
+		expect(audioExportPath(root, "Book.M4B", [root])).toBe(join(root, "Book.M4B"));
+	});
+	test("rejects traversal, separators, other types, bad input", () => {
+		expect(audioExportPath(root, "../.bashrc.mp3", [root])).toBeNull();
+		expect(audioExportPath(root, "a/b.mp3", [root])).toBeNull();
+		expect(audioExportPath(root, "a\\b.mp3", [root])).toBeNull();
+		expect(audioExportPath(root, "evil.desktop", [root])).toBeNull();
+		expect(audioExportPath(root, "..", [root])).toBeNull();
+		expect(audioExportPath("/home/u", "x.mp3", [root])).toBeNull();
+		expect(audioExportPath(root, 5, [root])).toBeNull();
+		expect(audioExportPath(null, "x.mp3", [root])).toBeNull();
+	});
+});
 
 describe("isAllowedOrigin", () => {
 	const allowed = ["app://bundle", "http://localhost:5173"];

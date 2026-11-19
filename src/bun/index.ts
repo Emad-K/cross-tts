@@ -1,5 +1,11 @@
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+	appendFileSync,
+	existsSync,
+	mkdirSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import {
 	APP_INDEX_URL,
@@ -7,7 +13,12 @@ import {
 	handleAppRequests,
 	registerAppScheme,
 } from "./appProtocol";
-import { isAllowedOrigin, urlOrigin } from "./securityGuards";
+import {
+	audioExportPath,
+	isAllowedOrigin,
+	isInsideRoot,
+	urlOrigin,
+} from "./securityGuards";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
@@ -186,6 +197,17 @@ async function getGpuInfo(): Promise<{ activeRenderer: string; gpus: string[] }>
 /** Resolves once the hub finished binding (or failed → null). */
 let kokoroHubReady: Promise<string | null> = Promise.resolve(null);
 let mainWindow: BrowserWindow | null = null;
+/**
+ * Folders the user picked via chooseExportFolder this session. Audiobook
+ * writes and revealPath are confined to these. The export folder isn't
+ * persisted (the dialog starts empty each time), so in-memory is enough.
+ */
+const exportRoots = new Set<string>();
+const EXPORT_DENIED = {
+	ok: false,
+	path: null,
+	error: "Export location not allowed. Choose the folder again.",
+};
 
 function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
@@ -255,7 +277,9 @@ function registerRpcHandlers(): void {
 			properties: ["openDirectory", "createDirectory"],
 		});
 		if (result.canceled || result.filePaths.length === 0) return null;
-		return result.filePaths[0]!;
+		const chosen = result.filePaths[0]!;
+		exportRoots.add(resolve(chosen));
+		return chosen;
 	});
 	ipcMain.handle(
 		"writeAudioFile",
@@ -263,9 +287,10 @@ function registerRpcHandlers(): void {
 			_event,
 			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
 		) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			if (!path || !(data instanceof Uint8Array)) return EXPORT_DENIED;
 			try {
 				mkdirSync(dir, { recursive: true });
-				const path = join(dir, fileName);
 				writeFileSync(path, Buffer.from(data));
 				return { ok: true, path };
 			} catch (e) {
@@ -283,8 +308,9 @@ function registerRpcHandlers(): void {
 			_event,
 			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
 		) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			if (!path || !(data instanceof Uint8Array)) return EXPORT_DENIED;
 			try {
-				const path = join(dir, fileName);
 				appendFileSync(path, Buffer.from(data));
 				return { ok: true, path };
 			} catch (e) {
@@ -298,8 +324,10 @@ function registerRpcHandlers(): void {
 	);
 	ipcMain.handle(
 		"audioFileExists",
-		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
-			existsSync(join(dir, fileName)),
+		(_event, { dir, fileName }: { dir: string; fileName: string }) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			return path !== null && existsSync(path);
+		},
 	);
 	ipcMain.handle(
 		"getBookCover",
@@ -326,7 +354,15 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("stopFindInPage", () => {
 		mainWindow?.webContents.stopFindInPage("clearSelection");
 	});
+	// Only ever opens an export folder the user picked, never a file: openPath
+	// on a file launches it with its default handler.
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
+		if (!isInsideRoot(path, exportRoots)) return;
+		try {
+			if (!statSync(path).isDirectory()) return;
+		} catch {
+			return;
+		}
 		void shell.openPath(path);
 	});
 	// Open a link in the user's default browser. Restricted to https so the
