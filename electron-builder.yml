@@ -24,9 +24,9 @@ files:
   - "!**/node_modules/phonon-tts/!(LICENSE-APACHE|LICENSE-MIT|THIRD_PARTY_LICENSES.md)"
   # onnxruntime-node: never ship the CUDA/TensorRT execution providers. npm
   # doesn't include them (a dev checkout only has them after an explicit
-  # `ONNXRUNTIME_NODE_INSTALL=cuda12` install); they are ~hundreds of MB and the
-  # opt-in CUDA setting expects the user to provide CUDA 12 + cuDNN 9 and the
-  # provider libraries. Without them the native engine logs why and uses CPU.
+  # `ONNXRUNTIME_NODE_INSTALL=cuda12` install) and they are hundreds of MB. The
+  # CUDA backend downloads them on request into the user's app-data folder
+  # instead (src/bun/cudaAddon.ts).
   # The binding links libonnxruntime.so.1 / @rpath/libonnxruntime.1.dylib, so
   # the full-version copies are duplicates (~45 MB each).
   - "!**/node_modules/onnxruntime-node/bin/**/{libonnxruntime_providers_cuda.so,libonnxruntime_providers_shared.so,libonnxruntime_providers_tensorrt.so,onnxruntime_providers_cuda.dll,onnxruntime_providers_shared.dll,onnxruntime_providers_tensorrt.dll,libonnxruntime.so.1.*,libonnxruntime.1.*.dylib}"
