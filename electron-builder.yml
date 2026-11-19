@@ -84,8 +84,14 @@ mac:
     - "!**/node_modules/onnxruntime-node/bin/napi-v3/{win32,linux}/**"
   icon: assets/icon.iconset
   category: public.app-category.productivity
+  # electron-updater on macOS installs from the zip (Squirrel.Mac can't use a
+  # dmg), so ship both: dmg for first install, zip for auto-update.
   target:
     - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
       arch:
         - x64
         - arm64
