@@ -1,11 +1,13 @@
 import type { TtsChunk } from "../tts/chunkText";
-import { locateOffset } from "./noteOffsets";
+import { chapterLength, locateOffset, shownOffset } from "./noteOffsets";
 
 /**
  * Maps between the reader's DOM and chapter-text offsets. Both viewers tag each
  * read-along span with `data-chunk-index`; a chunk can be several spans (an
  * EPUB sentence crossing <em>), so offsets inside a chunk count text across all
- * of that chunk's spans. Nothing here changes the DOM.
+ * of that chunk's spans, and go through `chapterLength` / `shownOffset` because
+ * an EPUB page can show more spaces than the chapter text has. Nothing here
+ * changes the DOM.
  */
 const CHUNK = "[data-chunk-index]";
 
@@ -35,17 +37,20 @@ export function offsetOfPoint(
 	if (host && root.contains(host)) {
 		const chunk = chunks[Number(host.dataset.chunkIndex)];
 		if (!chunk) return null;
-		let local = 0;
+		let shown = "";
 		for (const el of root.querySelectorAll<HTMLElement>(
 			`[data-chunk-index="${chunk.index}"]`,
 		)) {
 			if (el === host) break;
-			local += el.textContent?.length ?? 0;
+			shown += el.textContent ?? "";
 		}
 		const upTo = document.createRange();
 		upTo.selectNodeContents(host);
 		upTo.setEnd(node, offset);
-		return Math.min(chunk.end, chunk.start + local + upTo.toString().length);
+		return Math.min(
+			chunk.end,
+			chunk.start + chapterLength(shown + upTo.toString()),
+		);
 	}
 	// Between chunks (paragraph gaps, images): snap to the neighbouring chunk.
 	const point = document.createRange();
@@ -96,16 +101,17 @@ function domPoint(
 ): [Text, number] | null {
 	const at = locateOffset(chunks, offset, bias);
 	if (!at) return null;
-	let left = at.local;
-	let last: Text | null = null;
+	const nodes: Text[] = [];
 	for (const el of els.get(at.index) ?? []) {
 		const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-		for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
-			if (left < n.length || (bias === "end" && left === n.length)) return [n, left];
-			left -= n.length;
-			last = n;
-		}
+		for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
 	}
+	let left = shownOffset(nodes.map((n) => n.data).join(""), at.local, bias);
+	for (const n of nodes) {
+		if (left < n.length || (bias === "end" && left === n.length)) return [n, left];
+		left -= n.length;
+	}
+	const last = nodes.at(-1);
 	return last ? [last, last.length] : null;
 }
 

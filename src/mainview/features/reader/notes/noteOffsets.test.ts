@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { locateOffset, trimRange } from "./noteOffsets";
+import { chapterLength, locateOffset, shownOffset, trimRange } from "./noteOffsets";
 
 // "One two.  Three four." with a two-space gap at 8..10 between the chunks.
 const chunks = [
@@ -35,4 +35,30 @@ test("trimRange drops surrounding whitespace and clamps to the text", () => {
 	expect(trimRange("  hi there \n", 0, 99)).toEqual({ start: 2, end: 10 });
 	expect(trimRange("a   b", 1, 4)).toBeNull();
 	expect(trimRange("abc", 2, 1)).toBeNull();
+});
+
+describe("a chunk shown with more spaces than the chapter text has", () => {
+	// Chapter text: "Hi.  Bye now" collapses to "Hi. Bye now".
+	const shown = "Hi.  Bye now";
+
+	test("a point on screen maps to the chapter offset", () => {
+		expect(chapterLength(shown, 5)).toBe(4); // before "Bye"
+		expect("Hi. Bye now".slice(chapterLength(shown, 5), chapterLength(shown))).toBe(
+			"Bye now",
+		);
+	});
+
+	test("and back, so the highlight covers what the note quotes", () => {
+		const from = shownOffset(shown, 4, "start");
+		const to = shownOffset(shown, 11, "end");
+		expect(shown.slice(from, to)).toBe("Bye now");
+		// A range that ends on the collapsed run stops before it.
+		expect(shown.slice(0, shownOffset(shown, 3, "end"))).toBe("Hi.");
+	});
+
+	test("text with nothing collapsed maps one to one", () => {
+		expect(chapterLength("Bye now", 3)).toBe(3);
+		expect(shownOffset("Bye now", 3, "start")).toBe(3);
+		expect(shownOffset("Bye now", 99, "end")).toBe(7);
+	});
 });
