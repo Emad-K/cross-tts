@@ -6,12 +6,19 @@ import type {
 	EpubChapterContentResult,
 	ReadDocumentResult,
 } from "../shared/documentRpc";
+import { SUPPORTED_DOCUMENT_EXTENSIONS } from "../shared/droppedFiles";
 import { dataDir } from "./appConfigStore";
 import {
 	readEpubChapterContent,
 	readEpubCoverBytes,
 	readEpubManifest,
 } from "./epub/parseEpub";
+import { MAX_PDF_BYTES, assertDocumentSize } from "./fileSizeLimit";
+import {
+	chapteredKind,
+	loadChapteredBook,
+	titleFromFileName,
+} from "./formats/chapteredBook";
 import { readTextDocumentAtPath } from "./textDocumentIo";
 
 /** Cover thumbnail width; grid cards are small, so downscale aggressively. */
@@ -97,7 +104,7 @@ function pathsFromOpenDialogResult(paths: string[]): string[] {
 }
 
 const DOCUMENT_FILE_FILTERS = [
-	{ name: "Documents", extensions: ["txt", "epub"] },
+	{ name: "Documents", extensions: [...SUPPORTED_DOCUMENT_EXTENSIONS] },
 	{ name: "All Files", extensions: ["*"] },
 ];
 
@@ -115,9 +122,68 @@ export async function readDocumentAtPath(
 			chapters: manifest.chapters,
 		};
 	}
+	if (chapteredKind(filePath)) {
+		const book = await loadChapteredBook(filePath);
+		if (!book) return null;
+		return {
+			format: "epub",
+			source: book.source,
+			filePath,
+			fileName: basename(filePath),
+			title: book.title,
+			chapters: book.chapters,
+		};
+	}
+	if (isPdfPath(filePath)) return pdfPlaceholder(filePath);
 	const txt = readTextDocumentAtPath(filePath);
 	if (!txt) return null;
 	return txt;
+}
+
+function isPdfPath(path: string): boolean {
+	return path.toLowerCase().endsWith(".pdf");
+}
+
+/**
+ * PDFs are parsed in the sandboxed renderer (pdf.js in a Web Worker), never
+ * here. Main only confirms the file exists and is within the size cap, and
+ * returns a book with no chapters yet; the renderer fills them in after
+ * fetching the bytes with `readDocumentBytes` (see pdf/pdfDocument.ts).
+ */
+function pdfPlaceholder(filePath: string): ReadDocumentResult | null {
+	let size: number;
+	try {
+		const st = statSync(filePath);
+		if (!st.isFile()) return null;
+		size = st.size;
+	} catch {
+		return null;
+	}
+	assertDocumentSize(filePath, size, MAX_PDF_BYTES);
+	return {
+		format: "epub",
+		source: "pdf",
+		filePath,
+		fileName: basename(filePath),
+		title: titleFromFileName(filePath),
+		chapters: [],
+	};
+}
+
+/**
+ * Raw bytes of a PDF for the renderer's parser. Only regular `.pdf` files that
+ * start like a PDF and fit the size cap: this must not become a way to read
+ * arbitrary files.
+ */
+export function readPdfBytes(filePath: string): Uint8Array | null {
+	if (typeof filePath !== "string" || !isPdfPath(filePath)) return null;
+	if (!pdfPlaceholder(filePath)) return null;
+	const bytes = readFileSync(filePath);
+	// The header may sit a little way in; pdf.js looks in the first 1024 bytes.
+	if (!bytes.subarray(0, 1024).includes("%PDF-")) {
+		throw new Error(`"${basename(filePath)}" isn't a PDF file.`);
+	}
+	return bytes;
 }
 
 export async function pickDocument(
@@ -142,7 +208,9 @@ export async function getEpubChapterContent(
 	filePath: string,
 	chapterId: string,
 ): Promise<EpubChapterContentResult | null> {
-	const content = await readEpubChapterContent(filePath, chapterId);
+	const content = chapteredKind(filePath)
+		? (await loadChapteredBook(filePath))?.content.get(chapterId)
+		: await readEpubChapterContent(filePath, chapterId);
 	if (!content) return null;
 	return { chapterId, html: content.html, text: content.text };
 }
