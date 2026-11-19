@@ -6,7 +6,7 @@ import {
 	ttsNodeInit,
 	ttsNodeStop,
 } from "@/lib/desktopBridge";
-import { logInfo, logWarn } from "../logging";
+import { logError, logInfo, logWarn } from "../logging";
 import { SUPERTONIC_LANGS, SUPERTONIC_SAMPLE_RATE } from "./supertonicModel";
 import {
 	SUPERTONIC_DEFAULT_VOICE,
@@ -30,7 +30,7 @@ import { useTtsStore } from "./ttsStore";
 
 type Backend = "node" | "webgpu" | "wasm";
 type Result =
-	| { kind: "audio"; audio: Float32Array; samplingRate: number }
+	| { kind: "audio"; audio: Float32Array; samplingRate: number; synthMs: number }
 	| { kind: "empty" }
 	| { kind: "error"; message: string };
 
@@ -47,6 +47,8 @@ let active: Backend | null = null;
 /** Bumped by every teardown; a load from an older generation is stale. */
 let loadGen = 0;
 let gpuFailed = false;
+/** Log the first synthesis after each load (warm-up, realtime factor). */
+let loggedFirstSynth = false;
 let reqSeq = 0;
 let queuedChars = 0;
 const pending = new Map<number, (r: Result) => void>();
@@ -90,7 +92,14 @@ function startWorker(
 			pending.delete(msg.id);
 			if (msg.error) resolve({ kind: "error", message: msg.error });
 			else if (msg.empty) resolve({ kind: "empty" });
-			else resolve({ kind: "audio", audio: msg.audio, samplingRate: msg.samplingRate });
+			else {
+				resolve({
+					kind: "audio",
+					audio: msg.audio,
+					samplingRate: msg.samplingRate,
+					synthMs: msg.synthMs,
+				});
+			}
 		}
 	};
 	w.onerror = (e) => {
@@ -131,15 +140,6 @@ async function initNode(): Promise<boolean> {
 
 function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 	if (ready) return ready;
-	if (!useTtsStore.getState().licencesAccepted.includes(supertonicEngine.id)) {
-		// Settings asks for the acknowledgement before this engine can be picked;
-		// a book restored with it still mustn't download the model without it.
-		return Promise.reject(
-			new Error(
-				"Accept the Supertonic 3 licence in Settings → Playback before its model is downloaded.",
-			),
-		);
-	}
 	const { setModelPhase, setModelProgress } = useTtsStore.getState();
 	setModelPhase("loading");
 	setModelProgress(0);
@@ -148,7 +148,15 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		if (gen !== loadGen) throw new Error(ENGINE_RESET);
 	};
 	const startedAt = performance.now();
+	loggedFirstSynth = false;
 	ready = (async () => {
+		if (!useTtsStore.getState().licencesAccepted.includes(supertonicEngine.id)) {
+			// Settings asks for the acknowledgement before this engine can be
+			// picked; a book restored with it still mustn't download without it.
+			throw new Error(
+				"Accept the Supertonic 3 licence in Settings → Playback before its model is downloaded.",
+			);
+		}
 		const hubBaseUrl = await getKokoroHubBaseUrl();
 		checkCurrent();
 		logInfo("Loading Supertonic 3…", { source: "models" });
@@ -186,6 +194,7 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		const message = e instanceof Error ? e.message : String(e);
 		teardown();
 		setModelPhase("error", message);
+		logError("Couldn't load Supertonic 3.", { source: "models", detail: message });
 		throw e;
 	});
 	return ready;
@@ -250,6 +259,15 @@ async function synthesize(
 	if (result.samplingRate !== SUPERTONIC_SAMPLE_RATE) {
 		throw new Error(
 			`Supertonic returned ${result.samplingRate} Hz audio, expected ${SUPERTONIC_SAMPLE_RATE} Hz`,
+		);
+	}
+	if (!loggedFirstSynth) {
+		loggedFirstSynth = true;
+		const audioSec = result.audio.length / SUPERTONIC_SAMPLE_RATE;
+		logInfo(
+			`First sentence synthesized in ${(result.synthMs / 1000).toFixed(2)}s ` +
+				`(${audioSec.toFixed(1)}s of audio, ${(audioSec / (result.synthMs / 1000)).toFixed(1)}× realtime, ${steps} steps).`,
+			{ source: "tts" },
 		);
 	}
 	return result.audio;
