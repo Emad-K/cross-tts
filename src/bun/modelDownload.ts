@@ -1,18 +1,13 @@
-import {
-	createWriteStream,
-	existsSync,
-	mkdirSync,
-	renameSync,
-	statSync,
-} from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { modelCacheDir } from "./appConfigStore";
+import { downloadToFile } from "./modelCache";
 import {
 	MODEL_KINDS,
 	MODEL_ONNX,
 	MODEL_REPO,
+	MODEL_REVISION,
+	MODEL_SHA256,
 	type ModelKind,
 	type ModelStatusMap,
 } from "../shared/modelAssets";
@@ -28,11 +23,11 @@ const SIDECARS = [
 	"special_tokens_map.json",
 ];
 
-/** Mirrors the hub on-disk layout: <cache>/<repo>/resolve/main/<file>. */
+/** Mirrors the hub on-disk layout: <cache>/<repo>/resolve/<rev>/<file>. */
 function repoFilePath(repoRelative: string): string {
 	return join(
 		modelCacheDir(),
-		...`${MODEL_REPO}/resolve/main/${repoRelative}`.split("/"),
+		...`${MODEL_REPO}/resolve/${MODEL_REVISION}/${repoRelative}`.split("/"),
 	);
 }
 
@@ -57,31 +52,16 @@ export function modelStatus(): ModelStatusMap {
 	return out;
 }
 
-async function fetchToDisk(
+function fetchToDisk(
 	repoRelative: string,
 	onProgress?: (loaded: number, total: number) => void,
 ): Promise<void> {
-	const dest = repoFilePath(repoRelative);
-	const url = `${HF_ORIGIN}/${MODEL_REPO}/resolve/main/${repoRelative}`;
-	const res = await fetch(url, { redirect: "follow" });
-	if (!res.ok || !res.body) {
-		throw new Error(`Download failed ${res.status}: ${repoRelative}`);
-	}
-	const total = Number(res.headers.get("content-length") || 0);
-	mkdirSync(join(dest, ".."), { recursive: true });
-	const tmp = `${dest}.download`;
-	let loaded = 0;
-	const reader = Readable.fromWeb(
-		res.body as Parameters<typeof Readable.fromWeb>[0],
+	return downloadToFile(
+		`${HF_ORIGIN}/${MODEL_REPO}/resolve/${MODEL_REVISION}/${repoRelative}`,
+		repoFilePath(repoRelative),
+		MODEL_SHA256[repoRelative],
+		onProgress,
 	);
-	if (onProgress) {
-		reader.on("data", (chunk: Buffer) => {
-			loaded += chunk.length;
-			onProgress(loaded, total);
-		});
-	}
-	await pipeline(reader, createWriteStream(tmp));
-	renameSync(tmp, dest);
 }
 
 /** Download a model's ONNX (with progress) plus its shared sidecar files. */

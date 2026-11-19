@@ -32,7 +32,8 @@ export async function cacheVoiceBin(
 	const cache = await openVoiceCache();
 	const key = voiceBinUrl(id);
 	if (cache && (await cache.match(key))) return;
-	const url = hubBaseUrl ? voiceBinUrlFromHub(hubBaseUrl, id) : key;
+	// Bytes always come from the pinned revision (hub, else huggingface.co).
+	const url = voiceBinUrlFromHub(hubBaseUrl ?? "https://huggingface.co/", id);
 	const res = await fetch(url, { signal });
 	if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
 	const body = await res.arrayBuffer();

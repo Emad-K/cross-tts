@@ -6,31 +6,37 @@ import {
 	isAllowedOrigin,
 	isInsideRoot,
 } from "./securityGuards";
+import { MODEL_REVISION as rev } from "../shared/modelAssets";
 
 describe("hubRequestPath", () => {
 	const t = "abc123";
 	const repo = "onnx-community/Kokoro-82M-v1.0-ONNX";
 	test("maps allowed Kokoro files", () => {
 		for (const f of ["config.json", "onnx/model.onnx", "voices/af_heart.bin"]) {
-			expect(hubRequestPath(`/${t}/${repo}/resolve/main/${f}`, t)).toBe(
-				`/${repo}/resolve/main/${f}`,
+			expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/${f}`, t)).toBe(
+				`/${repo}/resolve/${rev}/${f}`,
 			);
 		}
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/voices%2Faf.bin`, t)).toBe(
-			`/${repo}/resolve/main/voices/af.bin`,
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/voices%2Faf.bin`, t)).toBe(
+			`/${repo}/resolve/${rev}/voices/af.bin`,
 		);
 	});
 	test("rejects wrong token, other repos, prefixes, traversal, other types", () => {
-		expect(hubRequestPath(`/${repo}/resolve/main/config.json`, t)).toBeNull();
-		expect(hubRequestPath(`/nope/${repo}/resolve/main/config.json`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/gpt2/resolve/main/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${repo}/resolve/${rev}/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/nope/${repo}/resolve/${rev}/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/gpt2/resolve/${rev}/config.json`, t)).toBeNull();
 		expect(hubRequestPath(`/${t}/${repo}`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/onnx`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/../x.json`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/%2e%2e/x.json`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/x.html`, t)).toBeNull();
-		expect(hubRequestPath(`/${t}/${repo}/resolve/main/%zz.json`, t)).toBeNull();
-		expect(hubRequestPath(`//${repo}/resolve/main/config.json`, "")).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/onnx`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/../x.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/%2e%2e/x.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/x.html`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/%zz.json`, t)).toBeNull();
+		expect(hubRequestPath(`//${repo}/resolve/${rev}/config.json`, "")).toBeNull();
+	});
+	test("rejects unpinned revisions and ONNX files without a known sha256", () => {
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/onnx/model.onnx`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/onnx/model_q4.onnx`, t)).toBeNull();
 	});
 });
 

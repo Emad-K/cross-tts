@@ -9,7 +9,11 @@ import { phonemizeForKokoro } from "./kokoroPhonemize";
 import { cacheVoiceBin } from "./prefetchKokoroAssets";
 import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
 import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
-import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
+import {
+	KOKORO_MODEL_ID,
+	KOKORO_REMOTE_PATH_TEMPLATE,
+	type KokoroVoiceId,
+} from "./kokoroVoices";
 
 /**
  * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
@@ -165,6 +169,7 @@ function load(init: InitMessage): Promise<KokoroTTS> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
 		hubBaseUrl = init.hubBaseUrl;
+		env.remotePathTemplate = KOKORO_REMOTE_PATH_TEMPLATE;
 		if (init.hubBaseUrl) {
 			env.remoteHost = init.hubBaseUrl;
 			env.useBrowserCache = false;

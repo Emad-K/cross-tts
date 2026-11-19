@@ -1,3 +1,5 @@
+import { MODEL_REPO, MODEL_REVISION } from "@shared/modelAssets";
+
 /** Voice ids shipped with Kokoro-82M v1.0 (matches `kokoro-js` runtime). */
 export const KOKORO_VOICE_IDS = [
 	"af_heart",
@@ -32,8 +34,19 @@ export const KOKORO_VOICE_IDS = [
 
 export type KokoroVoiceId = (typeof KOKORO_VOICE_IDS)[number];
 
-export const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+export const KOKORO_MODEL_ID = MODEL_REPO;
 
+/**
+ * transformers.js remote path with the pinned revision. Set as
+ * `env.remotePathTemplate` in every worker: kokoro-js's from_pretrained
+ * doesn't forward a `revision` option.
+ */
+export const KOKORO_REMOTE_PATH_TEMPLATE = `{model}/resolve/${MODEL_REVISION}/`;
+
+/**
+ * Cache API key kokoro-js looks voices up under. It hardcodes `main`, so this
+ * stays unpinned; the bytes stored under it come from the pinned hub URL.
+ */
 export function voiceBinUrl(voiceId: string): string {
 	return `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
 }
@@ -44,5 +57,5 @@ export function voiceBinUrlFromHub(
 	voiceId: string,
 ): string {
 	const base = hubBaseUrl.endsWith("/") ? hubBaseUrl : `${hubBaseUrl}/`;
-	return `${base}${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
+	return `${base}${KOKORO_MODEL_ID}/resolve/${MODEL_REVISION}/voices/${voiceId}.bin`;
 }

@@ -11,7 +11,10 @@ import {
 	CANCELLED,
 	SynthJobQueue,
 } from "../mainview/features/reader/tts/synthJobQueue";
-import { KOKORO_MODEL_ID } from "../mainview/features/reader/tts/kokoroVoices";
+import {
+	KOKORO_MODEL_ID,
+	KOKORO_REMOTE_PATH_TEMPLATE,
+} from "../mainview/features/reader/tts/kokoroVoices";
 import type { KokoroVoiceId } from "../mainview/features/reader/tts/kokoroVoices";
 import type {
 	TtsNodeGenerateParams,
@@ -52,6 +55,7 @@ function load(
 ): Promise<KokoroTTS> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
+		env.remotePathTemplate = KOKORO_REMOTE_PATH_TEMPLATE;
 		if (hubBaseUrl) {
 			// Fetch through the main process's caching hub proxy so the native and
 			// renderer backends share one on-disk model cache; skip transformers.js's

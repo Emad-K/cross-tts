@@ -1,19 +1,11 @@
-import {
-	createReadStream,
-	createWriteStream,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	renameSync,
-	statSync,
-} from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { MODEL_SHA256 } from "../shared/modelAssets";
 import { modelCacheDir } from "./appConfigStore";
 import { mainLog } from "./logBridge";
+import { adoptLegacyModelCache, downloadToFile } from "./modelCache";
 import { hubRequestPath } from "./securityGuards";
 
 const HF_ORIGIN = "https://huggingface.co";
@@ -64,7 +56,6 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	}
 
 	const task = (async () => {
-		mkdirSync(join(dest, ".."), { recursive: true });
 		const url = `${HF_ORIGIN}${hfPath}`;
 		// This branch only runs on a cache miss — a genuine download from HF.
 		const name = hfPath.split("/").pop() || hfPath;
@@ -73,16 +64,9 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 			source: "models",
 			message: `Downloading ${name} from HuggingFace (not cached yet)…`,
 		});
-		const res = await fetch(url, { redirect: "follow" });
-		if (!res.ok || !res.body) {
-			throw new Error(`Kokoro hub fetch failed ${res.status}: ${url}`);
-		}
-		const tmp = `${dest}.download`;
-		await pipeline(
-			Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
-			createWriteStream(tmp),
-		);
-		renameSync(tmp, dest);
+		// hfPath is /<repo>/resolve/<rev>/<file>; the hash table is keyed by <file>.
+		const repoRelative = hfPath.split("/").slice(5).join("/");
+		await downloadToFile(url, dest, MODEL_SHA256[repoRelative]);
 		const bytes = existsSync(dest) ? statSync(dest).size : 0;
 		mainLog({
 			level: "info",
@@ -112,6 +96,7 @@ export function startKokoroHubServer(
 		return Promise.resolve(hubBaseUrl);
 	}
 	mkdirSync(hubCacheDirectory(), { recursive: true });
+	adoptLegacyModelCache(hubCacheDirectory());
 	console.log(`Kokoro HF files on disk: ${hubCacheDirectory()}`);
 	const token = randomBytes(16).toString("hex");
 
