@@ -20,6 +20,8 @@ export type RegexReplaceRule = {
 	builtIn?: boolean;
 	/** Builtin preset group; grouped rules render under a collapsible section. */
 	group?: string;
+	/** Book path this rule is limited to; unset means all books. */
+	book?: string;
 };
 
 /** Maps a word to custom IPA phonemes (injected at kokoro-js phonemize time). */
@@ -34,6 +36,8 @@ export type PronunciationRule = {
 	builtIn?: boolean;
 	/** Builtin preset group; grouped rules render under a collapsible section. */
 	group?: string;
+	/** Book path this rule is limited to; unset means all books. */
+	book?: string;
 };
 
 /** Case-insensitive line-start chapter / part / volume headings (EPUB styles). */
@@ -421,6 +425,34 @@ export function isValidRegexPattern(pattern: string): boolean {
 	}
 }
 
+/** The persisted per-book scope of a rule, if it has one. */
+function ruleBook(r: Record<string, unknown>): { book?: string } {
+	return typeof r.book === "string" && r.book ? { book: r.book } : {};
+}
+
+/**
+ * The rules that apply while reading `book`: all-books rules plus that book's
+ * own, ordered so the book's rule has the last word. Regex rules run in order,
+ * so the book's go last (they see text the general rules already cleaned).
+ * Pronunciation takes the first rule that matches a word, so the book's go
+ * first there.
+ */
+export function effectiveTtsRules(
+	state: TtsTextRulesState,
+	book: string | null,
+): TtsTextRulesState {
+	const split = <T extends { book?: string }>(rules: T[]) => ({
+		all: rules.filter((r) => !r.book),
+		own: rules.filter((r) => r.book && r.book === book),
+	});
+	const regex = split(state.regexRules);
+	const pron = split(state.pronunciationRules);
+	return {
+		regexRules: [...regex.all, ...regex.own],
+		pronunciationRules: [...pron.own, ...pron.all],
+	};
+}
+
 export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 	const defaults = defaultTtsTextRulesState();
 	if (!raw || typeof raw !== "object") return defaults;
@@ -448,6 +480,7 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 				enabled: r.enabled !== false,
 				caseSensitive: r.caseSensitive === true,
 				builtIn: r.builtIn === true,
+				...ruleBook(r),
 			});
 		}
 	}
@@ -470,6 +503,7 @@ export function coerceTtsTextRulesState(raw: unknown): TtsTextRulesState {
 				caseSensitive: r.caseSensitive === true,
 				enabled: r.enabled !== false,
 				builtIn: r.builtIn === true,
+				...ruleBook(r),
 			});
 		}
 	}

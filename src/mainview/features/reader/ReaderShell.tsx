@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { LoadedDocument } from "./types";
 import { ListenEstimateSync } from "./listenEstimate/ListenEstimateSync";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
+import { BookDataSync } from "./bookData/BookDataSync";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
 import { TrayNowPlayingSync } from "./tray/TrayNowPlayingSync";
@@ -120,6 +121,7 @@ export function ReaderShell({
 			<TrayNowPlayingSync document={document} />
 			<TtsRulesSettingSync />
 			<SleepTimerEffect />
+			<BookDataSync document={document} />
 			<ListenEstimateSync
 				document={document}
 				activeChapterId={activeChapterId}

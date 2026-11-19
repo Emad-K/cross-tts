@@ -1,0 +1,29 @@
+/*
+ * Reader highlights are painted with the CSS Custom Highlight API: no DOM
+ * changes, so read-along spans, selection and layout are untouched. The tints
+ * are translucent so they work on every theme, over the active sentence too.
+ */
+::highlight(note-yellow) {
+	background-color: rgb(250 204 21 / 0.4);
+}
+::highlight(note-green) {
+	background-color: rgb(74 222 128 / 0.38);
+}
+::highlight(note-pink) {
+	background-color: rgb(244 114 182 / 0.4);
+}
+/* A highlight that also has a written note. */
+::highlight(note-noted) {
+	text-decoration: underline dotted;
+}
+
+/* Swatches for the same colours (menu, dialog, notes list). */
+.note-swatch-yellow {
+	background-color: rgb(250 204 21);
+}
+.note-swatch-green {
+	background-color: rgb(74 222 128);
+}
+.note-swatch-pink {
+	background-color: rgb(244 114 182);
+}

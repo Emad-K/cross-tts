@@ -20,6 +20,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { exportTtsRulesForUser } from "../ttsRules/ttsRulesExchangeUi";
+import {
+	RuleScopeBadge,
+	RuleScopeFilter,
+	RuleScopeSelect,
+	useScopeFilteredRules,
+} from "./RuleScopeSelect";
 
 export type TtsRulesPanelProps = {
 	/** True when this panel is the active settings section (drives scroll-into-view). */
@@ -60,12 +66,16 @@ type RegexFormDraft = {
 	pattern: string;
 	replacement: string;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; undefined = all books. */
+	book?: string;
 };
 
 type PronFormDraft = {
 	word: string;
 	phonetic: string;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; undefined = all books. */
+	book?: string;
 };
 
 function RuleRow({
@@ -248,6 +258,7 @@ function RulesAccordionSection({
 			</AccordionTrigger>
 			<AccordionContent>
 				<div className="flex flex-col gap-2.5 pb-1">
+					<RuleScopeFilter id={`rule-scope-filter-${value}`} />
 					<ScrollArea className="h-[min(15rem,40vh)] w-full rounded-md border border-border/60 bg-muted/5">
 						<div className="p-1.5 pr-3">
 							{isEmpty ? <RulesEmptyState message={emptyMessage} /> : list}
@@ -316,6 +327,11 @@ function InlineRegexForm({
 }) {
 	return (
 		<div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
+			<RuleScopeSelect
+				id="regex-form-scope"
+				value={draft.book}
+				onChange={(book) => onDraftChange({ book })}
+			/>
 			<Input
 				placeholder="Label (optional)"
 				value={draft.label}
@@ -375,6 +391,11 @@ function InlinePronForm({
 }) {
 	return (
 		<div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
+			<RuleScopeSelect
+				id="pron-form-scope"
+				value={draft.book}
+				onChange={(book) => onDraftChange({ book })}
+			/>
 			<div className="grid gap-2 sm:grid-cols-2">
 				<div className="space-y-1">
 					<Label htmlFor="pron-form-word">Word</Label>
@@ -447,9 +468,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 	const importUserRules = useTtsRulesStore((s) => s.importUserRules);
 
 	const { ungrouped: ungroupedRegexRules, groups: regexGroups } =
-		splitRuleGroups(regexRules);
+		splitRuleGroups(useScopeFilteredRules(regexRules));
 	const { ungrouped: ungroupedPronRules, groups: pronGroups } =
-		splitRuleGroups(pronunciationRules);
+		splitRuleGroups(useScopeFilteredRules(pronunciationRules));
 
 	const importInputRef = useRef<HTMLInputElement>(null);
 	const [importError, setImportError] = useState<string | null>(null);
@@ -530,6 +551,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			pattern: rule.pattern,
 			replacement: rule.replacement,
 			caseSensitive: rule.caseSensitive,
+			book: rule.book,
 		});
 		setRegexError(null);
 	};
@@ -559,6 +581,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			replacement: regexDraft.replacement,
 			enabled: true,
 			caseSensitive: regexDraft.caseSensitive,
+			book: regexDraft.book,
 		});
 		closeRegexForm();
 	};
@@ -576,6 +599,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			pattern,
 			replacement: regexDraft.replacement,
 			caseSensitive: regexDraft.caseSensitive,
+			book: regexDraft.book,
 		});
 		closeRegexForm();
 	};
@@ -595,6 +619,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			word: rule.word,
 			phonetic: rule.phonetic,
 			caseSensitive: rule.caseSensitive,
+			book: rule.book,
 		});
 		setPronError(null);
 	};
@@ -618,6 +643,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			phonetic: pronDraft.phonetic.trim(),
 			caseSensitive: pronDraft.caseSensitive,
 			enabled: true,
+			book: pronDraft.book,
 		});
 		closePronForm();
 	};
@@ -633,6 +659,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			word: pronDraft.word.trim(),
 			phonetic: pronDraft.phonetic.trim(),
 			caseSensitive: pronDraft.caseSensitive,
+			book: pronDraft.book,
 		});
 		closePronForm();
 	};
@@ -712,6 +739,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 								(case sensitive)
 							</span>
 						) : null}
+						<RuleScopeBadge book={rule.book} />
 					</>
 				}
 				actions={
@@ -770,6 +798,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 							{" "}
 							→ {rule.phonetic}
 						</span>
+						<RuleScopeBadge book={rule.book} />
 					</>
 				}
 				actions={
