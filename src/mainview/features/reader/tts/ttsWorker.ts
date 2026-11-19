@@ -52,6 +52,60 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 let tts: KokoroTTS | null = null;
 let loadPromise: Promise<KokoroTTS> | null = null;
+/** ORT's WebGPU device once a webgpu model is loaded (null on wasm). */
+let gpuDevice: GPUDevice | null = null;
+/** Set when the GPU device was lost; every later run reports a GPU fault. */
+let gpuLostReason: string | null = null;
+
+/** Hook the device ORT created so a lost device fails runs instead of
+ * silently producing garbage. */
+async function watchGpuDevice(): Promise<void> {
+	const webgpu = env.backends?.onnx?.webgpu as
+		| { device?: GPUDevice | Promise<GPUDevice> }
+		| undefined;
+	const dev = await webgpu?.device;
+	if (!dev) return;
+	gpuDevice = dev;
+	void dev.lost.then((info) => {
+		gpuLostReason = info.message || info.reason || "unknown";
+	});
+}
+
+/**
+ * One model run, with GPU errors made visible. ORT-web only logs validation
+ * errors and drops out-of-memory ones, and a failed buffer allocation can
+ * leave the run "succeeding" on stale pooled buffers — finite but wrong audio
+ * (the "odd voice" on Linux GPUs with no free VRAM). Error scopes around the
+ * run catch both; runs are serialized, so the scopes never overlap.
+ */
+async function generatePiece(
+	model: KokoroTTS,
+	inputIds: Parameters<KokoroTTS["generate_from_ids"]>[0],
+	voice: KokoroVoiceId,
+	speed: number,
+) {
+	const dev = gpuDevice;
+	if (!dev) return model.generate_from_ids(inputIds, { voice, speed });
+	if (gpuLostReason) throw new Error(`gpu-fault: device lost (${gpuLostReason})`);
+	dev.pushErrorScope("out-of-memory");
+	dev.pushErrorScope("validation");
+	let raw: Awaited<ReturnType<KokoroTTS["generate_from_ids"]>> | null = null;
+	let runError: unknown = null;
+	try {
+		raw = await model.generate_from_ids(inputIds, { voice, speed });
+	} catch (e) {
+		runError = e;
+	}
+	const [validation, oom] = await Promise.all([
+		dev.popErrorScope().catch(() => null),
+		dev.popErrorScope().catch(() => null),
+	]);
+	if (runError) throw runError;
+	const fault = oom ?? validation;
+	if (fault) throw new Error(`gpu-fault: ${fault.message}`);
+	if (gpuLostReason) throw new Error(`gpu-fault: device lost (${gpuLostReason})`);
+	return raw!;
+}
 
 async function selectGpuAdapter(power: GpuPower): Promise<void> {
 	// WebGPU can't pick a GPU by name — only a power hint, which on multi-GPU
@@ -102,7 +156,8 @@ function load(init: InitMessage): Promise<KokoroTTS> {
 					},
 				}),
 			)
-			.then((model) => {
+			.then(async (model) => {
+				if (init.device === "webgpu") await watchGpuDevice().catch(() => {});
 				tts = model;
 				return model;
 			})
@@ -151,75 +206,80 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 	}
 
 	if (msg.type === "generate") {
-		void (async () => {
-			const startedAt = performance.now();
-			try {
-				if (!tts) {
-					ctx.postMessage({
-						type: "result",
-						id: msg.id,
-						error: "Model not loaded",
-					});
-					return;
-				}
-				const phonemes = await phonemizeForKokoro(
-					msg.text,
-					msg.voice,
-					msg.pronunciationRules,
-				);
-				if (phonemes.trim() === "") {
-					ctx.postMessage({ type: "result", id: msg.id, empty: true });
-					return;
-				}
-				// Chunks whose phonemes exceed the tokenizer limit are synthesized in
-				// punctuation-aligned pieces and the audio concatenated — otherwise the
-				// tokenizer would silently truncate and the tail would go unspoken.
-				const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
-				const audios: Float32Array[] = [];
-				let samplingRate = 24000;
-				for (const piece of pieces) {
-					if (piece.trim() === "") continue;
-					const { input_ids } = tts.tokenizer(piece, { truncation: true });
-					const raw = await tts.generate_from_ids(input_ids, {
-						voice: msg.voice,
-						speed: msg.speed,
-					});
-					samplingRate = raw.sampling_rate;
-					audios.push(raw.audio as Float32Array);
-				}
-				if (audios.length === 0) {
-					ctx.postMessage({ type: "result", id: msg.id, empty: true });
-					return;
-				}
-				// Join into a fresh, exact-size buffer we can transfer (zero-copy).
-				const totalLength = audios.reduce((n, a) => n + a.length, 0);
-				const joined = new Float32Array(totalLength);
-				let offset = 0;
-				for (const a of audios) {
-					joined.set(a, offset);
-					offset += a.length;
-				}
-				if (!isPlausibleAudio(joined)) {
-					ctx.postMessage({ type: "result", id: msg.id, error: "bad-output" });
-					return;
-				}
-				ctx.postMessage(
-					{
-						type: "result",
-						id: msg.id,
-						audio: joined,
-						samplingRate,
-						synthMs: Math.round(performance.now() - startedAt),
-					},
-					[joined.buffer],
-				);
-			} catch (e) {
-				ctx.postMessage({
-					type: "result",
-					id: msg.id,
-					error: e instanceof Error ? e.message : String(e),
-				});
-			}
-		})();
+		jobChain = jobChain.then(() => runGenerate(msg));
 	}
 };
+
+/**
+ * Generate jobs run one at a time, in arrival order: GPU error scopes must
+ * wrap exactly one run, and a queue is what lets stale jobs be dropped.
+ */
+let jobChain: Promise<void> = Promise.resolve();
+
+async function runGenerate(msg: GenerateMessage): Promise<void> {
+	const startedAt = performance.now();
+	try {
+		if (!tts) {
+			ctx.postMessage({
+				type: "result",
+				id: msg.id,
+				error: "Model not loaded",
+			});
+			return;
+		}
+		const phonemes = await phonemizeForKokoro(
+			msg.text,
+			msg.voice,
+			msg.pronunciationRules,
+		);
+		if (phonemes.trim() === "") {
+			ctx.postMessage({ type: "result", id: msg.id, empty: true });
+			return;
+		}
+		// Chunks whose phonemes exceed the tokenizer limit are synthesized in
+		// punctuation-aligned pieces and the audio concatenated — otherwise the
+		// tokenizer would silently truncate and the tail would go unspoken.
+		const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
+		const audios: Float32Array[] = [];
+		let samplingRate = 24000;
+		for (const piece of pieces) {
+			if (piece.trim() === "") continue;
+			const { input_ids } = tts.tokenizer(piece, { truncation: true });
+			const raw = await generatePiece(tts, input_ids, msg.voice, msg.speed);
+			samplingRate = raw.sampling_rate;
+			audios.push(raw.audio as Float32Array);
+		}
+		if (audios.length === 0) {
+			ctx.postMessage({ type: "result", id: msg.id, empty: true });
+			return;
+		}
+		// Join into a fresh, exact-size buffer we can transfer (zero-copy).
+		const totalLength = audios.reduce((n, a) => n + a.length, 0);
+		const joined = new Float32Array(totalLength);
+		let offset = 0;
+		for (const a of audios) {
+			joined.set(a, offset);
+			offset += a.length;
+		}
+		if (!isPlausibleAudio(joined)) {
+			ctx.postMessage({ type: "result", id: msg.id, error: "bad-output" });
+			return;
+		}
+		ctx.postMessage(
+			{
+				type: "result",
+				id: msg.id,
+				audio: joined,
+				samplingRate,
+				synthMs: Math.round(performance.now() - startedAt),
+			},
+			[joined.buffer],
+		);
+	} catch (e) {
+		ctx.postMessage({
+			type: "result",
+			id: msg.id,
+			error: e instanceof Error ? e.message : String(e),
+		});
+	}
+}
