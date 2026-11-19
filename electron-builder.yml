@@ -25,6 +25,12 @@ files:
   # arch (x64 / arm64), so the extglob drops every *other* arch's directory and
   # never the one this target needs.
   - "!**/node_modules/onnxruntime-node/bin/napi-v3/*/!(${arch})/**"
+  # ONNX Runtime Web only runs in the renderer, and Vite already bundles it (and
+  # its .wasm/.mjs) into out/renderer. In Node, transformers' build marks
+  # onnxruntime-web as ignored, and main/utility only load
+  # dist/transformers.node.cjs, so the web builds and ORT copies are dead weight.
+  - "!**/node_modules/onnxruntime-web/**"
+  - "!**/node_modules/@huggingface/transformers/dist/!(transformers.node.cjs)"
 
 asar: true
 npmRebuild: false
@@ -99,6 +105,8 @@ mac:
 linux:
   files:
     - "!**/node_modules/onnxruntime-node/bin/napi-v3/{darwin,win32}/**"
+    # Our Linux targets are glibc-only; sharp's musl (Alpine) builds never load.
+    - "!**/node_modules/@img/*-linuxmusl-*/**"
   icon: assets/linux/icon_256x256.png
   category: AudioVideo
   maintainer: Emad Kazemi <emadkazemi310@gmail.com>
