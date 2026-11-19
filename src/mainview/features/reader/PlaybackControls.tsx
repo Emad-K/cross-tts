@@ -35,7 +35,7 @@ import {
 	togglePlayPause,
 	useTtsStore,
 } from "./tts";
-import { KOKORO_VOICE_IDS } from "./tts/kokoroVoices";
+import { getTtsEngine } from "./tts/ttsEngines";
 import { ChapterTime } from "./listenEstimate/ChapterTime";
 import { SleepTimerControl } from "./sleepTimer/SleepTimerControl";
 
@@ -62,7 +62,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const currentChunkIndex = useTtsStore((s) => s.currentChunkIndex);
 	const volumePct = useTtsStore((s) => s.volumePct);
 	const voice = useTtsStore((s) => s.voice);
-	const voiceOptions = useTtsStore((s) => s.voiceOptions);
+	const engineId = useTtsStore((s) => s.engineId);
 	const speedNum = useTtsStore((s) => s.speed);
 	const chunks = useTtsStore((s) => s.chunks);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
@@ -89,10 +89,10 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const setSpeed = useTtsStore((s) => s.setSpeed);
 	const setVoice = useTtsStore((s) => s.setVoice);
 
-	const menuVoices = useMemo(() => {
-		if (voiceOptions.length > 0) return voiceOptions;
-		return KOKORO_VOICE_IDS.map((id) => ({ id, label: id }));
-	}, [voiceOptions]);
+	const menuVoices = useMemo(
+		() => getTtsEngine(engineId).listVoices(),
+		[engineId],
+	);
 
 	useEffect(() => {
 		if (!isDraggingProgress) {

@@ -1,4 +1,5 @@
 import { MODEL_REPO, MODEL_REVISION } from "@shared/modelAssets";
+import type { TtsVoice } from "./ttsEngineTypes";
 
 /** Voices shipped with Kokoro-82M v1.0 (display names as in upstream kokoro-js). */
 const KOKORO_VOICES = {
@@ -37,10 +38,10 @@ export type KokoroVoiceId = keyof typeof KOKORO_VOICES;
 export const KOKORO_VOICE_IDS = Object.keys(KOKORO_VOICES) as KokoroVoiceId[];
 
 /** Voice picker entries, e.g. "Heart (af_heart) · en-us". */
-export function kokoroVoiceOptions(): { id: string; label: string }[] {
+export function kokoroVoiceOptions(): TtsVoice[] {
 	return KOKORO_VOICE_IDS.map((id) => {
 		const { name, language } = KOKORO_VOICES[id];
-		return { id, label: `${name} (${id}) · ${language}` };
+		return { id, label: `${name} (${id}) · ${language}`, language };
 	});
 }
 

@@ -61,7 +61,7 @@ import { cn } from "@/lib/utils";
 import {
 	getActiveDevice,
 	MAX_SENTENCE_PAUSE_MS,
-	resetKokoroEngine,
+	resetTtsEngine,
 	useTtsStore,
 } from "../tts";
 import { AppearancePanel } from "./AppearancePanel";
@@ -484,7 +484,7 @@ function CpuThreadsControl() {
 		// New thread count only applies on a fresh CPU load. If a CPU model is
 		// loaded, drop it so the next play picks up the change; leave a GPU model
 		// alone (the thread count doesn't affect it).
-		if (getActiveDevice() !== "webgpu") resetKokoroEngine();
+		if (getActiveDevice() !== "webgpu") resetTtsEngine();
 	};
 
 	return (
@@ -529,7 +529,7 @@ function CudaControl() {
 	const onToggle = async (next: boolean) => {
 		await setCudaEnabled(next);
 		// The native engine picks its execution provider when it loads.
-		if (getActiveDevice() !== "webgpu") resetKokoroEngine();
+		if (getActiveDevice() !== "webgpu") resetTtsEngine();
 	};
 	return (
 		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
@@ -621,7 +621,7 @@ function GpuPreferenceControl() {
 	const onChange = (next: GpuPowerPreference) => {
 		void setGpuPower(next);
 		// Reload only if a GPU model is live; the new adapter applies on reload.
-		if (getActiveDevice() === "webgpu") resetKokoroEngine();
+		if (getActiveDevice() === "webgpu") resetTtsEngine();
 	};
 
 	// Label the two WebGPU-addressable adapters with their real names.
@@ -690,7 +690,7 @@ function PerformancePanel() {
 		await setGpuEnabled(next);
 		// CPU and GPU use different model weights — drop the loaded model so the
 		// next play reloads the right one.
-		resetKokoroEngine();
+		resetTtsEngine();
 	};
 
 	return (

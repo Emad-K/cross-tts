@@ -8,7 +8,7 @@ import {
 } from "@/lib/desktopBridge";
 import { useBookmarksStore } from "./bookmarks/bookmarksStore";
 import { useLibraryStore } from "./library/libraryStore";
-import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { coerceEngineVoice, getTtsEngine } from "./tts/ttsEngines";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";
 import type { LoadedDocument } from "./types";
@@ -46,12 +46,6 @@ let writingLibraryFromSlice = false;
 
 export function touchSessionSave(): void {
 	scheduleSave?.();
-}
-
-function coerceVoice(id: string): KokoroVoiceId {
-	return KOKORO_VOICE_IDS.includes(id as KokoroVoiceId)
-		? (id as KokoroVoiceId)
-		: "af_heart";
 }
 
 export function buildWebSlice(
@@ -169,8 +163,8 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 		};
 	}
 	const { web } = file;
-	const voice = coerceVoice(web.voice);
-	useTtsStore.getState().setVoice(voice);
+	const engine = getTtsEngine(useTtsStore.getState().engineId);
+	useTtsStore.getState().setVoice(coerceEngineVoice(engine, web.voice));
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
 	if (typeof web.sentencePauseMs === "number") {

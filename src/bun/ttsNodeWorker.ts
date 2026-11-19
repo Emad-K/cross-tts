@@ -10,6 +10,7 @@ import {
 	generatePhonemes,
 	KOKORO_SAMPLE_RATE,
 	loadKokoro,
+	MAX_PHONEME_TOKENS,
 	voiceLoader,
 	type Kokoro,
 } from "../mainview/features/reader/tts/kokoroModel";
@@ -33,13 +34,6 @@ import { hubDiskCache } from "./hubDiskCache";
  */
 
 const DTYPE = "fp32";
-
-/**
- * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
- * end of the sentence AND the EOS token (garbled tail). One phoneme char is at
- * most one token, so pieces this long always fit, with room for BOS/EOS.
- */
-const MAX_PHONEME_TOKENS = 500;
 
 type GenerateJob = { type: "generate"; id: number } & TtsNodeGenerateParams;
 

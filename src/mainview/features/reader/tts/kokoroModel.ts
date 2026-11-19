@@ -15,6 +15,13 @@ import { KOKORO_MODEL_ID } from "./kokoroVoices";
 
 export const KOKORO_SAMPLE_RATE = 24000;
 
+/**
+ * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
+ * end of the sentence AND the EOS token (garbled tail). One phoneme char is at
+ * most one token, so pieces this long always fit, with room for BOS/EOS.
+ */
+export const MAX_PHONEME_TOKENS = 500;
+
 /** Floats per style vector; a voice `.bin` is 510 of them back to back. */
 const STYLE_DIM = 256;
 const MAX_STYLE_INDEX = 509;

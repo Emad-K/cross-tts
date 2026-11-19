@@ -12,8 +12,7 @@ import { logError, logInfo } from "../logging";
 import { getMaxChunkChars } from "../settings/appSettingsStore";
 import {
 	buildTtsChunks,
-	ensureKokoroLoaded,
-	type KokoroVoiceId,
+	ensureTtsLoaded,
 	stopPlaybackUi,
 	synthesizeChunkPcm,
 	useTtsStore,
@@ -81,7 +80,7 @@ export type StartExportOpts = {
 	chapters: { id: string; title: string }[];
 	format: AudioFormat;
 	dir: string;
-	voice: KokoroVoiceId;
+	voice: string;
 	speed: number;
 	/** Write the whole book as one file instead of one file per chapter. */
 	combine?: boolean;
@@ -143,7 +142,7 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 	const sentencePauseMs = useTtsStore.getState().sentencePauseMs;
 
 	try {
-		await ensureKokoroLoaded();
+		await ensureTtsLoaded();
 
 		// Pre-pass: fetch every chapter's text and chunk it so we know the total
 		// up front (accurate progress + ETA). No prefetch of audio — sequential.
