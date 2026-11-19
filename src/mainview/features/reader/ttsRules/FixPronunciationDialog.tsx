@@ -57,7 +57,7 @@ export function FixPronunciationDialog({
 		}
 		showToast({
 			title: `Pronunciation of “${w}” saved`,
-			description: "Change or remove it in Settings, under pronunciation rules.",
+			description: "Change or remove it in Settings.",
 		});
 		onClose();
 	};
