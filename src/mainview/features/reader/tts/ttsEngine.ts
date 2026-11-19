@@ -18,6 +18,7 @@ import { SynthCore } from "./synthCore";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
 import { getTtsEngine, TTS_ENGINES } from "./ttsEngines";
 import { useSweepStore } from "./sweepStore";
+import { listenRateKey } from "@shared/listenTimeEstimate";
 import { useTtsStore } from "./ttsStore";
 
 /**
@@ -157,8 +158,29 @@ function getAudioGraph(): { ctx: AudioContext; gain: GainNode } {
 		audioContext = new AudioContext();
 		gainNode = audioContext.createGain();
 		gainNode.connect(audioContext.destination);
+		applyOutputDevice();
 	}
 	return { ctx: audioContext, gain: gainNode! };
+}
+
+let outputSinkId = "";
+
+function applyOutputDevice(): void {
+	// setSinkId is Chromium 110+ and missing from older DOM typings.
+	const ctx = audioContext as
+		| (AudioContext & { setSinkId?: (id: string) => Promise<void> })
+		| null;
+	if (!ctx?.setSinkId) return;
+	// A device unplugged mid-call rejects; the picker then re-resolves on the
+	// devicechange event, so there is nothing to do here.
+	void ctx.setSinkId(outputSinkId).catch(() => {});
+}
+
+/** Route playback to an audio output device ("" = the system default). */
+export function setOutputDevice(sinkId: string): void {
+	if (sinkId === outputSinkId) return;
+	outputSinkId = sinkId;
+	applyOutputDevice();
 }
 
 function applyVolumeFromStore(): void {
@@ -798,7 +820,12 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				// and pin this chunk's exact length for the elapsed/total clock.
 				useListenEstimateStore
 					.getState()
-					.recordSample(text.length, buffer.duration, snap.speed);
+					.recordSample(
+						listenRateKey(snap.engineId, snap.voice),
+						text.length,
+						buffer.duration,
+						snap.speed,
+					);
 				chunkSec += buffer.duration;
 				if (k === parts.length - 1) {
 					useTtsStore.getState().recordChunkBaseSec(idx, chunkSec * snap.speed);

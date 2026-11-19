@@ -86,6 +86,7 @@ import {
 	readDocumentAtPath,
 } from "./documentIo";
 import { registerDocumentInputHandlers } from "./documentInputIpc";
+import { registerChapterLengthHandlers } from "./chapterLengths";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
 import {
 	pushWatchedFiles,
@@ -522,6 +523,7 @@ function registerRpcHandlers(): void {
 		"getBookCoverBytes",
 		(_event, { filePath }: { filePath: string }) => getBookCoverBytes(filePath),
 	);
+	registerChapterLengthHandlers();
 	ipcMain.handle(
 		"findInPage",
 		(
@@ -789,10 +791,13 @@ app.whenReady().then(async () => {
 	Menu.setApplicationMenu(null);
 
 	// Electron grants every permission by default. Deny all except clipboard
-	// writes (context-menu "Copy") from the app's own origin. WebGPU, audio
-	// playback, mediaSession and findInPage need no permission.
+	// writes (context-menu "Copy") and choosing an audio output (the player's
+	// output picker: lists speakers and their names, never microphones) from
+	// the app's own origin. WebGPU, audio playback, mediaSession and
+	// findInPage need no permission.
 	const allowPermission = (permission: string, url: string) =>
-		permission === "clipboard-sanitized-write" &&
+		(permission === "clipboard-sanitized-write" ||
+			permission === "speaker-selection") &&
 		isAllowedOrigin(url, TRUSTED_ORIGINS);
 	session.defaultSession.setPermissionRequestHandler((_wc, permission, cb, details) =>
 		cb(allowPermission(permission, details.requestingUrl)),

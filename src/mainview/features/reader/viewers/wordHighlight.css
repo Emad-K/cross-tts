@@ -1,0 +1,10 @@
+/*
+ * The word being spoken (Appearance > Highlight: Word). Painted with the CSS
+ * Custom Highlight API, so it changes no DOM and causes no layout shift; only
+ * colours are allowed here. Inverts the sentence highlight's colours so the
+ * word stands out inside it in every theme.
+ */
+::highlight(tts-word) {
+	background-color: hsl(var(--highlight-foreground));
+	color: hsl(var(--background));
+}
