@@ -31,6 +31,7 @@ import {
 } from "./library/libraryFilters";
 import { useLibraryStore } from "./library/libraryStore";
 import { PASTE_SHORTCUT_LABEL, pasteText } from "./paste/usePasteText";
+import { MissingBadge } from "./library/missingBooks";
 import { touchSessionSave } from "./sessionPersistence";
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
@@ -126,6 +127,7 @@ function CoverCard({
 							{book.title}
 						</span>
 					</div>
+					<MissingBadge path={book.path} />
 					{/* Read-progress bar. */}
 					{pct > 0 ? (
 						<div

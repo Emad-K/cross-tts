@@ -88,6 +88,12 @@ import {
 import { registerDocumentInputHandlers } from "./documentInputIpc";
 import { registerChapterLengthHandlers } from "./chapterLengths";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
+import { registerBackupHandlers } from "./backup";
+import {
+	hideInsteadOfClose,
+	registerTrayHandlers,
+	showMainWindow,
+} from "./tray";
 import {
 	pushWatchedFiles,
 	scanWatchedFolders,
@@ -151,6 +157,12 @@ if (
 		execPath: process.env["APPIMAGE"] || process.execPath,
 		args: [...process.argv.slice(1), "--ozone-platform=x11"],
 	});
+	app.exit(0);
+} else if (!app.requestSingleInstanceLock()) {
+	// One running copy only: a second launch hands over to the first (which
+	// shows its window, see tray.ts) and exits. Two copies would also overwrite
+	// each other's session file. In this `else` so a process that is about to
+	// relaunch never holds the lock its successor needs.
 	app.exit(0);
 }
 
@@ -696,6 +708,8 @@ function registerRpcHandlers(): void {
 		app.relaunch();
 		app.exit(0);
 	});
+	registerTrayHandlers(() => mainWindow);
+	registerBackupHandlers(() => mainWindow);
 	ipcMain.handle("addWatchedFolder", async () => {
 		if (!mainWindow) return null;
 		const result = await dialog.showOpenDialog(mainWindow, {
@@ -774,7 +788,11 @@ function createWindow(): void {
 	setTtsNodeProgressTarget(mainWindow);
 	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
-	mainWindow.on("close", () => snapshotWindowState());
+	mainWindow.on("close", (event) => {
+		snapshotWindowState();
+		// "Keep playing when the window is closed": hide to the tray instead.
+		if (mainWindow && hideInsteadOfClose(mainWindow)) event.preventDefault();
+	});
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
@@ -839,6 +857,8 @@ app.whenReady().then(async () => {
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+		// A window hidden to the menu bar comes back on a Dock click.
+		else showMainWindow();
 	});
 
 	console.log("Cross TTS started!");

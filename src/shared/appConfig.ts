@@ -116,6 +116,8 @@ export type AppConfigFileV1 = {
 	watchedFolders: string[];
 	/** "Don't ask again" for the crash-report dialog shown after a crash. */
 	crashPromptDisabled: boolean;
+	/** Closing the window hides it to the tray, so playback carries on. */
+	keepPlayingInBackground: boolean;
 };
 
 /**
@@ -153,6 +155,10 @@ export type AppConfigInfo = {
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */
 	modelBytes: number;
+	/** Closing the window hides it to the tray, so playback carries on. */
+	keepPlayingInBackground: boolean;
+	/** This desktop can show a tray icon (false on Linux without StatusNotifier). */
+	trayAvailable: boolean;
 };
 
 export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
@@ -169,4 +175,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	appearance: defaultAppearance(),
 	watchedFolders: [],
 	crashPromptDisabled: false,
+	keepPlayingInBackground: false,
 });

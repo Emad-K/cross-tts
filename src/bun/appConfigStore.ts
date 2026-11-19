@@ -26,7 +26,9 @@ import {
 	coerceShortcutBindings,
 } from "../shared/shortcuts";
 import { coerceWatchedFolders } from "../shared/watchedFolders";
+import type { BackupSettings } from "../shared/backup";
 import { backupUnreadableFile, writeFileAtomic } from "./atomicFile";
+import { trayAvailable } from "./trayAvailability";
 
 const CONFIG_NAME = "app-config.json";
 const MODEL_SUBDIR = "kokoro-hf-hub";
@@ -92,6 +94,9 @@ export function loadAppConfig(): AppConfigFileV1 {
 		next.appearance = coerceAppearance(o.appearance);
 		next.watchedFolders =
 			coerceWatchedFolders(o.watchedFolders).filter(isAbsoluteUsableDir);
+		if (typeof o.keepPlayingInBackground === "boolean") {
+			next.keepPlayingInBackground = o.keepPlayingInBackground;
+		}
 		cached = next;
 		return cached;
 	} catch (err) {
@@ -302,5 +307,32 @@ export function appConfigInfo(): AppConfigInfo {
 		crashPromptDisabled: config.crashPromptDisabled,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
+		keepPlayingInBackground: config.keepPlayingInBackground,
+		trayAvailable: trayAvailable(),
 	};
+}
+
+export function setKeepPlayingInBackground(value: boolean): void {
+	persist({ ...loadAppConfig(), keepPlayingInBackground: value });
+}
+
+/** The settings a backup file carries (see shared/backup.ts). */
+export function backupSettings(): BackupSettings {
+	const c = loadAppConfig();
+	return {
+		appearance: c.appearance,
+		shortcuts: c.shortcuts,
+		shortcutsEnabled: c.shortcutsEnabled,
+		watchedFolders: c.watchedFolders,
+		keepPlayingInBackground: c.keepPlayingInBackground,
+	};
+}
+
+/** Store settings from a backup that parseBackup already validated. */
+export function restoreBackupSettings(settings: BackupSettings): void {
+	persist({
+		...loadAppConfig(),
+		...settings,
+		watchedFolders: settings.watchedFolders.filter(isAbsoluteUsableDir),
+	});
 }
