@@ -85,9 +85,12 @@ let playbackLoopPromise: Promise<void> | null = null;
  * chunks beyond the configured sentence pause.
  */
 let playRequestedAt = 0;
-let lastAudioEnd = 0;
-function notePerfStart(ctx: AudioContext, start: number, duration: number): void {
-	if (lastAudioEnd === 0) {
+function notePerfStart(
+	ctx: AudioContext,
+	start: number,
+	expected: number | null,
+): void {
+	if (expected === null) {
 		const ms =
 			performance.now() - playRequestedAt +
 			Math.max(0, start - ctx.currentTime) * 1000;
@@ -95,11 +98,8 @@ function notePerfStart(ctx: AudioContext, start: number, duration: number): void
 			`[tts-perf] first-audio ${ms.toFixed(0)}ms (context ${ctx.sampleRate} Hz)`,
 		);
 	} else {
-		const pause = useTtsStore.getState().sentencePauseMs / 1000;
-		const gap = (start - lastAudioEnd - pause) * 1000;
-		console.debug(`[tts-perf] gap ${gap.toFixed(1)}ms`);
+		console.debug(`[tts-perf] gap ${((start - expected) * 1000).toFixed(1)}ms`);
 	}
-	lastAudioEnd = start + duration;
 }
 
 /** Return true when the handler advanced to the next chapter and will resume playback. */
@@ -323,104 +323,117 @@ function sliceBuffer(
 	return seg;
 }
 
-function playBuffer(
+/** Audio queued on the context clock; `ended` also settles on abort. */
+type Scheduled = { start: number; end: number; ended: Promise<void> };
+
+/**
+ * Queue `buffer` to start at `when` on the audio clock (or as soon as possible
+ * if that has passed), so consecutive chunks join sample-exactly instead of
+ * waiting for an 'ended' event and a main-thread round trip.
+ */
+function scheduleBuffer(
 	ctx: AudioContext,
 	gain: GainNode,
 	buffer: AudioBuffer,
+	when: number,
 	signal: AbortSignal,
-): Promise<void> {
-	return new Promise((resolve, reject) => {
-		if (signal.aborted) {
-			resolve();
-			return;
-		}
-
-		// Drive the in-sentence progress sweep from the audio clock. ctx.currentTime
-		// freezes while suspended (pause), so the sweep pauses for free. No real
-		// per-token timing exists, so this is a duration-proportional estimate.
-		// Assigned below, after the segment slices are built (see
-		// SCHEDULE_HEADROOM_S); the sweep only starts once scheduling is done.
-		let startTime = 0;
-		const duration = buffer.duration || 0;
-		let raf = 0;
-		const tick = () => {
-			if (signal.aborted) return;
-			const p =
-				duration > 0
-					? Math.min(1, Math.max(0, (ctx.currentTime - startTime) / duration))
-					: 0;
-			useSweepStore.getState().setProgress(p);
-			raf = requestAnimationFrame(tick);
-		};
-
-		// Split overlong buffers into sub-buffer sources, each under the Chromium
-		// limit, overlapping + crossfading at the seams. Resolve when the final
-		// segment ends; stopActiveSource() stops every scheduled source.
-		try {
-			const total = buffer.length;
-			const rate = buffer.sampleRate;
-			const xf = SEGMENT_XFADE_SAMPLES;
-			// Segment i covers source [bound_i - xf, bound_{i+1}); the leading xf
-			// samples (i>0) overlap the previous segment's trailing xf.
-			const segments: { start: number; end: number }[] = [];
-			for (let b = 0; b < total; b += SAFE_SOURCE_SAMPLES) {
-				segments.push({
-					start: b === 0 ? 0 : b - xf,
-					end: Math.min(b + SAFE_SOURCE_SAMPLES, total),
-				});
-			}
-			const single = segments.length === 1;
-			activeSources = [];
-			// Build every slice BEFORE capturing the clock so segment 0's start
-			// time is never already in the past (clamped ≠ aligned — see
-			// SCHEDULE_HEADROOM_S). Single-segment playback needs no alignment,
-			// so it keeps the zero-latency start.
-			const nodes = segments.map((seg) => {
-				const src = ctx.createBufferSource();
-				src.buffer = single
-					? buffer
-					: sliceBuffer(ctx, buffer, seg.start, seg.end - seg.start);
-				return { seg, src };
-			});
-			startTime = ctx.currentTime + (single ? 0 : SCHEDULE_HEADROOM_S);
-			notePerfStart(ctx, startTime, duration);
-			nodes.forEach(({ seg, src }, i) => {
-				const segStart = startTime + seg.start / rate;
-				if (single) {
-					src.connect(gain);
-				} else {
-					const g = ctx.createGain();
-					src.connect(g);
-					g.connect(gain);
-					if (i > 0) {
-						// Fade in across the leading overlap.
-						g.gain.setValueAtTime(0, segStart);
-						g.gain.linearRampToValueAtTime(1, segStart + xf / rate);
-					}
-					if (i < segments.length - 1) {
-						// Fade out across the trailing overlap.
-						const fadeOut = startTime + (seg.end - xf) / rate;
-						g.gain.setValueAtTime(1, fadeOut);
-						g.gain.linearRampToValueAtTime(0, fadeOut + xf / rate);
-					}
-				}
-				if (i === segments.length - 1) {
-					src.onended = () => {
-						activeSources = [];
-						cancelAnimationFrame(raf);
-						resolve();
-					};
-				}
-				src.start(segStart);
-				activeSources.push(src);
-			});
-			raf = requestAnimationFrame(tick);
-		} catch (e) {
-			activeSources = [];
-			cancelAnimationFrame(raf);
-			reject(e);
-		}
+): Scheduled {
+	let resolveEnded!: () => void;
+	const ended = new Promise<void>((r) => {
+		resolveEnded = r;
 	});
+	signal.addEventListener("abort", () => resolveEnded(), { once: true });
+
+	// Split overlong buffers into sub-buffer sources, each under the Chromium
+	// limit, overlapping + crossfading at the seams. stopActiveSource() stops
+	// every scheduled source.
+	const total = buffer.length;
+	const rate = buffer.sampleRate;
+	const xf = SEGMENT_XFADE_SAMPLES;
+	// Segment i covers source [bound_i - xf, bound_{i+1}); the leading xf
+	// samples (i>0) overlap the previous segment's trailing xf.
+	const segments: { start: number; end: number }[] = [];
+	for (let b = 0; b < total; b += SAFE_SOURCE_SAMPLES) {
+		segments.push({
+			start: b === 0 ? 0 : b - xf,
+			end: Math.min(b + SAFE_SOURCE_SAMPLES, total),
+		});
+	}
+	const single = segments.length === 1;
+	// Build every slice BEFORE reading the clock so segment 0's start time is
+	// never already in the past (clamped ≠ aligned — see SCHEDULE_HEADROOM_S).
+	// Single-segment playback needs no alignment, so it keeps the zero-latency
+	// start.
+	const nodes = segments.map((seg) => {
+		const src = ctx.createBufferSource();
+		src.buffer = single
+			? buffer
+			: sliceBuffer(ctx, buffer, seg.start, seg.end - seg.start);
+		return { seg, src };
+	});
+	const startTime = Math.max(
+		when,
+		ctx.currentTime + (single ? 0 : SCHEDULE_HEADROOM_S),
+	);
+	const mine: AudioBufferSourceNode[] = [];
+	nodes.forEach(({ seg, src }, i) => {
+		const segStart = startTime + seg.start / rate;
+		if (single) {
+			src.connect(gain);
+		} else {
+			const g = ctx.createGain();
+			src.connect(g);
+			g.connect(gain);
+			if (i > 0) {
+				// Fade in across the leading overlap.
+				g.gain.setValueAtTime(0, segStart);
+				g.gain.linearRampToValueAtTime(1, segStart + xf / rate);
+			}
+			if (i < segments.length - 1) {
+				// Fade out across the trailing overlap.
+				const fadeOut = startTime + (seg.end - xf) / rate;
+				g.gain.setValueAtTime(1, fadeOut);
+				g.gain.linearRampToValueAtTime(0, fadeOut + xf / rate);
+			}
+		}
+		if (i === segments.length - 1) {
+			src.onended = () => {
+				activeSources = activeSources.filter((s) => !mine.includes(s));
+				resolveEnded();
+			};
+		}
+		src.start(segStart);
+		mine.push(src);
+		activeSources.push(src);
+	});
+	return { start: startTime, end: startTime + total / rate, ended };
+}
+
+/** Audio-clock span of the audio now playing and the share of its chunk it covers. */
+let sweepSpan: { start: number; end: number; from: number; to: number } | null =
+	null;
+
+/**
+ * Drive the in-sentence progress sweep from the audio clock while `live()`.
+ * ctx.currentTime freezes while suspended (pause), so the sweep pauses for
+ * free. No real per-token timing exists, so this is a duration-proportional
+ * estimate.
+ */
+function runSweep(ctx: AudioContext, live: () => boolean): void {
+	sweepSpan = null;
+	const tick = () => {
+		if (!live()) return;
+		const s = sweepSpan;
+		if (s) {
+			const p =
+				s.end > s.start
+					? Math.min(1, Math.max(0, (ctx.currentTime - s.start) / (s.end - s.start)))
+					: 0;
+			useSweepStore.getState().setProgress(s.from + (s.to - s.from) * p);
+		}
+		requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
 }
 
 function stopActiveSource(): void {
@@ -468,7 +481,6 @@ function interruptPlaybackForReschedule(): void {
 function startPlaybackLoopFresh(): void {
 	interruptPlaybackForReschedule();
 	playRequestedAt = performance.now();
-	lastAudioEnd = 0;
 	const ab = new AbortController();
 	playbackAbort = ab;
 	playbackLoopPromise = runPlaybackLoop(ab.signal);
@@ -525,23 +537,6 @@ export function toggleMute(): void {
 	}
 }
 
-/**
- * Wait out the configured inter-sentence pause. Counts down only while
- * actually playing (a user pause freezes the gap too) and returns at once
- * when the loop is aborted (seek, chapter change, stop).
- */
-async function waitSentencePause(signal: AbortSignal): Promise<void> {
-	const total = useTtsStore.getState().sentencePauseMs;
-	if (total <= 0) return;
-	const TICK_MS = 50;
-	let remaining = total;
-	while (remaining > 0 && !signal.aborted) {
-		await new Promise((resolve) => setTimeout(resolve, TICK_MS));
-		if (signal.aborted) return;
-		if (useTtsStore.getState().playback === "playing") remaining -= TICK_MS;
-	}
-}
-
 async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	if (useTtsStore.getState().chunks.length === 0) return;
 
@@ -566,95 +561,116 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	if (signal.aborted) return;
 
 	let idx = useTtsStore.getState().currentChunkIndex;
+	/**
+	 * The audio playing now. The next chunk is synthesized meanwhile and queued
+	 * on the audio clock at its end; the loop then waits for it to end, so at
+	 * most one chunk is queued ahead.
+	 */
+	let playing: Scheduled | null = null;
+	let live = true;
+	runSweep(ctx, () => live && !signal.aborted);
 
-	while (!signal.aborted) {
-		const snap = useTtsStore.getState();
-		const { chunks } = snap;
-		if (idx >= chunks.length) break;
-
-		const chunk = chunks[idx];
-		if (!chunk) break;
-
-		const total = chunks.length;
-
-		// Already-synthesized chunks (prefetched, or revisited via seek) play
-		// instantly; the audio cache keys on engine/voice/speed/rules/text, so stale
-		// settings simply miss and re-synthesize.
-		const cached = hasCachedChunkAudio(chunk.text, snap.voice, snap.speed);
-
-		useSweepStore.getState().setProgress(0);
+	const showChunk = (i: number, playback: "playing" | "buffering") => {
+		const c = useTtsStore.getState().chunks[i];
+		if (!c) return;
+		const paused = useTtsStore.getState().playback === "paused";
 		useTtsStore.setState({
-			playback: cached ? "playing" : "buffering",
-			currentChunkIndex: idx,
-			highlightRange: { start: chunk.start, end: chunk.end },
-			progressPct: chunkProgressPct(idx, total),
+			...(paused ? {} : { playback }),
+			currentChunkIndex: i,
+			highlightRange: { start: c.start, end: c.end },
+			progressPct: chunkProgressPct(i, useTtsStore.getState().chunks.length),
 		});
+	};
 
-		let buffer: AudioBuffer | null = null;
-		try {
-			buffer = await synthesizeChunkBuffer(
-				ctx,
-				chunk.text,
-				snap.voice,
-				snap.speed,
-			);
-		} catch (e) {
-			// Stopped, seeked or reset meanwhile: the new owner of playback
-			// state decides what to show, not this stale loop.
-			if (signal.aborted) return;
-			const msg = e instanceof Error ? e.message : String(e);
-			useTtsStore.setState({ playback: "idle", playbackError: msg });
-			logError("Playback stopped: couldn't synthesize audio.", {
-				source: "tts",
-				detail: msg,
-			});
-			return;
-		}
+	try {
+		while (!signal.aborted) {
+			const snap = useTtsStore.getState();
+			const { chunks } = snap;
+			if (idx >= chunks.length) break;
 
-		if (signal.aborted) break;
+			const chunk = chunks[idx];
+			if (!chunk) break;
 
-		if (!buffer) {
-			idx += 1;
-			useTtsStore.setState({ currentChunkIndex: idx });
-			continue;
-		}
+			// Already-synthesized chunks (prefetched, or revisited via seek) play
+			// instantly; the audio cache keys on engine/voice/speed/rules/text, so
+			// stale settings simply miss and re-synthesize.
+			const cached = hasCachedChunkAudio(chunk.text, snap.voice, snap.speed);
+			const prev: Scheduled | null = playing;
+			let ready = false;
+			if (!cached) {
+				// Show "buffering" on this chunk once the audio before it runs out.
+				const i = idx;
+				void (prev?.ended ?? Promise.resolve()).then(() => {
+					if (ready || signal.aborted) return;
+					sweepSpan = null;
+					useSweepStore.getState().setProgress(0);
+					showChunk(i, "buffering");
+				});
+			}
 
-		// Feed the listen-time estimate with the measured chars→audio rate, and
-		// pin this chunk's exact length for the elapsed/total chapter clock.
-		useListenEstimateStore
-			.getState()
-			.recordSample(chunk.text.length, buffer.duration, snap.speed);
-		useTtsStore
-			.getState()
-			.recordChunkBaseSec(idx, buffer.duration * snap.speed);
+			let buffer: AudioBuffer | null = null;
+			try {
+				buffer = await synthesizeChunkBuffer(
+					ctx,
+					chunk.text,
+					snap.voice,
+					snap.speed,
+				);
+			} catch (e) {
+				ready = true;
+				// Let the sentence already playing finish.
+				await prev?.ended;
+				// Stopped, seeked or reset meanwhile: the new owner of playback
+				// state decides what to show, not this stale loop.
+				if (signal.aborted) return;
+				const msg = e instanceof Error ? e.message : String(e);
+				useTtsStore.setState({ playback: "idle", playbackError: msg });
+				logError("Playback stopped: couldn't synthesize audio.", {
+					source: "tts",
+					detail: msg,
+				});
+				return;
+			}
+			ready = true;
 
-		// Warm the cache for upcoming chunks so playback never waits on
-		// synthesis, even when the current chunk is short.
-		prefetchChunks(
-			ctx,
-			chunks,
-			idx + 1,
-			snap.voice,
-			snap.speed,
-			signal,
-		);
-
-		if (useTtsStore.getState().playback !== "paused") {
-			useTtsStore.setState({ playback: "playing" });
-		}
-
-		await playBuffer(ctx, gain, buffer, signal);
-
-		if (signal.aborted) break;
-
-		// Breathing room between sentences (skipped at the chapter's end).
-		if (idx + 1 < useTtsStore.getState().chunks.length) {
-			await waitSentencePause(signal);
 			if (signal.aborted) break;
-		}
 
-		idx += 1;
-		useTtsStore.setState({ currentChunkIndex: idx });
+			if (!buffer) {
+				idx += 1;
+				continue;
+			}
+
+			// Feed the listen-time estimate with the measured chars→audio rate, and
+			// pin this chunk's exact length for the elapsed/total chapter clock.
+			useListenEstimateStore
+				.getState()
+				.recordSample(chunk.text.length, buffer.duration, snap.speed);
+			useTtsStore
+				.getState()
+				.recordChunkBaseSec(idx, buffer.duration * snap.speed);
+
+			// Warm the cache for upcoming chunks so playback never waits on
+			// synthesis, even when the current chunk is short.
+			prefetchChunks(ctx, chunks, idx + 1, snap.voice, snap.speed, signal);
+
+			// Breathing room between sentences, on the audio clock (a user pause
+			// freezes it too).
+			const expected = prev
+				? prev.end + useTtsStore.getState().sentencePauseMs / 1000
+				: null;
+			const next = scheduleBuffer(ctx, gain, buffer, expected ?? 0, signal);
+			notePerfStart(ctx, next.start, expected);
+			if (prev) await prev.ended;
+			if (signal.aborted) break;
+			playing = next;
+			sweepSpan = { start: next.start, end: next.end, from: 0, to: 1 };
+			showChunk(idx, "playing");
+			idx += 1;
+		}
+		// Let the last queued chunk play out.
+		if (!signal.aborted) await playing?.ended;
+	} finally {
+		live = false;
 	}
 
 	const snap = useTtsStore.getState();
