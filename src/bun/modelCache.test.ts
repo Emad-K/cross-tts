@@ -32,6 +32,15 @@ describe("downloadToFile", () => {
 		);
 		expect(readdirSync(dirname(dest))).toEqual([]);
 	});
+	test("stops and discards a download larger than maxBytes", async () => {
+		const dest = join(mkdtempSync(join(tmpdir(), "mc-")), "f.onnx");
+		await expect(
+			downloadToFile(url, dest, undefined, undefined, { maxBytes: body.length - 1 }),
+		).rejects.toThrow(/larger than expected/);
+		expect(readdirSync(dirname(dest))).toEqual([]);
+		await downloadToFile(url, dest, undefined, undefined, { maxBytes: body.length });
+		expect(readFileSync(dest, "utf8")).toBe(body);
+	});
 });
 
 describe("adoptLegacyModelCache", () => {

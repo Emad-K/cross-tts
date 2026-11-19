@@ -164,7 +164,7 @@ export async function installCudaAddon(opts: {
 			nupkg,
 			undefined,
 			(loaded) => opts.onProgress?.(loaded, pkg.bytes),
-			{ signal: opts.signal, sha512: pkg.sha512 },
+			{ signal: opts.signal, sha512: pkg.sha512, maxBytes: pkg.bytes },
 		);
 		await extractZipEntries(nupkg, pkg.files, dir, opts.signal);
 		await copyFile(join(opts.bindingDir, ORT_LIB), join(dir, ORT_LIB));
