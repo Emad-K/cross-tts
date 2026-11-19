@@ -37,12 +37,23 @@ function backendPrefs(): TtsBackendPrefs {
 	};
 }
 
+/**
+ * Audio cache budget: ~150 MB of float32 samples. Buffers are cached at the
+ * AudioContext rate, already resampled (once, off the UI thread), so a replay
+ * or seek-back costs nothing; at 48 kHz that is ~13 minutes of audio, far more
+ * than read-ahead (~45 s) needs. Native-rate PCM would hold twice as much but
+ * put a ~75 ms resample (13 s chunk) back in front of every cache hit.
+ */
+const AUDIO_CACHE_SAMPLES = (150 * 1024 * 1024) / Float32Array.BYTES_PER_ELEMENT;
+
 /** Synthesized chunk audio, keyed by engine/voice/speed/rules/text, plus epochs. */
 const core = new SynthCore<AudioBuffer>({
 	engine: activeEngine,
 	prefs: backendPrefs,
 	rulesSignature: () => useTtsRulesStore.getState().signature,
 	prepareText: textForTtsSynthesis,
+	cacheMax: AUDIO_CACHE_SAMPLES,
+	cacheCost: (b) => b.length * b.numberOfChannels,
 });
 core.clearOnReset(TTS_ENGINES);
 

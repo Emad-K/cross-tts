@@ -64,6 +64,19 @@ describe("AudioCache", () => {
 		expect(cache.size).toBe(2);
 	});
 
+	test("bounds by total cost, evicting oldest first", async () => {
+		const cache = new AudioCache<string>(10, (v) => v.length);
+		await cache.getOrCreate("a", async () => "aaaa");
+		await cache.getOrCreate("b", async () => "bbbb");
+		await cache.getOrCreate("c", async () => "cccc");
+		expect(cache.has("a")).toBe(false);
+		expect(cache.size).toBe(2);
+		// An entry over the whole budget still stays (newest is always kept).
+		await cache.getOrCreate("d", async () => "d".repeat(20));
+		expect(cache.has("d")).toBe(true);
+		expect(cache.size).toBe(1);
+	});
+
 	test("does not cache a thrown factory; retries next call", async () => {
 		const cache = new AudioCache<string>(4);
 		let calls = 0;

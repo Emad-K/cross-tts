@@ -28,10 +28,12 @@ export class SynthCore<V> {
 			rulesSignature: () => string;
 			/** Chunk text as the engine should read it (regex rules, normalization). */
 			prepareText: (chunkText: string) => string;
-			cacheSize?: number;
+			/** Cache bound in `cacheCost` units (default: 64 entries). */
+			cacheMax?: number;
+			cacheCost?: (value: V) => number;
 		},
 	) {
-		this.cache = new AudioCache<V>(deps.cacheSize ?? 64);
+		this.cache = new AudioCache<V>(deps.cacheMax ?? 64, deps.cacheCost);
 	}
 
 	key(chunkText: string, voice: string, speed: number): string {
