@@ -84,9 +84,14 @@ let playbackLoopPromise: Promise<void> | null = null;
 /**
  * Perf instrumentation (console.debug, "[tts-perf]"): wall time from play/seek
  * to the first audible sample, and the audio-clock gap between consecutive
- * chunks beyond the configured sentence pause.
+ * chunks beyond the configured sentence pause. First-audio is split into
+ * `load` (model load; ~0 when preloaded), `synth` (waiting on the first
+ * audio; ~0 on a cache hit) and `wait` (the rest: resuming the audio context
+ * and the output latency).
  */
 let playRequestedAt = 0;
+let firstAudioLoadMs = 0;
+let firstAudioSynthMs = 0;
 function notePerfStart(
 	ctx: AudioContext,
 	start: number,
@@ -96,8 +101,11 @@ function notePerfStart(
 		const ms =
 			performance.now() - playRequestedAt +
 			Math.max(0, start - ctx.currentTime) * 1000;
+		const wait = Math.max(0, ms - firstAudioLoadMs - firstAudioSynthMs);
 		console.debug(
-			`[tts-perf] first-audio ${ms.toFixed(0)}ms (context ${ctx.sampleRate} Hz)`,
+			`[tts-perf] first-audio ${ms.toFixed(0)}ms ` +
+				`(load ${firstAudioLoadMs.toFixed(0)}, synth ${firstAudioSynthMs.toFixed(0)}, ` +
+				`wait ${wait.toFixed(0)}; context ${ctx.sampleRate} Hz)`,
 		);
 	} else {
 		console.debug(`[tts-perf] gap ${((start - expected) * 1000).toFixed(1)}ms`);
@@ -605,6 +613,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		});
 		return;
 	}
+	firstAudioLoadMs = performance.now() - playRequestedAt;
 
 	const { ctx, gain } = getAudioGraph();
 	applyVolumeFromStore();
@@ -658,6 +667,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				!core.inFlight(chunk.text, snap.voice, snap.speed);
 			const parts = fastStart ? splitForFastStart(chunk.text) : [chunk.text];
 			coldStart = false;
+			const synthFrom = performance.now();
 			const made = parts.map((text) =>
 				synthesizeChunkBuffer(ctx, text, snap.voice, snap.speed),
 			);
@@ -704,6 +714,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				}
 				ready = true;
 				if (signal.aborted) break;
+				if (!prev) firstAudioSynthMs = performance.now() - synthFrom;
 
 				const text = parts[k]!;
 				const from = doneChars / chunk.text.length;
