@@ -307,7 +307,8 @@ function warmResumePosition(): void {
 		return;
 	}
 	// An export owns the engine; don't queue playback work between its chunks.
-	if (isExportActive()) return;
+	// So does the benchmark (Settings), and extra work would skew its timings.
+	if (isExportActive() || isBenchmarkRunning()) return;
 	if (!activeEngine().activeBackend()) return;
 	const text = chunks[currentChunkIndex]?.text;
 	if (!text || !isSpeakableChunkText(text)) return;
