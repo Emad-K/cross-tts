@@ -83,7 +83,7 @@ test("highlight, note and per-book pronunciation fix", async () => {
 			expect(selected.length).toBeGreaterThan(20);
 
 			await contextMenuAt(page, null);
-			await page.getByRole("button", { name: "Highlight green" }).click();
+			await page.getByRole("menuitem", { name: "Highlight green" }).click();
 
 			const painted = await page.evaluate(() =>
 				[...(CSS.highlights.get("note-green") as unknown as Set<Range>)].map((r) =>
@@ -113,9 +113,16 @@ test("highlight, note and per-book pronunciation fix", async () => {
 
 		await test.step("the Notes tab lists it", async () => {
 			await page.getByRole("button", { name: "Show bookmarks" }).click();
-			await page.getByRole("tab", { name: /Notes/ }).click();
+			await page.getByRole("button", { name: /^Notes/ }).click();
 			await expect(page.getByText("Remember this bit")).toBeVisible();
 			await expect(page.getByRole("button", { name: "Export as Markdown" })).toBeEnabled();
+		});
+
+		await test.step("deleting from the list can be undone", async () => {
+			await page.getByRole("button", { name: /^Delete highlight: / }).click();
+			await expect.poll(savedNotes).toHaveLength(0);
+			await page.getByRole("button", { name: "Undo" }).click();
+			await expect.poll(() => savedNotes()[0]?.note).toBe("Remember this bit");
 		});
 
 		await test.step("Fix pronunciation…, limited to this book", async () => {
@@ -146,6 +153,26 @@ test("highlight, note and per-book pronunciation fix", async () => {
 				).filter((r: { book?: string }) => r.book === epubPath);
 			await expect.poll(bookRules, { timeout: 10_000 }).toHaveLength(1);
 			expect(bookRules()[0].replacement).toBe("chap-ter");
+		});
+
+		await test.step("the menu works from the keyboard, on the focused sentence", async () => {
+			await page.evaluate(() => window.getSelection()!.removeAllRanges());
+			const sentence = chunks.last();
+			await sentence.focus();
+			await sentence.dispatchEvent("contextmenu", await sentence.evaluate((el) => {
+				const r = el.getBoundingClientRect();
+				return { bubbles: true, clientX: r.left + 2, clientY: r.top + 2 };
+			}));
+			await expect(page.getByRole("menuitem").first()).toBeFocused();
+			await page.keyboard.press("ArrowDown");
+			await expect(page.getByRole("menuitem", { name: "Highlight yellow" })).toBeFocused();
+			await page.keyboard.press("Enter");
+			await expect.poll(savedNotes).toHaveLength(2);
+			expect(collapseWs(savedNotes()[1].text)).toBe(
+				collapseWs((await sentence.textContent()) ?? ""),
+			);
+			// Focus goes back to where the menu was opened.
+			await expect(sentence).toBeFocused();
 		});
 
 		await test.step("highlights come back after a reload", async () => {
