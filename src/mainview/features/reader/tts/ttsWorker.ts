@@ -83,11 +83,11 @@ let gpuLostReason: string | null = null;
 
 /** Hook the device ORT created so a lost device fails runs instead of
  * silently producing garbage. */
-async function watchGpuDevice(): Promise<void> {
+async function watchGpuDevice(own?: GPUDevice): Promise<void> {
 	const webgpu = env.backends?.onnx?.webgpu as
 		| { device?: GPUDevice | Promise<GPUDevice> }
 		| undefined;
-	const dev = await webgpu?.device;
+	const dev = own ?? (await webgpu?.device);
 	if (!dev) return;
 	gpuDevice = dev;
 	void dev.lost.then((info) => {
@@ -131,25 +131,42 @@ async function generatePiece(
 	return raw!;
 }
 
-async function selectGpuAdapter(power: GpuPower): Promise<void> {
+/** Limits and features ORT asks for when it creates its own device. */
+const GPU_LIMITS = [
+	"maxBufferSize",
+	"maxStorageBufferBindingSize",
+	"maxComputeWorkgroupStorageSize",
+	"maxComputeWorkgroupsPerDimension",
+	"maxComputeInvocationsPerWorkgroup",
+	"maxComputeWorkgroupSizeX",
+	"maxComputeWorkgroupSizeY",
+	"maxComputeWorkgroupSizeZ",
+] as const;
+const GPU_FEATURES = ["shader-f16", "timestamp-query", "subgroups"];
+
+async function requestGpuDevice(power: GpuPower): Promise<GPUDevice | undefined> {
 	// WebGPU can't pick a GPU by name — only a power hint, which on multi-GPU
-	// machines selects the dedicated (high-performance) vs integrated (low-power)
-	// adapter. Request it ourselves and hand it to ORT (the non-deprecated path).
-	if (power === "auto") return;
+	// machines selects the dedicated (high-performance) vs integrated
+	// (low-power) adapter. ORT 1.31's native WebGPU EP ignores
+	// env.webgpu.adapter/powerPreference and only takes a device through the
+	// EP options, so create one on the chosen adapter ourselves.
+	if (power === "auto") return undefined;
 	try {
-		if (typeof navigator === "undefined" || !navigator.gpu) return;
+		if (typeof navigator === "undefined" || !navigator.gpu) return undefined;
 		const adapter = await navigator.gpu.requestAdapter({
 			powerPreference: power,
 		});
-		const webgpu = env.backends?.onnx?.webgpu as
-			| { adapter?: unknown; powerPreference?: string }
-			| undefined;
-		if (webgpu) {
-			if (adapter) webgpu.adapter = adapter;
-			webgpu.powerPreference = power;
-		}
+		if (!adapter) return undefined;
+		const requiredLimits: Record<string, number> = {};
+		for (const k of GPU_LIMITS) requiredLimits[k] = adapter.limits[k];
+		return await adapter.requestDevice({
+			requiredLimits,
+			requiredFeatures: GPU_FEATURES.filter((f) =>
+				adapter.features.has(f),
+			) as GPUFeatureName[],
+		});
 	} catch {
-		// Fall back to ORT's default adapter selection.
+		return undefined; // Fall back to ORT's default adapter selection.
 	}
 }
 
@@ -162,6 +179,7 @@ function load(init: InitMessage): Promise<Kokoro> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
 		hubBaseUrl = init.hubBaseUrl;
+		let ownDevice: GPUDevice | undefined;
 		if (init.hubBaseUrl) {
 			env.remoteHost = init.hubBaseUrl;
 			env.useBrowserCache = false;
@@ -172,22 +190,30 @@ function load(init: InitMessage): Promise<Kokoro> {
 		}
 		loadPromise = (
 			init.device === "webgpu"
-				? selectGpuAdapter(init.gpuPower)
-				: Promise.resolve()
+				? requestGpuDevice(init.gpuPower)
+				: Promise.resolve(undefined)
 		)
-			.then(() =>
-				loadKokoro({
+			.then((device) => {
+				ownDevice = device;
+				return loadKokoro({
 					dtype: init.dtype,
 					device: init.device,
+					...(device && {
+						session_options: {
+							executionProviders: [{ name: "webgpu", device }],
+						},
+					}),
 					progress_callback: (info) => {
 						if (info.status === "progress") {
 							ctx.postMessage({ type: "progress", value: info.progress / 100 });
 						}
 					},
-				}),
-			)
+				});
+			})
 			.then(async (model) => {
-				if (init.device === "webgpu") await watchGpuDevice().catch(() => {});
+				if (init.device === "webgpu") {
+					await watchGpuDevice(ownDevice).catch(() => {});
+				}
 				tts = model;
 				return model;
 			})
