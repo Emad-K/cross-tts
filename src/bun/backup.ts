@@ -148,7 +148,6 @@ async function pickBackup(
 		: await dialog.showOpenDialog(options);
 	const filePath = result.filePaths[0];
 	if (result.canceled || !filePath) return null;
-	picked = null;
 	try {
 		const info = await stat(filePath);
 		if (!info.isFile()) return { error: "That isn't a file." };
@@ -156,6 +155,8 @@ async function pickBackup(
 		assertDocumentSize(filePath, info.size, MAX_BACKUP_BYTES);
 		const parsed = parseBackup(await readFile(filePath, "utf8"));
 		if (!parsed.ok) return { error: parsed.error };
+		// Only now: a pick that fails leaves the earlier one (which the window
+		// still shows) in place.
 		picked = parsed.data;
 		const { books, bookmarks, rules } = parsed.data;
 		return {
