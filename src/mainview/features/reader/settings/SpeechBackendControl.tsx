@@ -68,6 +68,7 @@ function CudaAddonDialog({
 	onInstalled: () => void;
 }) {
 	const setConfig = useAppSettingsStore((s) => s.setConfig);
+	const movedDataDir = useAppSettingsStore((s) => s.config?.isDefaultDataDir === false);
 	const [progress, setProgress] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const downloading = progress !== null;
@@ -111,6 +112,9 @@ function CudaAddonDialog({
 					are too large to ship with the app. This is a one-time {mb(bytes)} MB
 					download from nuget.org (about 330 MB on disk), checked against a
 					known checksum before it is used.
+					{movedDataDir
+						? " It is stored in the app's settings folder on the system drive, not in the data folder you chose."
+						: ""}
 				</DialogDescription>
 				<p className="text-xs text-muted-foreground">
 					The amount of GPU memory CUDA uses can&apos;t be capped. If it
