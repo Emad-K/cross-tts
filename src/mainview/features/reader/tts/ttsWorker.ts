@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
+import ortWasmUrl from "@transformers-dist/ort-wasm-simd-threaded.jsep.wasm?url";
 import type { PronunciationRule } from "@shared/ttsTextRules";
 import { isPlausibleAudio } from "./audioPlausibility";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
@@ -52,6 +53,13 @@ type GenerateMessage = {
 type InMessage = InitMessage | GenerateMessage;
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
+
+// Load the ONNX Runtime wasm binary from the app bundle. Left unset,
+// transformers.js points ORT at cdn.jsdelivr.net, so the GPU/in-app CPU path
+// wasn't offline. The JS glue is embedded in ORT's bundle build; only the
+// binary is fetched. Must be set before the first session is created.
+const ortWasmEnv = env.backends?.onnx?.wasm;
+if (ortWasmEnv) ortWasmEnv.wasmPaths = { wasm: ortWasmUrl };
 
 let tts: KokoroTTS | null = null;
 let loadPromise: Promise<KokoroTTS> | null = null;
