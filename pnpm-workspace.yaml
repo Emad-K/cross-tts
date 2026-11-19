@@ -16,6 +16,9 @@ onlyBuiltDependencies:
 #   ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js
 ignoredBuiltDependencies:
   - onnxruntime-node
+  # Pulled in by electron-builder's Squirrel.Windows target; we build NSIS and
+  # portable, so its install script (fetching Squirrel tools) isn't needed.
+  - electron-winstaller
 
 # Patched transitive versions for audit advisories: protobufjs and tar come in
 # through @huggingface/transformers (onnxruntime-web / onnxruntime-node),
