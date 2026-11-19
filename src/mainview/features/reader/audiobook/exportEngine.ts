@@ -17,7 +17,7 @@ import {
 	synthesizeChunkPcm,
 	useTtsStore,
 } from "../tts";
-import { createEncoder } from "./audioEncode";
+import { concat, createEncoder } from "./audioEncode";
 import {
 	type ChapterMark,
 	createSingleFileEncoder,
@@ -91,22 +91,39 @@ export type StartExportOpts = {
 /** ~16 MiB per IPC message keeps large single-file books off one giant payload. */
 const WRITE_CHUNK_BYTES = 16 * 1024 * 1024;
 
-/** Write a (possibly large) file via the first-write + append IPC pair. */
+/**
+ * Write a (possibly large) file from ordered byte parts via the first-write +
+ * append IPC pair, batching small parts and splitting big ones so no single
+ * message (or temporary buffer) exceeds WRITE_CHUNK_BYTES.
+ */
 async function writeAudioFileChunked(
 	dir: string,
 	fileName: string,
-	bytes: Uint8Array,
+	parts: Uint8Array[],
 ): Promise<void> {
-	const first = bytes.subarray(0, WRITE_CHUNK_BYTES);
-	const res = await writeAudioFile(dir, fileName, first);
-	if (!res.ok) throw new Error(res.error || "Couldn't write the file");
-	for (let off = WRITE_CHUNK_BYTES; off < bytes.length; off += WRITE_CHUNK_BYTES) {
-		const part = bytes.subarray(off, off + WRITE_CHUNK_BYTES);
-		const appended = await appendAudioFile(dir, fileName, part);
-		if (!appended.ok) {
-			throw new Error(appended.error || "Couldn't write the file");
+	let first = true;
+	const send = async (bytes: Uint8Array) => {
+		const res = first
+			? await writeAudioFile(dir, fileName, bytes)
+			: await appendAudioFile(dir, fileName, bytes);
+		first = false;
+		if (!res.ok) throw new Error(res.error || "Couldn't write the file");
+	};
+	let batch: Uint8Array[] = [];
+	let size = 0;
+	for (const part of parts) {
+		for (let off = 0; off < part.length; off += WRITE_CHUNK_BYTES) {
+			const piece = part.subarray(off, off + WRITE_CHUNK_BYTES);
+			if (size > 0 && size + piece.length > WRITE_CHUNK_BYTES) {
+				await send(concat(batch));
+				batch = [];
+				size = 0;
+			}
+			batch.push(piece);
+			size += piece.length;
 		}
 	}
+	if (first || size > 0) await send(concat(batch));
 }
 
 export async function startExport(opts: StartExportOpts): Promise<void> {
@@ -161,7 +178,10 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 				currentChapterIndex: ci,
 				currentChapterTitle: title,
 			});
-			if (m4b) chapterMarks.push({ title, startSample: bookSamples });
+			// M4B: mark the chapter at its first real audio — after the
+			// inter-sentence gap, and never for chapters that produce no audio
+			// (those would stack duplicate marks on the next chapter's start).
+			let markPending = m4b;
 
 			const trackName = trackFileName(ci + 1, title, opts.format);
 			// Resume: a per-chapter file already on disk is a checkpoint — skip it.
@@ -202,6 +222,10 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 							bookEnc.append(gapSamples);
 							bookSamples += gapSamples.length;
 						}
+						if (markPending) {
+							chapterMarks.push({ title, startSample: bookSamples });
+							markPending = false;
+						}
 						bookEnc.append(pcm.audio);
 						bookSamples += pcm.audio.length;
 					} else if (opts.combine) {
@@ -225,8 +249,10 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 			}
 			if (abort) break;
 			if (!single && enc) {
-				const bytes = enc.finish();
-				const res = await writeAudioFile(opts.dir, trackName, bytes);
+				// One write, not write+append: resume treats any existing track
+				// file as done, so keep the window for a partial file small.
+				// ponytail: still not atomic; needs a main-process .part→rename IPC.
+				const res = await writeAudioFile(opts.dir, trackName, concat(enc.finish()));
 				if (!res.ok) throw new Error(res.error || "Couldn't write the file");
 				useExportStore.setState({
 					filesWritten: useExportStore.getState().filesWritten + 1,
@@ -244,11 +270,14 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 					chapters: chapterMarks,
 					cover,
 				});
-				await writeAudioFileChunked(opts.dir, `${base}.${bookEnc.ext}`, bytes);
+				await writeAudioFileChunked(opts.dir, `${base}.${bookEnc.ext}`, [bytes]);
 				useExportStore.setState({ filesWritten: 1 });
 			} else if (combinedEnc) {
-				const bytes = combinedEnc.finish();
-				await writeAudioFileChunked(opts.dir, `${base}.${opts.format}`, bytes);
+				await writeAudioFileChunked(
+					opts.dir,
+					`${base}.${opts.format}`,
+					combinedEnc.finish(),
+				);
 				useExportStore.setState({ filesWritten: 1 });
 			}
 		}

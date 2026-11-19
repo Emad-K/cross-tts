@@ -4,7 +4,9 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 export default defineConfig({
 	main: {
-		plugins: [externalizeDepsPlugin()],
+		// sanitize-html >=2.18 depends on ESM-only htmlparser2, which Electron
+		// 33's Node can't require(); bundle it so Rollup converts it to CJS.
+		plugins: [externalizeDepsPlugin({ exclude: ["sanitize-html"] })],
 		resolve: {
 			alias: {
 				"@shared": resolve(__dirname, "src/shared"),

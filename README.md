@@ -92,6 +92,16 @@ Synthesis settings (use GPU, CPU thread count) live in **Settings → Performanc
 
 MIT © Emad Kazemi — see [LICENSE](LICENSE).
 
+### Third-party components
+
+Installers bundle third-party packages under their own licences. One worth
+calling out: [phonemizer](https://www.npmjs.com/package/phonemizer) (pulled in
+by kokoro-js for text-to-phoneme conversion) is published as Apache-2.0 but is
+built on and ships a compiled copy of [eSpeak NG](https://github.com/espeak-ng/espeak-ng),
+which is licensed **GPL-3.0-or-later**. Distributions of Cross TTS therefore
+include GPL-3.0+ code, and the eSpeak NG source is available from its
+repository linked above.
+
 ---
 
 <details>

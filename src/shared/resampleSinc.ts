@@ -8,8 +8,7 @@
  *
  * Output sample k corresponds exactly to input position k·inRate/outRate
  * (symmetric kernel, no group delay); edges treat out-of-range input as 0.
- * The M4B export path keeps the streaming LinearResampler — this one operates
- * on a whole chunk at once.
+ * `SincStreamResampler` below wraps it for the chunked M4B export path.
  */
 
 const TAPS = 32;
@@ -107,4 +106,84 @@ export function resampleSinc(
 		out[k] = sum;
 	}
 	return out;
+}
+
+function gcd(a: number, b: number): number {
+	while (b) [a, b] = [b, a % b];
+	return a;
+}
+
+/**
+ * Streaming wrapper around `resampleSinc` for audio fed in chunks (M4B
+ * export). Each call re-runs the one-shot resampler over the new chunk plus a
+ * small overlap of earlier input, and only emits outputs whose whole kernel
+ * is covered, so the result is identical to resampling the concatenated input
+ * in one go — no zero-padding dips at chunk seams.
+ */
+export class SincStreamResampler {
+	/** Input samples per alignment block / output samples per block. */
+	private readonly inBlock: number;
+	private readonly outBlock: number;
+	/** Pending input; `hist[0]` is absolute input index `histStart`. */
+	private hist = new Float32Array(0);
+	private histStart = 0;
+	private totalIn = 0;
+	private emitted = 0;
+
+	constructor(
+		readonly inRate: number,
+		readonly outRate: number,
+	) {
+		if (inRate <= 0 || outRate <= 0) {
+			throw new Error(`Invalid resample rates: ${inRate} → ${outRate}`);
+		}
+		const g = gcd(inRate, outRate);
+		this.inBlock = inRate / g;
+		this.outBlock = outRate / g;
+	}
+
+	/** Feed one chunk; returns the output samples now fully determined. */
+	process(input: Float32Array): Float32Array {
+		this.totalIn += input.length;
+		const buf = new Float32Array(this.hist.length + input.length);
+		buf.set(this.hist);
+		buf.set(input, this.hist.length);
+		// Outputs at input position t need input up to floor(t)+HALF.
+		const validEnd = Math.max(
+			0,
+			Math.ceil(
+				((this.histStart + buf.length - HALF) * this.outBlock) / this.inBlock,
+			),
+		);
+		const out = this.emit(buf, validEnd);
+		// Keep enough left context for the next unemitted output, starting on a
+		// block boundary so output indices stay aligned with absolute positions.
+		const nextPos = (this.emitted * this.inBlock) / this.outBlock;
+		const keepFrom = Math.max(
+			this.histStart,
+			Math.floor((nextPos - HALF) / this.inBlock) * this.inBlock,
+		);
+		this.hist = buf.slice(keepFrom - this.histStart);
+		this.histStart = keepFrom;
+		return out;
+	}
+
+	/** Flush the tail (input past the end is treated as silence). */
+	flush(): Float32Array {
+		const total = Math.round((this.totalIn * this.outRate) / this.inRate);
+		const out = this.emit(this.hist, total);
+		this.hist = new Float32Array(0);
+		return out;
+	}
+
+	private emit(buf: Float32Array, endAbs: number): Float32Array {
+		if (endAbs <= this.emitted || buf.length === 0) return new Float32Array(0);
+		const all = resampleSinc(buf, this.inRate, this.outRate);
+		const base = (this.histStart / this.inBlock) * this.outBlock;
+		const from = this.emitted - base;
+		const to = Math.min(endAbs - base, all.length);
+		if (to <= from) return new Float32Array(0);
+		this.emitted = base + to;
+		return all.slice(from, to);
+	}
 }
