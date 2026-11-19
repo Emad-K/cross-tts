@@ -92,8 +92,11 @@ export type PreToCanonicalMap = {
  * length incrementally: a non-whitespace char always contributes exactly one
  * character (no collapse rule touches it), and a maximal whitespace run is
  * finalized independently (none of the four `finalizePlainTextInner` rules span
- * a non-ws↔ws boundary), so only the live trailing whitespace run is
- * re-finalized. `htmlPlainText.test.ts` pins this against the naive version.
+ * a non-ws↔ws boundary). A finalized whitespace run is always some newlines
+ * (CRLF/CR count as one, spaces before a newline vanish, 3+ collapse to 2)
+ * followed by at most one space, so the live run is tracked with counters
+ * instead of being re-finalized per character (that was O(w²) on long runs).
+ * `htmlPlainText.test.ts` pins this against the naive version.
  */
 export function buildPreToCanonicalMap(pre: string): PreToCanonicalMap {
 	const innerFull = finalizePlainTextInner(pre);
@@ -106,24 +109,34 @@ export function buildPreToCanonicalMap(pre: string): PreToCanonicalMap {
 		Math.min(canonicalLength, Math.max(0, len - leadingSkip));
 
 	// `stableLen` is the finalized length of everything before the current
-	// trailing whitespace run; `tail` is that run.
+	// trailing whitespace run. In that run: `nl` newlines so far, `pendingCR`
+	// when the last char was \r (a following \n joins it), `sp` spaces/tabs
+	// since the last newline.
 	let stableLen = 0;
-	let tail = "";
+	let nl = 0;
+	let pendingCR = false;
+	let sp = 0;
 	map[0] = clamp(0);
 	for (let i = 0; i < pre.length; i++) {
 		const c = pre[i]!;
-		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
-			tail += c;
+		if (c === "\n") {
+			if (!pendingCR) nl++;
+			pendingCR = false;
+			sp = 0;
+		} else if (c === "\r") {
+			nl++;
+			pendingCR = true;
+			sp = 0;
+		} else if (c === " " || c === "\t") {
+			pendingCR = false;
+			sp++;
 		} else {
-			if (tail) {
-				stableLen += finalizePlainTextInner(tail).length;
-				tail = "";
-			}
-			stableLen += 1;
+			stableLen += Math.min(nl, 2) + (sp > 0 ? 1 : 0) + 1;
+			nl = 0;
+			pendingCR = false;
+			sp = 0;
 		}
-		const len = tail
-			? stableLen + finalizePlainTextInner(tail).length
-			: stableLen;
+		const len = stableLen + Math.min(nl, 2) + (sp > 0 ? 1 : 0);
 		map[i + 1] = i + 1 < pre.length ? clamp(len) : canonicalLength;
 	}
 
