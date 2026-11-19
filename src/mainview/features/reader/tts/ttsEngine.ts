@@ -344,7 +344,10 @@ function scheduleBuffer(
 	const ended = new Promise<void>((r) => {
 		resolveEnded = r;
 	});
-	signal.addEventListener("abort", () => resolveEnded(), { once: true });
+	// Removed once the audio ends: the loop's signal lives for a whole chapter,
+	// and this closure's scope reaches the buffer and its source nodes.
+	const onAbort = () => resolveEnded();
+	signal.addEventListener("abort", onAbort, { once: true });
 
 	// Split overlong buffers into sub-buffer sources, each under the Chromium
 	// limit, overlapping + crossfading at the seams. stopActiveSource() stops
@@ -401,6 +404,7 @@ function scheduleBuffer(
 		if (i === segments.length - 1) {
 			src.onended = () => {
 				activeSources = activeSources.filter((s) => !mine.includes(s));
+				signal.removeEventListener("abort", onAbort);
 				resolveEnded();
 			};
 		}
