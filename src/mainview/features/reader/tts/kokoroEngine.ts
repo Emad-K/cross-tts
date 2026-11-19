@@ -499,6 +499,13 @@ async function synthesizeKokoro(
 	const result = await requestGenerate(text, voice, speed, opts.epoch);
 	if (result.kind === "error") throw new Error(result.message);
 	if (result.kind === "empty") return null;
+	// Playback and export trust kokoroEngine.sampleRate; a mismatch would play
+	// off-pitch without any error.
+	if (result.samplingRate !== kokoroEngine.sampleRate) {
+		throw new Error(
+			`Kokoro returned ${result.samplingRate} Hz audio, expected ${kokoroEngine.sampleRate} Hz`,
+		);
+	}
 	return result.audio;
 }
 
