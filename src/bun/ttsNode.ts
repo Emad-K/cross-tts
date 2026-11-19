@@ -50,6 +50,14 @@ export function ttsNodeInit(
 	cuda: boolean,
 ): Promise<TtsNodeInitResult> {
 	if (initPromise) return initPromise;
+	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
+	// WASM engine. Say so instead of spawning a process that can't load it.
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return Promise.resolve({
+			ok: false,
+			error: "Native engine isn't available on Intel Macs",
+		});
+	}
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
 		const proc = utilityProcess.fork(join(__dirname, "ttsNodeWorker.js"), [], {
 			serviceName: "cross-tts-native-tts",

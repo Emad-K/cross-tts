@@ -107,7 +107,7 @@ repository linked above.
 <details>
 <summary><strong>For developers</strong></summary>
 
-Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback.
+Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback. onnxruntime-node 1.31 has no Intel-Mac (darwin/x64) binary, so on Intel Macs the native engine is skipped and the CPU path is the WASM worker (about 2.5× slower than native).
 
 **Optional CUDA (Linux/Windows x64, experimental):** Settings → Performance →
 "Use NVIDIA GPU (CUDA) for native engine" (off by default) makes the native
