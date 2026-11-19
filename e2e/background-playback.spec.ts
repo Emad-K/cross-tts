@@ -15,7 +15,7 @@ function sandbox(): { root: string; env: Record<string, string> } {
 	mkdirSync(userData, { recursive: true });
 	writeFileSync(
 		join(userData, "app-config.json"),
-		JSON.stringify({ version: 2, keepPlayingInBackground: true }),
+		JSON.stringify({ version: 2, keepPlayingInBackground: true, welcomeSeen: true }),
 	);
 	return {
 		root,
