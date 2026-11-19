@@ -98,7 +98,7 @@ export class SynthCore<V> {
 		chunkText: string,
 		voice: string,
 		speed: number,
-		toValue: (pcm: Float32Array, sampleRate: number) => V,
+		toValue: (pcm: Float32Array, sampleRate: number) => V | Promise<V>,
 	): Promise<V | null> {
 		const key = this.key(chunkText, voice, speed);
 		const { sampleRate } = this.deps.engine();
@@ -126,7 +126,7 @@ export class SynthCore<V> {
 						throw e;
 					}
 					if (!pcm) return null;
-					return toValue(pcm, sampleRate);
+					return await toValue(pcm, sampleRate);
 				}
 			} finally {
 				this.wantedAtEpoch.delete(key);

@@ -1,4 +1,3 @@
-import { resampleSinc } from "@shared/resampleSinc";
 import { logError } from "../logging";
 import {
 	effectiveCpuThreads,
@@ -135,11 +134,60 @@ function applyVolumeFromStore(): void {
 	g.gain.value = useTtsStore.getState().volumePct / 100;
 }
 
-function pcmToBuffer(
+let resampler: Worker | null = null;
+let resampleSeq = 0;
+const resamplePending = new Map<
+	number,
+	{ resolve: (pcm: Float32Array<ArrayBuffer>) => void; reject: (e: Error) => void }
+>();
+
+/** Resample in resampleWorker.ts; `pcm` is transferred (unusable afterwards). */
+function resampleOffThread(
+	pcm: Float32Array,
+	from: number,
+	to: number,
+): Promise<Float32Array<ArrayBuffer>> {
+	if (!resampler) {
+		const w = new Worker(new URL("./resampleWorker.ts", import.meta.url), {
+			type: "module",
+		});
+		w.onmessage = (event: MessageEvent) => {
+			const { id, out, error } = event.data;
+			const p = resamplePending.get(id);
+			resamplePending.delete(id);
+			if (error) p?.reject(new Error(error));
+			else p?.resolve(out);
+		};
+		w.onerror = (e) => {
+			for (const p of resamplePending.values()) {
+				p.reject(new Error(e.message || "Resampler crashed"));
+			}
+			resamplePending.clear();
+			w.terminate();
+			if (resampler === w) resampler = null;
+		};
+		resampler = w;
+	}
+	// Transfer only a buffer this view owns outright; copy anything else
+	// (a view into a larger or shared buffer).
+	const owned =
+		pcm.buffer instanceof ArrayBuffer &&
+		pcm.byteOffset === 0 &&
+		pcm.byteLength === pcm.buffer.byteLength
+			? pcm
+			: pcm.slice();
+	const id = ++resampleSeq;
+	return new Promise((resolve, reject) => {
+		resamplePending.set(id, { resolve, reject });
+		resampler!.postMessage({ id, pcm: owned, from, to }, [owned.buffer]);
+	});
+}
+
+async function pcmToBuffer(
 	ctx: AudioContext,
 	audio: Float32Array,
 	sampleRate: number,
-): AudioBuffer {
+): Promise<AudioBuffer> {
 	// Resample to the context's own rate ourselves so Chromium never resamples
 	// the AudioBufferSource. On Linux its per-buffer resampler is broken — a
 	// 24 kHz buffer in a 48 kHz context plays at 2× (chipmunk), and matching the
@@ -147,14 +195,12 @@ function pcmToBuffer(
 	// resampler. Creating the buffer already at ctx.sampleRate avoids both.
 	// Windowed sinc, not linear: linear interpolation leaves audible spectral
 	// images above 12 kHz (a faint metallic sheen on every Linux sentence).
-	const resampled =
+	// copyToChannel rejects a SharedArrayBuffer-backed view; the worker's
+	// output never is one, and same-rate input is copied (rare: 24 kHz output).
+	const data =
 		sampleRate === ctx.sampleRate
-			? audio
-			: resampleSinc(audio, sampleRate, ctx.sampleRate);
-	// Copy into a fresh ArrayBuffer-backed array: copyToChannel rejects the
-	// SharedArrayBuffer-backed view the worker hands back under cross-origin isolation.
-	const data = new Float32Array(resampled.length);
-	data.set(resampled);
+			? audio.slice()
+			: await resampleOffThread(audio, sampleRate, ctx.sampleRate);
 	const buf = ctx.createBuffer(1, data.length, ctx.sampleRate);
 	buf.copyToChannel(data, 0, 0);
 	return buf;
