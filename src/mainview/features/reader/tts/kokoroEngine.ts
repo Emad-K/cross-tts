@@ -449,9 +449,22 @@ function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 			if (device === "webgpu") {
 				logInfo(`Loading voice model (GPU, ${dtype})…`, { source: "models" });
 				try {
-					await initWorker(device, dtype, prefs);
+					try {
+						await initWorker(device, dtype, prefs);
+						loadedDtype = dtype;
+					} catch (e) {
+						if (dtype !== "fp16") throw e;
+						checkCurrent();
+						// Opt-in fp16 may lack kernels or shader-f16 on ORT's device.
+						logWarn("The half-precision GPU model failed to load; trying fp32.", {
+							source: "models",
+							detail: e instanceof Error ? e.message : String(e),
+						});
+						worker?.terminate();
+						worker = null;
+						await initWorker(device, "fp32", prefs);
+					}
 					backend = "webgpu";
-					loadedDtype = dtype;
 				} catch (e) {
 					checkCurrent();
 					// GPU failed — fall through to the CPU paths so the app still speaks.

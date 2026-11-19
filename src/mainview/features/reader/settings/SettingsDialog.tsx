@@ -567,8 +567,9 @@ function GpuFp16Control() {
 	if (!config) return null;
 	const onToggle = async (next: boolean) => {
 		await setGpuFp16(next);
-		// The GPU model's precision is chosen when it loads.
-		if (getActiveDevice() === "webgpu") resetTtsEngine();
+		// The GPU model's precision is chosen when it loads (and a failed fp16
+		// load may have left the engine on the CPU).
+		resetTtsEngine();
 	};
 	return (
 		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
