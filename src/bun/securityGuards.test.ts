@@ -1,6 +1,38 @@
 import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
-import { audioExportPath, isAllowedOrigin, isInsideRoot } from "./securityGuards";
+import {
+	audioExportPath,
+	hubRequestPath,
+	isAllowedOrigin,
+	isInsideRoot,
+} from "./securityGuards";
+
+describe("hubRequestPath", () => {
+	const t = "abc123";
+	const repo = "onnx-community/Kokoro-82M-v1.0-ONNX";
+	test("maps allowed Kokoro files", () => {
+		for (const f of ["config.json", "onnx/model.onnx", "voices/af_heart.bin"]) {
+			expect(hubRequestPath(`/${t}/${repo}/resolve/main/${f}`, t)).toBe(
+				`/${repo}/resolve/main/${f}`,
+			);
+		}
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/voices%2Faf.bin`, t)).toBe(
+			`/${repo}/resolve/main/voices/af.bin`,
+		);
+	});
+	test("rejects wrong token, other repos, prefixes, traversal, other types", () => {
+		expect(hubRequestPath(`/${repo}/resolve/main/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/nope/${repo}/resolve/main/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/gpt2/resolve/main/config.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/onnx`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/../x.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/%2e%2e/x.json`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/x.html`, t)).toBeNull();
+		expect(hubRequestPath(`/${t}/${repo}/resolve/main/%zz.json`, t)).toBeNull();
+		expect(hubRequestPath(`//${repo}/resolve/main/config.json`, "")).toBeNull();
+	});
+});
 
 describe("isInsideRoot", () => {
 	const roots = [resolve("/home/u/Audiobooks")];

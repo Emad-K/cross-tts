@@ -602,7 +602,7 @@ app.whenReady().then(async () => {
 	createWindow();
 	void initAutoUpdate();
 
-	kokoroHubReady = startKokoroHubServer()
+	kokoroHubReady = startKokoroHubServer(TRUSTED_ORIGINS)
 		.then((url) => {
 			console.log(`Kokoro hub URL (for webview): ${url}`);
 			return url;

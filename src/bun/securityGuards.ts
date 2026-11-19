@@ -17,7 +17,33 @@ export function isInsideRoot(path: string, roots: Iterable<string>): boolean {
 	return false;
 }
 
-const AUDIO_EXT = /\.(mp3|wav|m4b)$/i;
+// One path segment: no leading dot (so no "..", no dotfiles), no separators.
+const SEG = "[A-Za-z0-9_-][A-Za-z0-9._-]*";
+const KOKORO_REPO = "onnx-community/Kokoro-82M-v1\\.0-ONNX";
+
+/**
+ * Map a local Kokoro hub request path (`/<token>/<repo>/resolve/<rev>/<file>`)
+ * to the HuggingFace path it proxies (`/<repo>/resolve/<rev>/<file>`), or null
+ * if the token is wrong or the path is anything but a model/config/voice file
+ * of the Kokoro repo.
+ */
+export function hubRequestPath(pathname: string, token: string): string | null {
+	let p: string;
+	try {
+		p = decodeURIComponent(pathname);
+	} catch {
+		return null;
+	}
+	const prefix = `/${token}/`;
+	if (!token || !p.startsWith(prefix)) return null;
+	const rest = p.slice(prefix.length);
+	const re = new RegExp(
+		`^${KOKORO_REPO}/resolve/${SEG}/(?:${SEG}/)*${SEG}\\.(?:json|onnx|bin)$`,
+	);
+	return re.test(rest) ? `/${rest}` : null;
+}
+
+const AUDIO_EXT =/\.(mp3|wav|m4b)$/i;
 
 /**
  * Absolute target for an audiobook export write, or null if the renderer asked
