@@ -5,7 +5,18 @@
  * last-resort in-app (wasm) fallback. transformers.js resolves these exact
  * file names from the dtype. Kind keys keep their historical names.
  */
-export type ModelKind = "cpu" | "gpu";
+import {
+	PHONON_REPO,
+	PHONON_REVISION,
+	PHONON_SHA256,
+	PHONON_VOICES,
+	PHONON_VOICES_REPO,
+	PHONON_VOICES_REVISION,
+	PHONON_WEIGHTS,
+	phononVoicePath,
+} from "./phononAssets";
+
+export type ModelKind = "cpu" | "gpu" | "phonon";
 
 export const MODEL_REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
@@ -16,11 +27,11 @@ export const MODEL_REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
  */
 export const MODEL_REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 
-/** Repo-relative ONNX file per model kind. */
-export const MODEL_ONNX: Record<ModelKind, string> = {
+/** Repo-relative ONNX file per Kokoro model kind. */
+export const MODEL_ONNX = {
 	cpu: "onnx/model_quantized.onnx",
 	gpu: "onnx/model.onnx",
-};
+} as const;
 
 /**
  * sha256 (HF LFS oid at MODEL_REVISION) of every ONNX file the app loads.
@@ -63,14 +74,79 @@ export const HUB_REPOS: Readonly<Record<string, readonly HubRepo[]>> = {
 			sha256: MODEL_SHA256,
 		},
 	],
+	phonon: [
+		{
+			repo: PHONON_REPO,
+			revision: PHONON_REVISION,
+			extensions: ["json", "gguf"],
+			// config.json and tokenizer.json.
+			unhashedExtensions: ["json"],
+			sha256: PHONON_SHA256,
+		},
+		{
+			repo: PHONON_VOICES_REPO,
+			revision: PHONON_VOICES_REVISION,
+			extensions: ["safetensors"],
+			unhashedExtensions: [],
+			sha256: Object.fromEntries(
+				PHONON_VOICES.map(([id, , , sha]) => [phononVoicePath(id), sha]),
+			),
+		},
+	],
 };
+
+/** One file of an allowlisted repo, at its pinned revision. */
+export type HubFile = { repo: string; revision: string; path: string };
+
+/**
+ * What Settings → Storage downloads per model kind: the weights (whose size
+ * says whether the model is present) and the small files loading needs.
+ */
+export const MODEL_FILES: Record<
+	ModelKind,
+	{ weights: HubFile; sidecars: readonly HubFile[] }
+> = (() => {
+	const kokoro = (path: string): HubFile => ({
+		repo: MODEL_REPO,
+		revision: MODEL_REVISION,
+		path,
+	});
+	const kokoroSidecars = [
+		"config.json",
+		"tokenizer.json",
+		"tokenizer_config.json",
+		"special_tokens_map.json",
+	].map(kokoro);
+	const phonon = (path: string): HubFile => ({
+		repo: PHONON_REPO,
+		revision: PHONON_REVISION,
+		path,
+	});
+	return {
+		cpu: { weights: kokoro(MODEL_ONNX.cpu), sidecars: kokoroSidecars },
+		gpu: { weights: kokoro(MODEL_ONNX.gpu), sidecars: kokoroSidecars },
+		phonon: {
+			weights: phonon(PHONON_WEIGHTS),
+			sidecars: [
+				phonon("config.json"),
+				phonon("tokenizer.json"),
+				...PHONON_VOICES.map(([id]) => ({
+					repo: PHONON_VOICES_REPO,
+					revision: PHONON_VOICES_REVISION,
+					path: phononVoicePath(id),
+				})),
+			],
+		},
+	};
+})();
 
 export const MODEL_LABEL: Record<ModelKind, string> = {
 	cpu: "Fallback model (compatibility)",
 	gpu: "Voice model (GPU & CPU)",
+	phonon: "Phonon 31M model and voices",
 };
 
-export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu"];
+export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "phonon"];
 
 export type ModelStatus = { present: boolean; bytes: number };
 export type ModelStatusMap = Record<ModelKind, ModelStatus>;

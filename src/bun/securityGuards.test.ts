@@ -8,6 +8,12 @@ import {
 	isInsideRoot,
 } from "./securityGuards";
 import { MODEL_REVISION as rev } from "../shared/modelAssets";
+import {
+	PHONON_REPO,
+	PHONON_REVISION,
+	PHONON_VOICES_REPO,
+	PHONON_VOICES_REVISION,
+} from "../shared/phononAssets";
 
 describe("hubRequestPath", () => {
 	const t = "abc123";
@@ -81,6 +87,33 @@ describe("hubRequestPath", () => {
 			expect(hubFileSha256("/org/v/resolve/r/v.bin", repos)).toBe("hv");
 			expect(hubFileSha256("/org/v/resolve/r/m.onnx", repos)).toBe("hm");
 			expect(hubRequestPath(`/${t}/org/v/resolve/r/x.bin`, t, repos)).toBeNull();
+		}
+	});
+});
+
+describe("hubRequestPath (Phonon)", () => {
+	const t = "abc123";
+	const m = `${PHONON_REPO}/resolve/${PHONON_REVISION}`;
+	const v = `${PHONON_VOICES_REPO}/resolve/${PHONON_VOICES_REVISION}`;
+	test("serves the pinned weights, configs and English voices, hashed", () => {
+		for (const f of [`${m}/model.q8.gguf`, `${m}/config.json`, `${m}/tokenizer.json`, `${v}/voices/LMDIYE0Oa377Qh6Z.safetensors`]) {
+			expect(hubRequestPath(`/${t}/${f}`, t)).toBe(`/${f}`);
+		}
+		expect(hubFileSha256(`/${m}/model.q8.gguf`)).toBe(
+			"a7d9aad2cd6dc66473f24a08bc6d2939030ef4d751ef82349361fbef3272dbae",
+		);
+		expect(hubFileSha256(`/${v}/voices/LMDIYE0Oa377Qh6Z.safetensors`)).toHaveLength(64);
+	});
+	test("refuses unhashed weights, other voices and unpinned revisions", () => {
+		for (const f of [
+			`${m}/model.safetensors`,
+			`${m}/model.q4k.gguf`,
+			`${v}/voices/nope.safetensors`,
+			`${v}/samples/x.ogg`,
+			`${PHONON_REPO}/resolve/main/model.q8.gguf`,
+			`${PHONON_VOICES_REPO}/resolve/main/voices/LMDIYE0Oa377Qh6Z.safetensors`,
+		]) {
+			expect(hubRequestPath(`/${t}/${f}`, t)).toBeNull();
 		}
 	});
 });

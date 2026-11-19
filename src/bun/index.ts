@@ -54,7 +54,7 @@ import {
 import { downloadModel, modelStatus } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
 import type { Appearance } from "../shared/appearance";
-import type { ModelKind } from "../shared/modelAssets";
+import { MODEL_KINDS, MODEL_LABEL, type ModelKind } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -434,6 +434,7 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
 	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {
+		if (!MODEL_KINDS.includes(kind)) return modelStatus();
 		const send = (loaded: number, total: number, done: boolean, error?: string) => {
 			const wc = mainWindow?.webContents;
 			if (wc && !wc.isDestroyed()) {
@@ -446,7 +447,7 @@ function registerRpcHandlers(): void {
 			mainLog({
 				level: "info",
 				source: "models",
-				message: `${kind === "gpu" ? "GPU" : "CPU"} model downloaded.`,
+				message: `${MODEL_LABEL[kind]} downloaded.`,
 			});
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
@@ -454,7 +455,7 @@ function registerRpcHandlers(): void {
 			mainLog({
 				level: "error",
 				source: "models",
-				message: `Couldn't download the ${kind === "gpu" ? "GPU" : "CPU"} model.`,
+				message: `Couldn't download ${MODEL_LABEL[kind]}.`,
 				detail: msg,
 			});
 		}
