@@ -11,8 +11,10 @@ import type {
 	TtsNodeEp,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
+import { backendAvailability } from "./appConfigStore";
 import { hubCacheDirectory } from "./kokoroHubServer";
 import { mainLog } from "./logBridge";
+import { NATIVE_TTS_SERVICE_NAME, nativeSpawnDecision } from "./nativeEngineGate";
 
 /**
  * Manages the native-CPU TTS utility process (see ttsNodeWorker.ts) and
@@ -33,6 +35,17 @@ let childEp: TtsNodeEp = "cpu";
  */
 let gpuCrashed = false;
 let initPromise: Promise<TtsNodeInitResult> | null = null;
+/**
+ * The most recently started process finished loading. Reset only when the
+ * next one starts (not on exit), so crashReports.ts can still ask about a
+ * process that just died.
+ */
+let ready = false;
+
+/** Whether the latest native TTS process got as far as "ready". */
+export function nativeTtsReady(): boolean {
+	return ready;
+}
 let seq = 0;
 const pending = new Map<number, (result: TtsNodeGenerateResult) => void>();
 let progressTarget: BrowserWindow | null = null;
@@ -82,23 +95,14 @@ export function ttsNodeInit(
 	stopTtsNode();
 	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
 	// WASM engine. Say so instead of spawning a process that can't load it.
-	if (process.platform === "darwin" && process.arch === "x64") {
-		return Promise.resolve({
-			ok: false,
-			error: "Native engine isn't available on Intel Macs",
-		});
-	}
-	// transformers.js 4 needs the hub's on-disk cache to hand ORT a model path,
-	// and voices come from the hub; without it, native init can't work offline.
-	if (!hubBaseUrl) {
-		return Promise.resolve({
-			ok: false,
-			error: "Local model hub isn't running",
-		});
-	}
+	const decision = nativeSpawnDecision({
+		bindingPresent: backendAvailability().native,
+		hubBaseUrl,
+	});
+	if (!decision.ok) return Promise.resolve(decision);
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
 		const proc = utilityProcess.fork(join(__dirname, WORKER_ENTRY[engine]), [], {
-			serviceName: "cross-tts-native-tts",
+			serviceName: NATIVE_TTS_SERVICE_NAME,
 			// ORT loads its providers from the folder libonnxruntime came from,
 			// and the installed app's folder is read-only: put the add-on's copy
 			// first on the loader path. Ahead of any existing value (AppImage).
@@ -114,6 +118,7 @@ export function ttsNodeInit(
 				: {}),
 		});
 		child = proc;
+		ready = false;
 		childEngine = engine;
 		childEp = ep;
 		proc.on("message", (msg) => {
@@ -129,6 +134,7 @@ export function ttsNodeInit(
 					mainLog({ level: msg.level, source: "models", message: msg.message });
 					break;
 				case "ready":
+					if (child === proc) ready = true;
 					resolve({
 						ok: true,
 						voices: msg.voices,

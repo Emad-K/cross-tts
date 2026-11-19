@@ -9,6 +9,7 @@ import { isAbsolute, join } from "node:path";
 import { app } from "electron";
 import { CUDA_ADDON, cudaAddonInstalled } from "./cudaAddon";
 import { cudaSystemReady, ortBindingDir } from "./cudaSupport";
+import { ORT_BINDING_FILE } from "./nativeEngineGate";
 import {
 	APP_CONFIG_VERSION,
 	type AppConfigFileV1,
@@ -136,7 +137,7 @@ let nativeEngine: boolean | null = null;
 export function backendAvailability(): BackendAvailability {
 	if (nativeEngine === null) {
 		try {
-			nativeEngine = existsSync(ortBindingDir());
+			nativeEngine = existsSync(join(ortBindingDir(), ORT_BINDING_FILE));
 		} catch {
 			nativeEngine = false;
 		}
