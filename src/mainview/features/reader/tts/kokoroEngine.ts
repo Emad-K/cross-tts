@@ -242,7 +242,7 @@ async function detectWebgpu(
 				power === "auto" ? undefined : { powerPreference: power },
 			);
 			if (adapter) {
-				const software = softwareAdapterReason(adapter.info);
+				const software = softwareAdapterReason(adapter);
 				if (!loggedAdapter) {
 					loggedAdapter = true;
 					logInfo(

@@ -720,7 +720,7 @@ function PerformancePanel() {
 			try {
 				const adapter = await navigator.gpu?.requestAdapter();
 				// A software rasterizer is no GPU (same rule as the engine's probe).
-				setWebgpuAvailable(!!adapter && !softwareAdapterReason(adapter.info));
+				setWebgpuAvailable(!!adapter && !softwareAdapterReason(adapter));
 			} catch {
 				setWebgpuAvailable(false);
 			}

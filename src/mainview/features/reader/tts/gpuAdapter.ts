@@ -10,12 +10,22 @@ export function describeAdapter(info: AdapterInfo): string {
 }
 
 /**
- * Why `info` is a software rasterizer rather than a GPU (fallback adapter,
- * Mesa llvmpipe/lavapipe, SwiftShader), or null for a real GPU. Running the
- * model there is slower than the CPU backends, so it counts as "no GPU".
+ * Why `adapter` is a software rasterizer rather than a GPU (fallback adapter,
+ * Mesa llvmpipe/lavapipe, SwiftShader, WARP), or null for a real GPU. Running
+ * the model there is slower than the CPU backends, so it counts as "no GPU".
+ * The fallback flag moved from GPUAdapter to GPUAdapterInfo in later
+ * Chromium releases (Electron 33 only has the adapter one), so check both.
  */
-export function softwareAdapterReason(info: AdapterInfo): string | null {
-	if (info.isFallbackAdapter) return "fallback adapter";
-	const m = /llvmpipe|lavapipe|swiftshader/i.exec(describeAdapter(info));
+export function softwareAdapterReason(adapter: {
+	info: AdapterInfo;
+	isFallbackAdapter?: boolean;
+}): string | null {
+	const { info } = adapter;
+	if (info.isFallbackAdapter ?? adapter.isFallbackAdapter) {
+		return "fallback adapter";
+	}
+	const m = /llvmpipe|lavapipe|swiftshader|microsoft basic render/i.exec(
+		describeAdapter(info),
+	);
 	return m ? m[0].toLowerCase() : null;
 }
