@@ -8,6 +8,8 @@ import {
 import { logError, logInfo, logWarn } from "../logging";
 import { useAppSettingsStore } from "../settings/appSettingsStore";
 import { getTtsRulesForEngine } from "../ttsRules/ttsRulesStore";
+import type { GpuPowerPreference } from "@shared/appConfig";
+import { describeAdapter, softwareAdapterReason } from "./gpuAdapter";
 import { getKokoroHubBaseUrlSync, setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { kokoroVoiceOptions } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
@@ -219,13 +221,31 @@ function initWorker(
 	return ready;
 }
 
-/** Probe whether a usable WebGPU adapter exists, and record it for the UI. */
-async function detectWebgpu(): Promise<boolean> {
+let loggedAdapter = false;
+
+/**
+ * Probe whether a usable WebGPU adapter exists (on the preferred GPU), and
+ * record it for the UI. Software adapters count as none.
+ */
+async function detectWebgpu(power: GpuPowerPreference): Promise<boolean> {
 	let available = false;
 	try {
 		if (typeof navigator !== "undefined" && navigator.gpu) {
-			const adapter = await navigator.gpu.requestAdapter();
-			available = !!adapter;
+			const adapter = await navigator.gpu.requestAdapter(
+				power === "auto" ? undefined : { powerPreference: power },
+			);
+			if (adapter) {
+				const software = softwareAdapterReason(adapter.info);
+				if (!loggedAdapter) {
+					loggedAdapter = true;
+					logInfo(
+						`WebGPU adapter: ${describeAdapter(adapter.info)}` +
+							(software ? ` (software: ${software}; using the CPU instead).` : "."),
+						{ source: "models" },
+					);
+				}
+				available = !software;
+			}
 		}
 	} catch {
 		available = false;
@@ -250,7 +270,7 @@ async function resolveKokoroLoadOptions(prefs: TtsBackendPrefs): Promise<{
 	dtype: KokoroDtype;
 }> {
 	const wantGpu = prefs.gpu && !gpuFailed;
-	const hasGpu = wantGpu ? await detectWebgpu() : false;
+	const hasGpu = wantGpu ? await detectWebgpu(prefs.gpuPower) : false;
 	const device: KokoroDevice = wantGpu && hasGpu ? "webgpu" : "wasm";
 	const dtype: KokoroDtype = device === "webgpu" ? "fp32" : "q8";
 	return { device, dtype };

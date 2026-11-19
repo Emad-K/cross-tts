@@ -72,6 +72,7 @@ import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
+import { softwareAdapterReason } from "../tts/gpuAdapter";
 
 type SectionId =
 	| "appearance"
@@ -682,7 +683,8 @@ function PerformancePanel() {
 		void (async () => {
 			try {
 				const adapter = await navigator.gpu?.requestAdapter();
-				setWebgpuAvailable(!!adapter);
+				// A software rasterizer is no GPU (same rule as the engine's probe).
+				setWebgpuAvailable(!!adapter && !softwareAdapterReason(adapter.info));
 			} catch {
 				setWebgpuAvailable(false);
 			}
