@@ -1,4 +1,5 @@
 import licenceText from "../../../../../third_party/supertonic-3/LICENSE?raw";
+import type { GpuPowerPreference } from "@shared/appConfig";
 import {
 	getKokoroHubBaseUrl,
 	onTtsNodeProgress,
@@ -7,6 +8,7 @@ import {
 	ttsNodeStop,
 } from "@/lib/desktopBridge";
 import { logError, logInfo, logWarn } from "../logging";
+import { softwareAdapterReason } from "./gpuAdapter";
 import { SUPERTONIC_LANGS, SUPERTONIC_SAMPLE_RATE } from "./supertonicModel";
 import {
 	SUPERTONIC_DEFAULT_VOICE,
@@ -112,9 +114,13 @@ function startWorker(
 	return loaded;
 }
 
-async function hasWebgpu(): Promise<boolean> {
+/** A real GPU adapter (not SwiftShader/llvmpipe, which run slower than WASM). */
+async function hasWebgpu(power: GpuPowerPreference): Promise<boolean> {
 	try {
-		return !!(await navigator.gpu?.requestAdapter());
+		const adapter = await navigator.gpu?.requestAdapter(
+			power === "auto" ? undefined : { powerPreference: power },
+		);
+		return !!adapter && !softwareAdapterReason(adapter);
 	} catch {
 		return false;
 	}
@@ -167,7 +173,7 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		logInfo("Loading Supertonic 3…", { source: "models" });
 		let backend: Backend | null = (await initNode()) ? "node" : null;
 		checkCurrent();
-		if (!backend && prefs.gpu && !gpuFailed && (await hasWebgpu())) {
+		if (!backend && prefs.gpu && !gpuFailed && (await hasWebgpu(prefs.gpuPower))) {
 			try {
 				await startWorker("webgpu", hubBaseUrl, prefs);
 				backend = "webgpu";
