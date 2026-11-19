@@ -118,8 +118,9 @@ export function BackupRestoreControl() {
 			</div>
 			<p className="text-[11px] text-muted-foreground">
 				A backup is one file with your library list, reading positions,
-				bookmarks, each book&apos;s voice, text rules and settings. The book
-				files themselves, voice models and caches aren&apos;t included.
+				bookmarks, highlights and notes, listening time, each book&apos;s
+				voice, text rules and settings. The book files themselves, voice
+				models and caches aren&apos;t included.
 			</p>
 
 			<Dialog open={picked !== null} onOpenChange={(open) => !open && setPicked(null)}>
@@ -151,8 +152,9 @@ export function BackupRestoreControl() {
 								<div>
 									<dt className="font-medium text-foreground">Replace</dt>
 									<dd>
-										Your library, bookmarks, text rules and settings become
-										what the backup has. What is here now is lost.
+										Your library, bookmarks, notes, listening time, text rules
+										and settings become what the backup has. What is here now
+										is lost.
 									</dd>
 								</div>
 							</dl>

@@ -58,6 +58,15 @@ async function mergeSavedStats(): Promise<void> {
 	useStatsStore.setState({ stats });
 }
 
+/** Write the counters now (before a backup reads the file). */
+export const flushStats = () => saver.flush();
+
+/** Take reading-stats.json as it is on disk now (after a restore rewrote it). */
+export async function reloadStats(): Promise<void> {
+	const raw = await loadUserData("stats");
+	if (raw) useStatsStore.setState({ stats: coerceReadingStats(raw) });
+}
+
 const TICK_MS = 30_000;
 /** Longest stretch one commit may add: a suspended laptop must not count as listening. */
 const MAX_COMMIT_SEC = (TICK_MS / 1000) * 2;

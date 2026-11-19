@@ -82,6 +82,17 @@ export function coerceNotesFile(raw: unknown): NotesFile {
 	return out;
 }
 
+/** Merging a backup: everything here stays, notes only the backup has are added. */
+export function mergeNotesFiles(current: NotesFile, incoming: NotesFile): NotesFile {
+	const byPath = { ...current.byPath };
+	for (const [path, theirs] of Object.entries(incoming.byPath)) {
+		const mine = byPath[path] ?? [];
+		const ids = new Set(mine.map((n) => n.id));
+		byPath[path] = [...mine, ...theirs.filter((n) => !ids.has(n.id))];
+	}
+	return { version: 1, byPath };
+}
+
 /**
  * Where a note sits in the chapter text as it is now. The saved offsets win
  * when the saved snippet is still there; otherwise the closest occurrence of the

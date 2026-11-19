@@ -67,6 +67,36 @@ export function coerceReadingStats(raw: unknown): ReadingStats {
 	return out;
 }
 
+/**
+ * Merging a backup: the larger count wins per book and per day, not the sum,
+ * so restoring a backup of this same computer doesn't count the time twice.
+ */
+export function mergeReadingStats(
+	current: ReadingStats,
+	incoming: ReadingStats,
+): ReadingStats {
+	const out: ReadingStats = {
+		version: 1,
+		books: { ...current.books },
+		days: { ...current.days },
+	};
+	for (const [path, theirs] of Object.entries(incoming.books)) {
+		const mine = out.books[path];
+		const finished = [mine?.finishedAt, theirs.finishedAt].filter(
+			(t): t is number => t !== undefined,
+		);
+		out.books[path] = {
+			listenedSec: Math.max(mine?.listenedSec ?? 0, theirs.listenedSec),
+			...(finished.length ? { finishedAt: Math.min(...finished) } : {}),
+		};
+	}
+	for (const [day, sec] of Object.entries(incoming.days)) {
+		out.days[day] = Math.max(out.days[day] ?? 0, sec);
+	}
+	out.days = pruneDays(out.days);
+	return out;
+}
+
 /** Add listened seconds to today and (when the document is a saved book) to the book. */
 export function addListening(
 	stats: ReadingStats,

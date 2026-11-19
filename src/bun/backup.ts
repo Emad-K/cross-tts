@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { type BrowserWindow, app, dialog, ipcMain } from "electron";
@@ -12,6 +12,8 @@ import {
 	buildBackup,
 	parseBackup,
 } from "../shared/backup";
+import { coerceNotesFile, mergeNotesFiles } from "../shared/notes";
+import { coerceReadingStats, mergeReadingStats } from "../shared/readingStats";
 import { MAX_RECENT_BOOKS } from "../shared/recentBooks";
 import {
 	appConfigInfo,
@@ -28,14 +30,42 @@ import { pushWatchedFiles } from "./watchedFolders";
 /**
  * Other JSON files in the data folder that a backup carries under
  * `extra[key]`. `coerce` validates what comes back from a backup file before
- * it is written. Restore writes a file when replacing, or when there is none
- * yet; merging two versions of a file is up to the feature that owns it.
+ * it is written. Replace takes the backup's file; merge combines it with the
+ * one here using `merge`. The renderer saves what it holds before either and
+ * reloads these files afterwards (see backupRestore.ts).
  */
-export const EXTRA_BACKUP_FILES: {
+type ExtraBackupFile<T> = {
 	key: string;
 	file: string;
-	coerce: (raw: unknown) => unknown;
-}[] = [];
+	coerce: (raw: unknown) => T;
+	merge: (current: T, incoming: T) => T;
+};
+const extraFile = <T>(f: ExtraBackupFile<T>): ExtraBackupFile<unknown> =>
+	f as ExtraBackupFile<unknown>;
+
+export const EXTRA_BACKUP_FILES = [
+	extraFile({
+		key: "notes",
+		file: "notes.json",
+		coerce: coerceNotesFile,
+		merge: mergeNotesFiles,
+	}),
+	extraFile({
+		key: "stats",
+		file: "reading-stats.json",
+		coerce: coerceReadingStats,
+		merge: mergeReadingStats,
+	}),
+];
+
+function readJsonFile(path: string): unknown {
+	try {
+		return JSON.parse(readFileSync(path, "utf8"));
+	} catch {
+		// Not there (or unreadable).
+		return undefined;
+	}
+}
 
 const FILTERS = [{ name: "Cross TTS backup", extensions: ["json"] }];
 
@@ -47,11 +77,8 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 function readExtraFiles(): Record<string, unknown> {
 	const extra: Record<string, unknown> = {};
 	for (const { key, file } of EXTRA_BACKUP_FILES) {
-		try {
-			extra[key] = JSON.parse(readFileSync(join(dataDir(), file), "utf8"));
-		} catch {
-			// Not there (or unreadable): nothing to back up.
-		}
+		const data = readJsonFile(join(dataDir(), file));
+		if (data !== undefined) extra[key] = data;
 	}
 	return extra;
 }
@@ -164,11 +191,17 @@ function applyPickedSettings(mode: unknown): void {
 					},
 		);
 	}
-	for (const { key, file, coerce } of EXTRA_BACKUP_FILES) {
+	for (const { key, file, coerce, merge } of EXTRA_BACKUP_FILES) {
 		if (!(key in data.extra)) continue;
 		const path = join(dataDir(), file);
-		if (!replace && existsSync(path)) continue;
-		writeFileAtomic(path, JSON.stringify(coerce(data.extra[key])));
+		const incoming = coerce(data.extra[key]);
+		const current = replace ? undefined : readJsonFile(path);
+		writeFileAtomic(
+			path,
+			JSON.stringify(
+				current === undefined ? incoming : merge(coerce(current), incoming),
+			),
+		);
 	}
 	applyGlobalShortcuts();
 	syncTray();

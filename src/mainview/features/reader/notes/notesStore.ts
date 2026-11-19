@@ -49,6 +49,15 @@ export async function loadNotes(): Promise<void> {
 	useNotesStore.setState((s) => ({ byPath: { ...file.byPath, ...s.byPath } }));
 }
 
+/** Write notes that are waiting to be saved now (before a backup reads the file). */
+export const flushNotes = () => saver.flush();
+
+/** Take notes.json as it is on disk now (after a restore rewrote it). */
+export async function reloadNotes(): Promise<void> {
+	const raw = await loadUserData("notes");
+	if (raw) useNotesStore.setState({ byPath: coerceNotesFile(raw).byPath });
+}
+
 /**
  * Where a new note would be filed: the open book and, for EPUBs, its chapter
  * (plain text is one chapter, whatever heading the sidebar is on).

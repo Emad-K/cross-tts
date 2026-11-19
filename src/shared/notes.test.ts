@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	type Note,
 	coerceNotesFile,
+	mergeNotesFiles,
 	notesToMarkdown,
 	reanchor,
 } from "./notes";
@@ -97,5 +98,23 @@ describe("notesToMarkdown", () => {
 
 	test("a .txt book has no chapter headings", () => {
 		expect(notesToMarkdown("T", [note({})])).toBe("# Notes: T\n\n> quick\n");
+	});
+});
+
+describe("mergeNotesFiles", () => {
+	test("keeps the notes here and adds the ones only the backup has", () => {
+		const mine = note({ id: "a", note: "mine" });
+		const merged = mergeNotesFiles(
+			{ version: 1, byPath: { "/a.epub": [mine] } },
+			{
+				version: 1,
+				byPath: {
+					"/a.epub": [note({ id: "a", note: "theirs" }), note({ id: "b" })],
+					"/b.epub": [note({ id: "c" })],
+				},
+			},
+		);
+		expect(merged.byPath["/a.epub"]).toEqual([mine, note({ id: "b" })]);
+		expect(merged.byPath["/b.epub"]).toEqual([note({ id: "c" })]);
 	});
 });

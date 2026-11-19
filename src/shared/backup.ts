@@ -13,7 +13,8 @@ import { coerceWatchedFolders } from "./watchedFolders";
 
 /**
  * Backup file: one JSON document with the library (book paths, reading
- * positions, per-book voice), bookmarks, text rules and settings. Models,
+ * positions, per-book voice), bookmarks, text rules and settings, plus notes
+ * and listening stats as whole files under `extra`. Models,
  * caches, the data folder location and hardware settings are left out: they
  * belong to the machine, not the reader. A backup is untrusted input when it
  * comes back: everything is rebuilt field by field, nothing is executed.

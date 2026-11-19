@@ -8,6 +8,8 @@ import {
 import { useBookmarksStore } from "../bookmarks/bookmarksStore";
 import { checkMissingBooks } from "../library/missingBooks";
 import { useLibraryStore } from "../library/libraryStore";
+import { flushNotes, reloadNotes } from "../notes/notesStore";
+import { flushStats, reloadStats } from "../stats/statsStore";
 import { useAppSettingsStore } from "../settings/appSettingsStore";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 
@@ -20,8 +22,18 @@ function currentLibrary(): BackupLibrary {
 	};
 }
 
+/**
+ * Notes and listening stats are files the main process backs up and restores
+ * itself, so what is still waiting to be saved has to be on disk first.
+ */
+function saveNotesAndStats(): void {
+	flushNotes();
+	flushStats();
+}
+
 /** Ask where to save and write a backup. Null if cancelled (or not the desktop app). */
 export async function exportBackup(): Promise<BackupExportResult | null> {
+	saveNotesAndStats();
 	return (
 		(await window.api?.request.backupExport({ library: currentLibrary() })) ?? null
 	);
@@ -36,7 +48,8 @@ export async function pickBackup(): Promise<BackupPickResult | null> {
  * Put a picked backup into the app. Books, bookmarks and rules go into the
  * renderer's stores, and the normal session save writes them to disk: the
  * main process must not write the session file itself, because the next save
- * from here would overwrite it. Settings are restored by the main process.
+ * from here would overwrite it. Settings, notes and listening stats are
+ * restored by the main process; the notes and stats stores then reload.
  * Returns how many custom text rules arrived switched off (see mergeBackup).
  */
 export async function restoreBackup(
@@ -47,8 +60,10 @@ export async function restoreBackup(
 	useLibraryStore.getState().setBooks(merged.books);
 	useBookmarksStore.getState().setAll(merged.bookmarks);
 	useTtsRulesStore.getState().hydrate(merged.rules);
+	saveNotesAndStats();
 	const config = await window.api?.request.backupApplySettings({ mode });
 	if (config) useAppSettingsStore.getState().setConfig(config);
+	await Promise.all([reloadNotes(), reloadStats()]);
 	checkMissingBooks();
 	return merged.rulesSwitchedOff;
 }

@@ -6,6 +6,7 @@ import {
 	dayKey,
 	emptyReadingStats,
 	markFinished,
+	mergeReadingStats,
 	streak,
 	weekSeconds,
 } from "./readingStats";
@@ -98,4 +99,32 @@ test("coerceReadingStats drops junk", () => {
 		days: { "2026-01-01": 5 },
 	});
 	expect(coerceReadingStats("x")).toEqual(emptyReadingStats());
+});
+
+describe("mergeReadingStats", () => {
+	test("takes the larger count, so the same backup twice adds nothing", () => {
+		const mine = {
+			version: 1 as const,
+			books: { "/a.epub": { listenedSec: 100, finishedAt: 50 } },
+			days: { "2026-03-01": 100 },
+		};
+		const theirs = {
+			version: 1 as const,
+			books: {
+				"/a.epub": { listenedSec: 60, finishedAt: 20 },
+				"/b.epub": { listenedSec: 30 },
+			},
+			days: { "2026-03-01": 60, "2026-03-02": 30 },
+		};
+		const merged = mergeReadingStats(mine, theirs);
+		expect(merged).toEqual({
+			version: 1,
+			books: {
+				"/a.epub": { listenedSec: 100, finishedAt: 20 },
+				"/b.epub": { listenedSec: 30 },
+			},
+			days: { "2026-03-01": 100, "2026-03-02": 30 },
+		});
+		expect(mergeReadingStats(merged, theirs)).toEqual(merged);
+	});
 });
