@@ -103,6 +103,7 @@ import type {
 } from "../shared/ttsNodeRpc";
 import {
 	cudaAddonDir,
+	cudaAddonErrorText,
 	installCudaAddon,
 	pruneCudaAddons,
 	removeCudaAddon,
@@ -390,16 +391,19 @@ function registerRpcHandlers(): void {
 			mainLog({ level: "info", source: "models", message: "CUDA add-on installed." });
 			return { ok: true, config: appConfigInfo() };
 		} catch (e) {
-			const error = e instanceof Error ? e.message : String(e);
 			if (!abort.signal.aborted) {
 				mainLog({
 					level: "error",
 					source: "models",
 					message: "Couldn't install the CUDA add-on.",
-					detail: error,
+					detail: e instanceof Error ? e.message : String(e),
 				});
 			}
-			return { ok: false, error, cancelled: abort.signal.aborted };
+			return {
+				ok: false,
+				error: cudaAddonErrorText(e),
+				cancelled: abort.signal.aborted,
+			};
 		} finally {
 			cudaAddonAbort = null;
 		}

@@ -132,6 +132,17 @@ export async function extractZipEntries(
 }
 
 /**
+ * What to tell the user when the install failed. Network failures (fetch
+ * throws a TypeError, e.g. "fetch failed") get advice instead of that text.
+ */
+export function cudaAddonErrorText(e: unknown): string {
+	const message = e instanceof Error ? e.message : String(e);
+	return e instanceof TypeError || message.startsWith("Download failed")
+		? "Couldn't reach nuget.org. Check your internet connection and try again."
+		: message;
+}
+
+/**
  * Download, verify and unpack the add-on. Throws on cancel (signal), a hash
  * mismatch, or too little disk space; nothing usable is left behind then.
  * `bindingDir` is where the app's own libonnxruntime lives.

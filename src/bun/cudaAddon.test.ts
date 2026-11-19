@@ -13,6 +13,7 @@ import {
 	installCudaAddon,
 	pruneCudaAddons,
 	removeCudaAddon,
+	cudaAddonErrorText,
 } from "./cudaAddon";
 
 const NATIVE = "runtimes/linux-x64/native/";
@@ -134,4 +135,15 @@ test("the pinned add-on matches the installed onnxruntime-node", () => {
 	const { version } = fromTransformers("onnxruntime-node/package.json") as { version: string };
 	expect(CUDA_ADDON.ortVersion).toBe(version);
 	expect(CUDA_ADDON.url).toContain(`/${version}/`);
+});
+
+test("install errors: network failures get advice, the rest keep their text", async () => {
+	const offline = await fetch("http://127.0.0.1:1/x").catch((e: unknown) => e);
+	expect(cudaAddonErrorText(offline)).toMatch(/^Couldn't reach nuget\.org/);
+	expect(cudaAddonErrorText(new Error("Download failed 503: https://x"))).toMatch(
+		/^Couldn't reach nuget\.org/,
+	);
+	expect(cudaAddonErrorText(new Error("Not enough free disk space"))).toBe(
+		"Not enough free disk space",
+	);
 });
