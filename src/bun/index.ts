@@ -38,6 +38,7 @@ import {
 	resetDataDir,
 	setAppearance,
 	setCpuThreads,
+	setCudaEnabled,
 	setDataDir,
 	setGpuEnabled,
 	setGpuPower,
@@ -243,7 +244,11 @@ function registerRpcHandlers(): void {
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
 	ipcMain.handle("ttsNodeInit", async () =>
-		ttsNodeInit(await kokoroHubReady, loadAppConfig().cpuThreads ?? 0),
+		ttsNodeInit(
+			await kokoroHubReady,
+			loadAppConfig().cpuThreads ?? 0,
+			loadAppConfig().cudaEnabled,
+		),
 	);
 	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
 		ttsNodeGenerate(params),
@@ -437,6 +442,10 @@ function registerRpcHandlers(): void {
 	});
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
+		return appConfigInfo();
+	});
+	ipcMain.handle("setCudaEnabled", (_event, { enabled }: { enabled: boolean }) => {
+		setCudaEnabled(enabled === true);
 		return appConfigInfo();
 	});
 	ipcMain.handle(

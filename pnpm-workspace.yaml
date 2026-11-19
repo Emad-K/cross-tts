@@ -8,15 +8,29 @@
 onlyBuiltDependencies:
   - electron
   - esbuild
-  - onnxruntime-node
   - protobufjs
   - sharp
+
+# onnxruntime-node's npm tarball already contains the CPU binaries for every
+# platform; its postinstall only downloads the optional CUDA execution provider
+# (~hundreds of MB from NuGet) on Linux x64, which made `pnpm install` slow and
+# fail when that download 404'd. The app never bundles CUDA (see
+# electron-builder.yml), so the script is skipped for everyone. To try the CUDA
+# EP from a dev checkout run:
+#   ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js
+ignoredBuiltDependencies:
+  - onnxruntime-node
 
 # Patched transitive versions for audit advisories: protobufjs and tar come in
 # through @huggingface/transformers (onnxruntime-web / onnxruntime-node),
 # js-yaml through electron-updater (and electron-builder). Drop each once the
 # parent package ships with that version or newer.
+#
+# onnxruntime-node/web: transformers 4.3 pins node 1.30.0 and a web dev
+# snapshot; use the matching stable 1.31.1 release for both instead.
 overrides:
   protobufjs@7: ^7.6.6
   tar@7: ^7.5.23
   js-yaml@4: ^4.3.2
+  onnxruntime-node: 1.31.1
+  onnxruntime-web: 1.31.1

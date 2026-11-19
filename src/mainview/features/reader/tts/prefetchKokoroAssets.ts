@@ -16,27 +16,26 @@ async function openVoiceCache(): Promise<Cache | undefined> {
 }
 
 /**
- * Make sure one voice `.bin` is in the Cache API store kokoro-js reads.
+ * Return one voice `.bin`, caching it in the Cache API store.
  *
- * The cache key is always the canonical huggingface.co URL: that is the
- * exact key kokoro-js looks up before falling back to fetching from
- * huggingface.co itself. The bytes come from the local hub when there is
- * one. Keying by the hub URL (random port, per-launch token) missed on
- * every launch and was never seen by kokoro-js, so voices weren't offline.
+ * The cache key is always the canonical huggingface.co URL so it survives
+ * relaunches (the hub URL has a random port and per-launch token). The bytes
+ * come from the local hub when there is one.
  */
 export async function cacheVoiceBin(
 	id: string,
 	hubBaseUrl: string | null,
 	signal?: AbortSignal,
-): Promise<void> {
+): Promise<ArrayBuffer> {
 	const cache = await openVoiceCache();
 	const key = voiceBinUrl(id);
-	if (cache && (await cache.match(key))) return;
+	const hit = await cache?.match(key);
+	if (hit) return hit.arrayBuffer();
 	const url = hubBaseUrl ? voiceBinUrlFromHub(hubBaseUrl, id) : key;
 	const res = await fetch(url, { signal });
 	if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
 	const body = await res.arrayBuffer();
-	if (!cache) return;
+	if (!cache) return body;
 	try {
 		await cache.put(
 			key,
@@ -47,10 +46,11 @@ export async function cacheVoiceBin(
 	} catch {
 		// ignore quota / private mode
 	}
+	return body;
 }
 
 /**
- * Fetch every Kokoro voice `.bin` into the Cache API (same store `kokoro-js` uses at runtime).
+ * Fetch every Kokoro voice `.bin` into the Cache API (the store the TTS worker reads).
  */
 export async function prefetchAllVoiceBins(options?: {
 	onProgress?: (loaded: number, total: number) => void;

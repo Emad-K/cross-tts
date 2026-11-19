@@ -31,6 +31,7 @@ const api: AppApi = {
 		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
 		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
+		setCudaEnabled: (params) => ipcRenderer.invoke("setCudaEnabled", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
 		setAutoUpdate: (params) => ipcRenderer.invoke("setAutoUpdate", params),

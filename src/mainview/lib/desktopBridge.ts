@@ -237,6 +237,14 @@ export async function setCpuThreads(
 	return b.request.setCpuThreads({ threads });
 }
 
+export async function setCudaEnabled(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setCudaEnabled({ enabled });
+}
+
 export async function setShortcutsEnabled(
 	enabled: boolean,
 ): Promise<AppConfigInfo | null> {

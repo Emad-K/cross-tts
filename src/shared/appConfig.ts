@@ -35,6 +35,11 @@ export type AppConfigFileV1 = {
 	 * `logicalCores - 1`.
 	 */
 	cpuThreads: number;
+	/**
+	 * Run the native (onnxruntime-node) engine on the CUDA execution provider.
+	 * Opt-in; Linux/Windows x64 only; falls back to CPU when CUDA can't load.
+	 */
+	cudaEnabled: boolean;
 	/** Global media shortcuts enabled (work when the app isn't focused). */
 	shortcutsEnabled: boolean;
 	/** Accelerator per action (Electron syntax). */
@@ -67,6 +72,9 @@ export type AppConfigInfo = {
 	gpuPower: GpuPowerPreference;
 	/** CPU inference threads; 0 = auto. */
 	cpuThreads: number;
+	cudaEnabled: boolean;
+	/** Whether this platform can try the CUDA EP at all (Linux/Windows x64). */
+	cudaSupported: boolean;
 	shortcutsEnabled: boolean;
 	shortcuts: ShortcutBindings;
 	/** Automatic updates: true/false chosen, null = not asked yet. */
@@ -86,6 +94,7 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	gpuEnabled: true,
 	gpuPower: "auto",
 	cpuThreads: 0,
+	cudaEnabled: false,
 	shortcutsEnabled: false,
 	shortcuts: defaultShortcutBindings(),
 	autoUpdate: null,

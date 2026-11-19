@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { app } from "electron";
+import { cudaSupported } from "./cudaSupport";
 import {
 	APP_CONFIG_VERSION,
 	type AppConfigFileV1,
@@ -76,6 +77,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
+		if (typeof o.cudaEnabled === "boolean") next.cudaEnabled = o.cudaEnabled;
 		if (typeof o.shortcutsEnabled === "boolean") {
 			next.shortcutsEnabled = o.shortcutsEnabled;
 		}
@@ -135,6 +137,10 @@ export function setGpuPower(value: GpuPowerPreference): void {
 export function setCpuThreads(value: number): void {
 	const clean = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 	persist({ ...loadAppConfig(), cpuThreads: clean });
+}
+
+export function setCudaEnabled(value: boolean): void {
+	persist({ ...loadAppConfig(), cudaEnabled: value });
 }
 
 export function shortcutsEnabled(): boolean {
@@ -252,6 +258,8 @@ export function appConfigInfo(): AppConfigInfo {
 		gpuEnabled: config.gpuEnabled,
 		gpuPower: config.gpuPower,
 		cpuThreads: config.cpuThreads,
+		cudaEnabled: config.cudaEnabled,
+		cudaSupported: cudaSupported(),
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
 		autoUpdate: config.autoUpdate,

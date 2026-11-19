@@ -38,12 +38,6 @@ export default defineConfig({
 			alias: {
 				"@": resolve(__dirname, "src/mainview"),
 				"@shared": resolve(__dirname, "src/shared"),
-				// transformers.js ships the ONNX Runtime wasm binary its bundled ORT
-				// expects; the package's exports map hides dist/, so alias it.
-				"@transformers-dist": resolve(
-					__dirname,
-					"node_modules/@huggingface/transformers/dist",
-				),
 			},
 		},
 		build: {

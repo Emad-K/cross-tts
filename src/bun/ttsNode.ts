@@ -9,6 +9,7 @@ import type {
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
+import { hubCacheDirectory } from "./kokoroHubServer";
 import { mainLog } from "./logBridge";
 
 /**
@@ -46,8 +47,25 @@ export function stopTtsNode(): void {
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
 	numThreads: number,
+	cuda: boolean,
 ): Promise<TtsNodeInitResult> {
 	if (initPromise) return initPromise;
+	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
+	// WASM engine. Say so instead of spawning a process that can't load it.
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return Promise.resolve({
+			ok: false,
+			error: "Native engine isn't available on Intel Macs",
+		});
+	}
+	// transformers.js 4 needs the hub's on-disk cache to hand ORT a model path,
+	// and voices come from the hub; without it, native init can't work offline.
+	if (!hubBaseUrl) {
+		return Promise.resolve({
+			ok: false,
+			error: "Local model hub isn't running",
+		});
+	}
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
 		const proc = utilityProcess.fork(join(__dirname, "ttsNodeWorker.js"), [], {
 			serviceName: "cross-tts-native-tts",
@@ -62,6 +80,9 @@ export function ttsNodeInit(
 					}
 					break;
 				}
+				case "log":
+					mainLog({ level: msg.level, source: "models", message: msg.message });
+					break;
 				case "ready":
 					resolve({ ok: true, voices: msg.voices, loadMs: msg.loadMs });
 					break;
@@ -101,7 +122,13 @@ export function ttsNodeInit(
 			}
 			resolve({ ok: false, error: `Native TTS process exited (code ${code})` });
 		});
-		proc.postMessage({ type: "init", hubBaseUrl, numThreads });
+		proc.postMessage({
+			type: "init",
+			hubBaseUrl,
+			hubCacheDir: hubCacheDirectory(),
+			numThreads,
+			cuda,
+		});
 	});
 	return initPromise;
 }
