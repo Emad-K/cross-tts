@@ -503,7 +503,14 @@ export function switchTtsEngine(previousId: string): void {
 	if (getTtsEngine(previousId) === activeEngine()) return;
 	getTtsEngine(previousId).dispose();
 	core.clear();
-	restartPlaybackIfPlaying();
+	// A loop loading or suspended on the old engine would fail with "TTS engine
+	// reset" / "Engine not ready"; restart it (or drop it while paused, so the
+	// next resume starts fresh and loads the new engine).
+	if (useTtsStore.getState().playback === "loading_model") {
+		startPlaybackLoopFresh();
+	} else {
+		rescheduleForSeek();
+	}
 }
 
 function interruptPlaybackForReschedule(): void {
