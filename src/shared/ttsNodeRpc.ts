@@ -20,6 +20,11 @@ export type TtsNodeGenerateParams = {
 	voice: string;
 	speed: number;
 	pronunciationRules: PronunciationRule[];
+	/**
+	 * Playback epoch. Once a newer epoch arrives, queued older-epoch jobs reply
+	 * with error "cancelled". Omitted for export, which is never cancelled.
+	 */
+	epoch?: number;
 };
 
 export type TtsNodeGenerateResult =

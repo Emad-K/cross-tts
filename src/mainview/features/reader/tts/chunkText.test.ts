@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { htmlToPlainText } from "@shared/htmlPlainText";
 import { isSpeakableChunkText } from "./ttsChunkText";
-import { buildTtsChunks } from "./chunkText";
+import { buildTtsChunks, chunkIndexAtOffset } from "./chunkText";
+
+describe("chunkIndexAtOffset", () => {
+	test("keeps the reading position across a re-chunk", () => {
+		const text = Array.from({ length: 20 }, (_, i) => `Sentence number ${i} is here.`).join(" ");
+		const small = buildTtsChunks(text, 60);
+		const large = buildTtsChunks(text, 300);
+		const old = small[7]!;
+		const idx = chunkIndexAtOffset(large, old.start);
+		expect(large[idx]!.start).toBeLessThanOrEqual(old.start);
+		expect(large[idx]!.end).toBeGreaterThan(old.start);
+		expect(chunkIndexAtOffset(large, 0)).toBe(0);
+		expect(chunkIndexAtOffset([], 10)).toBe(0);
+	});
+});
 
 describe("buildTtsChunks", () => {
 	test("drops the chapter heading and keeps the paragraph as its own chunk", () => {

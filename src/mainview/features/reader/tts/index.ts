@@ -11,6 +11,7 @@ export {
 	getActiveDevice,
 	resetKokoroEngine,
 	pausePlayback,
+	prefetchTexts,
 	resumePlayback,
 	seekProgressPercent,
 	seekToChunkAndMaybePlay,
