@@ -222,6 +222,29 @@ test("renders a CRLF EPUB chapter with intact read-along offsets", async () => {
 				.poll(() => JSON.parse(readFileSync(configPath, "utf8")).crashPromptDisabled)
 				.toBe(true);
 		});
+
+		await test.step("the 1.15 features sit in their tabs", async () => {
+			// General (already open): background playback and backup.
+			await expect(
+				page.getByRole("switch", { name: "Keep playing when the window is closed" }),
+			).toBeVisible();
+			await expect(page.getByRole("button", { name: "Back up…" })).toBeVisible();
+			await expect(page.getByRole("button", { name: "Restore…" })).toBeVisible();
+			await expect(page.getByText(/New EPUB, PDF, Word/)).toBeVisible();
+
+			await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
+			await expect(page.getByText("Paste text", { exact: true })).toBeVisible();
+
+			await page.getByRole("button", { name: "Pronunciation", exact: true }).click();
+			await expect(page.getByText("Skip clutter").first()).toBeVisible();
+
+			await page.getByRole("button", { name: "Appearance", exact: true }).click();
+			await page.getByRole("combobox", { name: "Reading highlight" }).click();
+			await page.getByRole("option", { name: "Word" }).click();
+			await expect
+				.poll(() => JSON.parse(readFileSync(configPath, "utf8")).appearance?.highlightMode)
+				.toBe("word");
+		});
 	} finally {
 		await electronApp?.close().catch(() => {});
 		rmSync(tempRoot, { recursive: true, force: true });
