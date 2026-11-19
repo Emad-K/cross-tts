@@ -24,6 +24,7 @@ import {
 } from "./library/libraryFilters";
 import { useLibraryStore } from "./library/libraryStore";
 import { touchSessionSave } from "./sessionPersistence";
+import { BookStatsLine, StatsButton } from "./stats/StatsButton";
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
 const coverCache = new Map<string, string | null>();
@@ -139,6 +140,7 @@ function CoverCard({
 						{book.series}
 					</span>
 				) : null}
+				<BookStatsLine book={book} />
 			</button>
 			<BookCardMenu book={book} onRemove={onRemove} onSaveDetails={onSaveDetails} />
 		</div>
@@ -279,6 +281,7 @@ export function ReaderEmptyState({
 								</DropdownMenuRadioGroup>
 							</DropdownMenuContent>
 						</DropdownMenu>
+						<StatsButton />
 					</div>
 				</div>
 

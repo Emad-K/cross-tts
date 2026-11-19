@@ -83,7 +83,8 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			set((s) =>
 				s.currentBook === currentBook
 					? s
-					: { currentBook, ...withSignature(s, currentBook) },
+					: // currentBook last: withSignature spreads the old state back in.
+						{ ...withSignature(s, currentBook), currentBook },
 			),
 		hydrate: (raw) => set(sign(coerceTtsTextRulesState(raw))),
 		setRegexEnabled: (id, enabled) =>
