@@ -40,3 +40,12 @@ test("hostile input stays fast", () => {
 	}
 	expect(performance.now() - started).toBeLessThan(5000);
 });
+
+test("a wrapped list item keeps \"$\" in its text and stays linear", () => {
+	expect(markdownToHtml("- cost\nis $$5 and $& here\n- next")).toBe(
+		"<ul>\n<li>cost is $$5 and $&amp; here</li>\n<li>next</li>\n</ul>",
+	);
+	const started = performance.now();
+	markdownToHtml(`- x\n${"a\n".repeat(300_000)}`);
+	expect(performance.now() - started).toBeLessThan(2000);
+});

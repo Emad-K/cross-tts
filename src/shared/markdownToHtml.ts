@@ -25,10 +25,18 @@ export function markdownToHtml(markdown: string): string {
 	let para: string[] = [];
 	let list: "ul" | "ol" | null = null;
 	let code: string[] | null = null;
+	// The open list item's lines. Kept apart and joined once when the item
+	// ends, so a long wrapped item isn't copied again for every line.
+	let item: string[] = [];
 
+	const closeItem = () => {
+		if (item.length > 0) out.push(`<li>${item.join(" ")}</li>`);
+		item = [];
+	};
 	const flush = () => {
 		if (para.length > 0) out.push(`<p>${inline(para.join(" "))}</p>`);
 		para = [];
+		closeItem();
 		if (list) out.push(`</${list}>`);
 		list = null;
 	};
@@ -81,22 +89,22 @@ export function markdownToHtml(markdown: string): string {
 			continue;
 		}
 
-		const item = /^([-*+]|\d+[.)])\s+(.*)$/.exec(line);
-		if (item) {
-			const kind = /\d/.test(item[1]!) ? "ol" : "ul";
+		const bullet = /^([-*+]|\d+[.)])\s+(.*)$/.exec(line);
+		if (bullet) {
+			const kind = /\d/.test(bullet[1]!) ? "ol" : "ul";
+			closeItem();
 			if (list !== kind) {
 				flush();
 				out.push(`<${kind}>`);
 				list = kind;
 			}
-			out.push(`<li>${inline(item[2]!.replace(/^\[[ xX]\]\s+/, ""))}</li>`);
+			item = [inline(bullet[2]!.replace(/^\[[ xX]\]\s+/, ""))];
 			continue;
 		}
 
 		if (list) {
 			// A wrapped list item: join it to the item above.
-			const last = out.length - 1;
-			out[last] = out[last]!.replace(/<\/li>$/, ` ${inline(line)}</li>`);
+			item.push(inline(line));
 			continue;
 		}
 		para.push(line.includes("|") ? line.replace(/\s*\|\s*/g, " ").trim() : line);
