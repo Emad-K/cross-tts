@@ -123,6 +123,19 @@ The inference code in `src/mainview/features/reader/tts/supertonicModel.ts`
 is adapted from Supertone's MIT-licensed
 [reference implementation](https://github.com/supertone-inc/supertonic).
 
+The optional **Phonon 31M** voice engine (by Gradium, built on Kyutai's
+Pocket TTS and Mimi) runs on the bundled
+[phonon-tts](https://www.npmjs.com/package/phonon-tts) runtime (MIT or
+Apache-2.0; its licence files ship with the app). Its weights and voices,
+[gradium/phonon-31m-en](https://huggingface.co/gradium/phonon-31m-en) and
+[gradium/phonon-voices](https://huggingface.co/gradium/phonon-voices), are
+Apache-2.0 and downloaded on first use (pinned revision, sha256-verified).
+
+Installers also bundle the [ONNX Runtime](https://github.com/microsoft/onnxruntime)
+WebAssembly build (MIT, © Microsoft). The notices for it and the Supertone
+helper are kept in [third_party/](third_party/) and shipped under the app's
+`resources/licenses` folder.
+
 ---
 
 <details>
