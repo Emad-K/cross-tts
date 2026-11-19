@@ -529,7 +529,7 @@ function CudaControl() {
 	const onToggle = async (next: boolean) => {
 		await setCudaEnabled(next);
 		// The native engine picks its execution provider when it loads.
-		if (getActiveDevice() === "node") resetKokoroEngine();
+		if (getActiveDevice() !== "webgpu") resetKokoroEngine();
 	};
 	return (
 		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
