@@ -13,6 +13,7 @@ export {
 	getActiveDevice,
 	resetTtsEngine,
 	pausePlayback,
+	playSample,
 	prefetchTexts,
 	resumePlayback,
 	seekProgressPercent,

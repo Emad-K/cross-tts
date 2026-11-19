@@ -912,6 +912,25 @@ export async function startOrResumePlayback(): Promise<void> {
 	startPlaybackLoopFresh();
 }
 
+/**
+ * Speak one sentence with the selected engine and voice, outside the reading
+ * loop (the welcome's "Hear a sample"). Stops whatever is playing. Loads the
+ * model, so call it only when the model is on disk: it would download it.
+ */
+export async function playSample(text: string): Promise<void> {
+	stopPlaybackUi();
+	await ensureTtsLoaded();
+	const { voice, speed } = useTtsStore.getState();
+	const { ctx, gain } = getAudioGraph();
+	const buffer = await synthesizeChunkBuffer(ctx, text, voice, speed);
+	if (!buffer) return;
+	// Playback may have started while the sample was made.
+	stopActiveSource();
+	applyVolumeFromStore();
+	await ctx.resume();
+	await scheduleBuffer(ctx, gain, buffer, 0, new AbortController().signal).ended;
+}
+
 export function restartPlaybackIfPlaying(): void {
 	const p = useTtsStore.getState().playback;
 	if (p !== "playing" && p !== "buffering") return;
