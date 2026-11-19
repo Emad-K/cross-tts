@@ -55,7 +55,7 @@ import {
 import { downloadModel, modelStatus } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
 import type { Appearance } from "../shared/appearance";
-import type { ModelKind } from "../shared/modelAssets";
+import { MODEL_LABEL, type ModelKind } from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -447,7 +447,7 @@ function registerRpcHandlers(): void {
 			mainLog({
 				level: "info",
 				source: "models",
-				message: `${kind === "gpu" ? "GPU" : "CPU"} model downloaded.`,
+				message: `${MODEL_LABEL[kind]} downloaded.`,
 			});
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
@@ -455,7 +455,7 @@ function registerRpcHandlers(): void {
 			mainLog({
 				level: "error",
 				source: "models",
-				message: `Couldn't download the ${kind === "gpu" ? "GPU" : "CPU"} model.`,
+				message: `Couldn't download the ${MODEL_LABEL[kind]}.`,
 				detail: msg,
 			});
 		}

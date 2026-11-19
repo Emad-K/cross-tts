@@ -144,13 +144,13 @@ function ModelRow({
 	bytes: number;
 	onDownload: () => void;
 }) {
-	const Icon = kind === "gpu" ? Zap : Cpu;
+	const Icon = kind === "cpu" ? Cpu : Zap;
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-3">
 			<Icon
 				className={cn(
 					"size-4 shrink-0",
-					kind === "gpu" ? "text-amber-400" : "text-muted-foreground",
+					kind === "cpu" ? "text-muted-foreground" : "text-amber-400",
 				)}
 				aria-hidden
 			/>
@@ -587,8 +587,9 @@ function GpuFp16Control() {
 			</label>
 			<p className="mt-3 text-xs text-muted-foreground">
 				Experimental. Loads the smaller fp16 weights (about 160 MB instead of
-				325 MB) when your GPU supports 16-bit shaders, otherwise the full
-				model. It may sound slightly different; switch off if it does.
+				325 MB) when your GPU supports 16-bit shaders and they are downloaded
+				(Storage → Voice models); otherwise the full model. It may sound
+				slightly different; switch off if it does.
 			</p>
 		</div>
 	);

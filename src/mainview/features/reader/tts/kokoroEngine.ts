@@ -1,5 +1,6 @@
 import {
 	getKokoroHubBaseUrl,
+	getModelStatus,
 	onTtsNodeProgress,
 	ttsNodeGenerate,
 	ttsNodeInit,
@@ -282,12 +283,23 @@ async function resolveKokoroLoadOptions(prefs: TtsBackendPrefs): Promise<{
 		? await detectWebgpu(prefs.gpuPower)
 		: { available: false, f16: false };
 	if (!gpu.available) return { device: "wasm", dtype: "q8" };
-	if (prefs.gpuFp16 && !gpu.f16) {
+	if (!prefs.gpuFp16) return { device: "webgpu", dtype: "fp32" };
+	if (!gpu.f16) {
 		logInfo("This GPU lacks 16-bit shaders (shader-f16); using the fp32 model.", {
 			source: "models",
 		});
+		return { device: "webgpu", dtype: "fp32" };
 	}
-	return { device: "webgpu", dtype: prefs.gpuFp16 && gpu.f16 ? "fp16" : "fp32" };
+	// Never fetch fp16 implicitly: the app must stay offline once its models
+	// are downloaded, so it is only used after an explicit download.
+	if (!(await getModelStatus().catch(() => null))?.fp16.present) {
+		logInfo(
+			"The half-precision model isn't downloaded (Settings → Storage → Voice models); using the fp32 model.",
+			{ source: "models" },
+		);
+		return { device: "webgpu", dtype: "fp32" };
+	}
+	return { device: "webgpu", dtype: "fp16" };
 }
 
 /** Synthesize one chunk on the native (onnxruntime-node) CPU backend. */

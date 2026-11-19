@@ -2,10 +2,12 @@
  * Kokoro ONNX model assets, split by dtype. Full-precision fp32 weights serve
  * both main paths — WebGPU *and* the native CPU engine (q8 is slower than fp32
  * on the native CPU EP). The quantized q8 weights are only loaded by the
- * last-resort in-app (wasm) fallback. transformers.js resolves these exact
- * file names from the dtype. Kind keys keep their historical names.
+ * last-resort in-app (wasm) fallback. The half-precision fp16 weights are an
+ * optional download, used on WebGPU only when opted in and on disk.
+ * transformers.js resolves these exact file names from the dtype. Kind keys
+ * keep their historical names.
  */
-export type ModelKind = "cpu" | "gpu";
+export type ModelKind = "cpu" | "gpu" | "fp16";
 
 export const MODEL_REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
@@ -20,6 +22,7 @@ export const MODEL_REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 export const MODEL_ONNX: Record<ModelKind, string> = {
 	cpu: "onnx/model_quantized.onnx",
 	gpu: "onnx/model.onnx",
+	fp16: "onnx/model_fp16.onnx",
 };
 
 /**
@@ -71,9 +74,10 @@ export const HUB_REPOS: Readonly<Record<string, readonly HubRepo[]>> = {
 export const MODEL_LABEL: Record<ModelKind, string> = {
 	cpu: "Fallback model (compatibility)",
 	gpu: "Voice model (GPU & CPU)",
+	fp16: "Half-precision GPU model (optional)",
 };
 
-export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu"];
+export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "fp16"];
 
 export type ModelStatus = { present: boolean; bytes: number };
 export type ModelStatusMap = Record<ModelKind, ModelStatus>;
