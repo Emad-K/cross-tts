@@ -11,8 +11,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Read-only by default; only the publish job gets write access (to create the
+# tag and release), so the build legs never hold a token that can push.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -32,7 +34,7 @@ jobs:
       release: ${{ steps.check.outputs.release }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -61,20 +63,27 @@ jobs:
           - os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: oven-sh/setup-bun@v2
-
       - run: pnpm install --frozen-lockfile
+
+      # Typecheck + unit tests are platform-independent, so they run once on
+      # the Linux leg instead of three times. A failure there still blocks the
+      # release: publish needs every build leg to succeed.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: runner.os == 'Linux'
       - run: pnpm run typecheck
+        if: runner.os == 'Linux'
       - run: pnpm run test
+        if: runner.os == 'Linux'
+
       - run: pnpm run build
 
       - name: Install rpm tooling (Linux)
@@ -89,7 +98,7 @@ jobs:
       # Artifact only ferries files to the publish job below; the GitHub
       # Release holds the durable copies. Minimum retention keeps ~3 GB per
       # release from sitting in Actions storage for the default 90 days.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-${{ matrix.os }}
           retention-days: 1
@@ -108,13 +117,15 @@ jobs:
   publish:
     needs: [detect, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: release-assets
           pattern: dist-*
