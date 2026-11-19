@@ -25,7 +25,7 @@ import { hubDiskCache } from "./hubDiskCache";
 /**
  * Native TTS backend: an Electron utility process running Kokoro on
  * onnxruntime-node — on the CPU, or on NVIDIA CUDA / DirectML when the user
- * picked one (Settings → Performance). fp32 on the CPU here is ~2.5×
+ * picked one (Settings → Voice → Advanced). fp32 on the CPU here is ~2.5×
  * faster than the renderer's WASM q8 path (native q8 is *slower* than fp32 —
  * dequant overhead dominates on the CPU EP).
  * Mirrors ttsWorker.ts (the renderer WASM/WebGPU worker): same phonemization,
@@ -92,7 +92,7 @@ function loadOn(target: TtsNodeEp): Promise<Kokoro> {
 	return loadKokoro({
 		dtype: DTYPE,
 		device: "cpu",
-		// The user's thread preference (Settings → Performance) must reach the
+		// The user's thread preference (Settings → Voice → Advanced) must reach the
 		// native ORT session. 0 = auto (ORT's default: one per physical core).
 		session_options: {
 			...(numThreads > 0 ? { intraOpNumThreads: numThreads } : {}),

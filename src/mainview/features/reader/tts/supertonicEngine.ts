@@ -163,7 +163,7 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 			// Settings asks for the acknowledgement before this engine can be
 			// picked; a book restored with it still mustn't download without it.
 			throw new Error(
-				"Accept the Supertonic 3 licence in Settings → Playback before its model is downloaded.",
+				"Accept the Supertonic 3 licence in Settings → Voice before its model is downloaded.",
 			);
 		}
 		const hubBaseUrl = await getKokoroHubBaseUrl();

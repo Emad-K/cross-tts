@@ -8,7 +8,7 @@ import type { PronunciationRule } from "./ttsTextRules";
  * phoneme stream (same dialect as the builtin `qi` → `tʃiː` rule).
  *
  * EXPERIMENTAL — every entry is shipped DISABLED. Enable the terms you want
- * in Settings → Text & pronunciation rules.
+ * in Settings → Pronunciation.
  *
  * CONTRIBUTING / QA notes
  * -----------------------

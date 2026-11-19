@@ -85,7 +85,7 @@ function logCpuThreads(threads: number): number {
 	);
 	if (!hasSab) {
 		logWarn(
-			"No SharedArrayBuffer — CPU synthesis runs single-threaded (slower). Enable GPU in Settings if you have a compatible GPU.",
+			"No SharedArrayBuffer — speech on the processor runs single-threaded (slower). If you have a graphics card, pick it in Settings → Voice → Advanced.",
 			{ source: "models" },
 		);
 	}
@@ -310,7 +310,7 @@ async function resolveGpuDtype(
 	// are downloaded, so it is only used after an explicit download.
 	if (!(await getModelStatus().catch(() => null))?.fp16.present) {
 		logInfo(
-			"The half-precision model isn't downloaded (Settings → Storage → Voice models); using the fp32 model.",
+			"The smaller graphics-card model isn't downloaded (Settings → Voice → Advanced); using the full model.",
 			{ source: "models" },
 		);
 		return "fp32";

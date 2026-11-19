@@ -302,7 +302,7 @@ function nodeEp(engine: TtsNodeEngine, ep: unknown): TtsNodeEp {
 /** Settles once the startup CUDA library lookup is done (cudaSupport.ts). */
 let cudaDetected: Promise<string | null> = Promise.resolve(null);
 
-/** The CUDA add-on download in progress, if any (Settings → Performance). */
+/** The CUDA add-on download in progress, if any (Settings → Voice → Advanced). */
 let cudaAddonAbort: AbortController | null = null;
 
 function registerRpcHandlers(): void {

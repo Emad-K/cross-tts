@@ -92,7 +92,7 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 - **OS:** Windows 10/11, macOS 12 (Monterey)+, or a current 64-bit Linux desktop.
 - **Internet:** only for the one-time voice download, app updates, and the optional NVIDIA CUDA add-on if you ask for it. Reading and listening are **100% offline** after that.
 
-Synthesis settings (use GPU, CPU thread count) live in **Settings → Performance** if you want to tune them.
+Synthesis settings (graphics card or processor, thread count) live under **Settings → Voice → Advanced** if you want to tune them.
 
 ---
 
@@ -143,13 +143,14 @@ helper are kept in [third_party/](third_party/) and shipped under the app's
 
 Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback. onnxruntime-node 1.31 has no Intel-Mac (darwin/x64) binary, so on Intel Macs the native engine is skipped and the CPU path is the WASM worker (about 2.5× slower than native).
 
-**Supertonic 3** (Settings → Playback → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
+**Supertonic 3** (Settings → Voice → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
 
-**Speech backend (Settings → Performance):** "Auto" keeps the order above.
-The picker also lists explicit choices, each only where it can work: GPU
-(WebGPU), CPU (native), CPU (WASM), and two GPU providers for the native
-Kokoro engine. Any of them falls back to the CPU when it can't start, and
-"Run benchmark" times them on request (it never runs on its own).
+**Run speech on (Settings → Voice → Advanced):** "Automatic" keeps the order
+above. The picker also lists explicit choices, each only where it can work:
+Graphics card (WebGPU), Processor (native), Processor (compatibility mode,
+WASM), and two graphics-card providers for the native Kokoro engine. Any of
+them falls back to the processor when it can't start, and "Test speed on this
+computer" times them on request (it never runs on its own).
 
 - **DirectML (Windows, experimental):** ships with the app; nothing to install.
 - **NVIDIA CUDA (Linux x64 only):** offered only when the CUDA 13 runtime and

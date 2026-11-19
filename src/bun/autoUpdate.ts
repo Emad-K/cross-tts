@@ -180,7 +180,7 @@ export async function initAutoUpdate(): Promise<void> {
 				message: "Keep Cross TTS up to date automatically?",
 				detail:
 					"New versions download in the background and install when you restart. " +
-					"You can change this anytime in Settings → Updates.",
+					"You can change this anytime in Settings → General.",
 			})
 			.catch(() => null);
 		setAutoUpdate(result?.response === 0);

@@ -19,7 +19,7 @@ export type TtsVoice = {
 	language: string;
 };
 
-/** Hardware preferences from Settings → Performance. */
+/** Hardware preferences from Settings → Voice → Advanced. */
 export type TtsBackendPrefs = {
 	/** The backend choice; decides the load order (backendChoice.ts). */
 	backend: TtsBackend;

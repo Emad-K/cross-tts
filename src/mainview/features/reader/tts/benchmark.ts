@@ -3,8 +3,8 @@ import { loadPlan, type RunningBackend } from "./backendChoice";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
 
 /**
- * The user-run backend benchmark (Settings → Performance): load the current
- * engine on each backend this machine has, read one sentence twice, and
+ * The user-run backend benchmark (Settings → Voice → Advanced, "Test speed
+ * on this computer"): load the current engine on each backend this machine has, read one sentence twice, and
  * report load time, first-sentence time and speed. Never runs on its own and
  * never changes a setting. No store or DOM access, so a fake engine can
  * drive it in tests.
