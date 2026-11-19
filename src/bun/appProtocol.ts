@@ -56,26 +56,23 @@ const COI_HEADERS: Record<string, string> = {
  * only the permissive meta policy that Vite HMR needs.
  *
  * - wasm-unsafe-eval: ONNX Runtime wasm/JSEP backends.
- * - cdn.jsdelivr.net: transformers.js defaults ORT's wasmPaths to its CDN and
- *   the TTS worker doesn't override it, so ORT's .mjs/.wasm come from there
- *   (verified: without it the wasm backend fails to load). Drop it once
- *   wasmPaths points at the bundled assets.
- * - blob: in script-src: ORT fetches its .mjs and imports it from a blob URL
- *   (verified: without it the wasm backend fails). worker-src blob: for the
- *   ORT thread workers.
+ * - No CDN and no blob: in script-src: the TTS worker points ORT's wasmPaths
+ *   at the bundled .mjs/.wasm on app://, so ORT neither reaches
+ *   cdn.jsdelivr.net nor imports its glue from a blob URL (verified: wasm
+ *   synthesis works with both removed). worker-src keeps blob:.
  * - 127.0.0.1:* is the local Kokoro hub; huggingface.co (+ its LFS/xet CDNs)
  *   is the fallback when the hub is down; dictionaryapi.dev and gstatic serve
  *   dictionary lookups and pronunciation audio.
  */
 const CSP = [
 	"default-src 'self'",
-	"script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
+	"script-src 'self' 'wasm-unsafe-eval'",
 	"worker-src 'self' blob:",
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' data: blob:",
 	"font-src 'self' data:",
 	"media-src 'self' blob: data:",
-	"connect-src 'self' blob: data: http://127.0.0.1:* https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.dictionaryapi.dev https://ssl.gstatic.com",
+	"connect-src 'self' blob: data: http://127.0.0.1:* https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.dictionaryapi.dev https://ssl.gstatic.com",
 	"object-src 'none'",
 	"frame-src 'none'",
 	"frame-ancestors 'none'",
