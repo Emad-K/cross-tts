@@ -933,6 +933,9 @@ function EngineControl() {
 	const [viewLicence, setViewLicence] = useState(false);
 	const [stepsDraft, setStepsDraft] = useState<number | null>(null);
 
+	/** Selected (e.g. restored with a book) but its licence not yet accepted. */
+	const needsAccept =
+		!!engine.licence.acknowledge && !accepted.includes(engine.id);
 	const select = (next: TtsEngine) =>
 		setEngine(next.id, coerceEngineVoice(next, voice));
 	const onPick = (id: string) => {
@@ -966,9 +969,11 @@ function EngineControl() {
 						<button
 							type="button"
 							className="underline underline-offset-2 hover:text-foreground"
-							onClick={() => setViewLicence(true)}
+							onClick={() =>
+								needsAccept ? setPending(engine) : setViewLicence(true)
+							}
 						>
-							terms
+							{needsAccept ? "accept to use it" : "terms"}
 						</button>
 						)
 					</>
@@ -1046,7 +1051,9 @@ function EngineControl() {
 						const { licencesAccepted, setLicencesAccepted } =
 							useTtsStore.getState();
 						setLicencesAccepted([...licencesAccepted, pending.id]);
-						select(pending);
+						// Already selected: clear the refused load so Play works again.
+						if (pending.id === engine.id) resetTtsEngine();
+						else select(pending);
 						setPending(null);
 					}}
 				/>
