@@ -64,8 +64,9 @@ electronFuses:
   enableNodeCliInspectArguments: false
   onlyLoadAppFromAsar: true
   grantFileProtocolExtraPrivileges: false
-  # Mac builds are unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false in release.yml),
-  # and flipping fuses invalidates the arm64 ad-hoc signature: re-sign ad hoc.
+  # Flipping fuses invalidates the arm64 ad-hoc signature: re-sign ad hoc.
+  # Needed while Mac builds are unsigned (no signing secrets, see
+  # docs/SIGNING.md); a real signature, applied afterwards, replaces it.
   # Only acts on .app bundles, so Windows/Linux are unaffected.
   resetAdHocDarwinSignature: true
 
@@ -93,6 +94,9 @@ win:
   files:
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**"
   icon: assets/windows/icon_256x256.png
+  # No azureSignOptions here on purpose: its presence alone switches
+  # electron-builder to Azure signing, which fails without credentials.
+  # release.yml adds it on the command line when the secrets exist.
   target:
     - target: nsis
       arch:
@@ -117,6 +121,14 @@ mac:
   category: public.app-category.productivity
   # Electron 38+ (Chromium 138+) no longer runs on macOS 11; make Finder say so.
   minimumSystemVersion: "12.0"
+  # Signing (docs/SIGNING.md). These only take effect when release.yml finds
+  # a certificate; without one, signing is skipped and they do nothing.
+  # Notarization needs the hardened runtime; the entitlements are the
+  # exceptions Electron and onnxruntime-node need under it.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
   # electron-updater on macOS installs from the zip (Squirrel.Mac can't use a
   # dmg), so ship both: dmg for first install, zip for auto-update. The zip
   # only installs once these builds are signed; until then autoUpdate.ts only
