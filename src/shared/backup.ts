@@ -88,6 +88,20 @@ function sanitizeRules(raw: unknown): TtsTextRulesState {
 	};
 }
 
+/**
+ * A Windows network path (`\\host\share` or `//host/share`). Looking at one
+ * connects to that host, so a backup file must not be able to name any.
+ */
+export function isNetworkPath(path: string): boolean {
+	return /^(\\\\|\/\/)/.test(path);
+}
+
+function withoutNetworkPaths<T>(byPath: Record<string, T>): Record<string, T> {
+	return Object.fromEntries(
+		Object.entries(byPath).filter(([path]) => !isNetworkPath(path)),
+	);
+}
+
 function sanitizeLibrary(raw: Record<string, unknown>): BackupLibrary {
 	return {
 		books: coerceRecentBooks(raw.books),
@@ -143,6 +157,7 @@ export function parseBackup(json: string): ParseBackupResult {
 		};
 	}
 	const s = raw.settings;
+	const library = sanitizeLibrary(raw);
 	return {
 		ok: true,
 		data: {
@@ -150,13 +165,17 @@ export function parseBackup(json: string): ParseBackupResult {
 			version: BACKUP_VERSION,
 			createdAt: typeof raw.createdAt === "string" ? raw.createdAt : "",
 			appVersion: typeof raw.appVersion === "string" ? raw.appVersion : "",
-			...sanitizeLibrary(raw),
+			...library,
+			books: withoutNetworkPaths(library.books),
+			bookmarks: withoutNetworkPaths(library.bookmarks),
 			settings: isRecord(s)
 				? {
 						appearance: coerceAppearance(s.appearance),
 						shortcuts: coerceShortcutBindings(s.shortcuts),
 						shortcutsEnabled: s.shortcutsEnabled === true,
-						watchedFolders: coerceWatchedFolders(s.watchedFolders),
+						watchedFolders: coerceWatchedFolders(s.watchedFolders).filter(
+							(dir) => !isNetworkPath(dir),
+						),
 						keepPlayingInBackground: s.keepPlayingInBackground === true,
 					}
 				: null,

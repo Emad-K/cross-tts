@@ -10,6 +10,7 @@ import {
 	backupFileName,
 	backupSummary,
 	buildBackup,
+	isNetworkPath,
 	parseBackup,
 } from "../shared/backup";
 import { coerceNotesFile, mergeNotesFiles } from "../shared/notes";
@@ -83,7 +84,10 @@ function readExtraFiles(): Record<string, unknown> {
 	return extra;
 }
 
-/** Paths that aren't files this computer can reach. */
+/**
+ * Paths that aren't files this computer can reach. Network paths count as
+ * missing without being looked at: checking one would connect to its host.
+ */
 async function missingPaths(paths: unknown): Promise<string[]> {
 	if (!Array.isArray(paths)) return [];
 	const list = paths
@@ -91,7 +95,7 @@ async function missingPaths(paths: unknown): Promise<string[]> {
 		.slice(0, MAX_RECENT_BOOKS);
 	const gone = await Promise.all(
 		list.map((p) =>
-			isAbsolute(p)
+			isAbsolute(p) && !isNetworkPath(p)
 				? access(p).then(
 						() => false,
 						() => true,

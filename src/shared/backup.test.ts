@@ -107,6 +107,25 @@ describe("parseBackup rejects and cleans", () => {
 		}
 	});
 
+	test("network paths are dropped, so restoring never contacts a host the file names", () => {
+		const unc = "\\\\evil\\share\\a.epub";
+		const bm = { id: "b", chapterId: "c1", chunkIndex: 0, createdAt: 1 };
+		const file = JSON.parse(
+			fileFor(
+				library({
+					books: { [unc]: book(unc), "/ok.epub": book("/ok.epub") },
+					bookmarks: { "//evil/share/b.epub": [bm], "/ok.epub": [bm] },
+				}),
+			),
+		);
+		file.settings.watchedFolders = ["\\\\evil\\share", "//evil/share", "/books"];
+		const r = parseBackup(JSON.stringify(file));
+		if (!r.ok) throw new Error(r.error);
+		expect(Object.keys(r.data.books)).toEqual(["/ok.epub"]);
+		expect(Object.keys(r.data.bookmarks)).toEqual(["/ok.epub"]);
+		expect(r.data.settings?.watchedFolders).toEqual(["/books"]);
+	});
+
 	test("a backup from a newer version", () => {
 		const r = parseBackup('{"format":"cross-tts-backup","version":2}');
 		expect(r).toEqual({
