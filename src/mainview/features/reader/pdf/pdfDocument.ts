@@ -1,4 +1,4 @@
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFWorker } from "pdfjs-dist";
 import type {
 	EpubChapterContentResult,
 	ReadEpubDocumentResult,
@@ -39,27 +39,34 @@ type OpenPdf = {
 const openPdfs = new Map<string, Promise<OpenPdf>>();
 const MAX_OPEN_PDFS = 2;
 
-let pdfjs: Promise<typeof import("pdfjs-dist")> | null = null;
+type Pdfjs = { lib: typeof import("pdfjs-dist"); worker: PDFWorker };
+let pdfjs: Promise<Pdfjs> | null = null;
 
-function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
+/**
+ * pdf.js and the one worker every PDF is parsed in. The worker is ours, not
+ * a document's: left to pdf.js, closing any PDF shuts the shared worker down
+ * under the others, and one opened at that moment fails as "damaged".
+ */
+function loadPdfjs(): Promise<Pdfjs> {
 	pdfjs ??= Promise.all([
 		import("pdfjs-dist/build/pdf.min.mjs"),
 		import("pdfjs-dist/build/pdf.worker.min.mjs?worker"),
-	]).then(([lib, worker]) => {
-		lib.GlobalWorkerOptions.workerPort = new worker.default();
-		return lib;
-	});
+	]).then(([lib, worker]) => ({
+		lib,
+		worker: lib.PDFWorker.create({ port: new worker.default() }),
+	}));
 	return pdfjs;
 }
 
 async function parse(filePath: string): Promise<OpenPdf> {
 	const data = await window.api?.request.readDocumentBytes({ filePath });
 	if (!data) throw new Error("The PDF file wasn't found.");
-	const lib = await loadPdfjs();
+	const { lib, worker } = await loadPdfjs();
 	let doc: PDFDocumentProxy;
 	try {
 		doc = await lib.getDocument({
 			data,
+			worker,
 			// Text only: no font loading, no wasm decoders, no fetches, no forms.
 			disableFontFace: true,
 			useSystemFonts: false,
