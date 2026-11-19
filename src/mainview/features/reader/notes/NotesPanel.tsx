@@ -119,7 +119,8 @@ export function NotesPanel() {
 						<p className="text-sm text-muted-foreground">No highlights yet.</p>
 						<p className="mt-1 text-xs text-muted-foreground/80">
 							Select text in the book, then right-click and choose Highlight
-							or Add note.
+							or Add note. With the keyboard, move to a sentence with Tab and
+							press Shift+F10.
 						</p>
 					</div>
 				) : (
@@ -169,7 +170,7 @@ export function NotesPanel() {
 										<button
 											type="button"
 											onClick={() => setEditing(n)}
-											aria-label={n.note ? "Edit note" : "Add note"}
+											aria-label={`${n.note ? "Edit note" : "Add note"}: ${n.text.slice(0, 40)}`}
 											title={n.note ? "Edit note" : "Add note"}
 											className="mt-1 shrink-0 rounded p-1.5 text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground"
 										>
@@ -177,8 +178,19 @@ export function NotesPanel() {
 										</button>
 										<button
 											type="button"
-											onClick={() => remove(path, n.id)}
-											aria-label="Delete highlight"
+											onClick={() => {
+												remove(path, n.id);
+												showToast({
+													title: n.note ? "Note deleted" : "Highlight deleted",
+													action: {
+														label: "Undo",
+														onClick: () =>
+															useNotesStore.getState().upsert(path, n),
+													},
+													durationMs: 8000,
+												});
+											}}
+											aria-label={`Delete highlight: ${n.text.slice(0, 40)}`}
 											title="Delete highlight"
 											className="mt-1 shrink-0 rounded p-1.5 text-muted-foreground/70 transition-colors hover:bg-destructive/15 hover:text-destructive"
 										>
