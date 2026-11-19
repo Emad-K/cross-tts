@@ -28,7 +28,13 @@ export function TtsSettingSync() {
 
 	useEffect(() => {
 		const p = prev.current;
-		if (p.voice === voice && p.speed === speed && p.steps === steps) return;
+		if (
+			p.engineId === engineId &&
+			p.voice === voice &&
+			p.speed === speed &&
+			p.steps === steps
+		)
+			return;
 		prev.current = { engineId, voice, speed, steps };
 		if (voiceReadsCjk(p.engineId, p.voice) !== voiceReadsCjk(engineId, voice)) {
 			// CJK-only sentences become speakable (or not): rebuild the chunks,
@@ -37,6 +43,8 @@ export function TtsSettingSync() {
 			seekToChunkAndMaybePlay(useTtsStore.getState().currentChunkIndex);
 			return;
 		}
+		// switchTtsEngine (effect above) already restarted playback.
+		if (p.engineId !== engineId) return;
 		restartPlaybackIfPlaying();
 	}, [engineId, voice, speed, steps]);
 
