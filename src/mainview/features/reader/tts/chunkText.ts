@@ -180,6 +180,19 @@ function mergeUndersizedChunks(
 }
 
 /**
+ * Index of the chunk containing character `offset` (the last chunk starting
+ * at or before it). Maps a reading position across a re-chunk of the same text.
+ */
+export function chunkIndexAtOffset(
+	chunks: readonly { start: number }[],
+	offset: number,
+): number {
+	let idx = 0;
+	while (idx + 1 < chunks.length && chunks[idx + 1]!.start <= offset) idx++;
+	return idx;
+}
+
+/**
  * Split document text into speakable chunks on sentence boundaries when possible.
  */
 export function buildTtsChunks(
