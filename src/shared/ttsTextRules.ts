@@ -3,6 +3,8 @@ import {
 	PINYIN_PRONUNCIATION_PACK,
 } from "./ttsPinyinPack";
 
+import { REPEATED_LINES_RULE_ID } from "./ttsClutter";
+
 export { PINYIN_PACK_GROUP, PINYIN_PRONUNCIATION_PACK };
 
 /** Regex find/replace applied to chunk text before Kokoro synthesis. */
@@ -49,6 +51,9 @@ export type TtsTextRule = RegexReplaceRule | PronunciationRule;
 /** Default-off builtin preset group: chapter-end junk in translated webnovels. */
 export const WEBNOVEL_BOILERPLATE_GROUP = "Webnovel boilerplate";
 
+/** Builtin preset group: marks and addresses that aren't meant to be heard. */
+export const SKIP_CLUTTER_GROUP = "Skip clutter";
+
 /** Always-shipped default rules (the original ungrouped builtins). */
 export const ESSENTIALS_GROUP = "Essentials";
 
@@ -58,6 +63,8 @@ export const BUILTIN_GROUP_DESCRIPTIONS: Record<string, string> = {
 		"Core defaults that help most books — on out of the box. Toggle off anything your book doesn't need.",
 	[WEBNOVEL_BOILERPLATE_GROUP]:
 		"Skips common chapter-end junk in translated webnovels (notes, sponsor pleas, Discord/Patreon plugs). Off by default — enable the presets you want.",
+	[SKIP_CLUTTER_GROUP]:
+		"Leaves out things that aren't meant to be read aloud: reference and footnote marks, email and web addresses. The text on screen doesn't change. Page numbers and repeated headers are off by default because they can sometimes match real text.",
 	[PINYIN_PACK_GROUP]:
 		"Experimental — enable the terms you want. IPA is best-effort and still needs listening QA.",
 };
@@ -133,6 +140,84 @@ const WEBNOVEL_BOILERPLATE_PRESETS: RegexReplaceRule[] = (
 	caseSensitive: false,
 	builtIn: true,
 	group: WEBNOVEL_BOILERPLATE_GROUP,
+}));
+
+/**
+ * "Skip clutter" presets. Decisions (each has a test in ttsClutter.test.ts):
+ * - Reference markers are 1-3 digit numbers in brackets, so a bracketed year
+ *   like [1999] is still read. A single-letter name directly before the
+ *   bracket keeps it (a[1], x[12] are code or maths, not citations).
+ * - Superscript digits count as footnote marks after a word of 3+ letters or
+ *   after punctuation; after a digit or a 1-2 letter unit they are exponents
+ *   and stay (x², m², km³, 10²). ponytail: "sin²" loses its exponent; narrow
+ *   the lookbehind if maths books matter.
+ * - An asterisk is a footnote mark only when glued to the end of a word, so
+ *   "2 * 3", "a*b" and paired markdown "**bold**" stay as they are.
+ * - Markers inside quotations are removed like any other, together with the
+ *   space before them.
+ * - Addresses are skipped, not replaced by a spoken "link", matching the
+ *   existing "Remove URLs" rule.
+ */
+const EMAIL = String.raw`<?\b[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+>?`;
+// The last character can't be closing punctuation, so the sentence keeps its
+// full stop. Not after "//": "Remove URLs" owns https://www… whichever rule
+// runs first (new builtins are put in front of a saved rule list).
+const WWW_ADDRESS = String.raw`(?<!\/)\bwww\.[^\s<>"”]+[^\s<>"”.,;:!?)\]'’]`;
+/** Also take the space before `core` when punctuation follows ("see x." → "see."). */
+const withSpaceBeforePunctuation = (core: string) =>
+	String.raw`[ \t]*${core}(?=[.,;:!?)\]'’"”]+(?:\s|$))|${core}`;
+
+const SKIP_CLUTTER_PRESETS: RegexReplaceRule[] = (
+	[
+		{
+			id: "builtin-clutter-reference-markers",
+			label: "Skip reference markers like [12], [3-5] and [1, 2]",
+			pattern: String.raw`[ \t]*(?<!(?<![\p{L}\p{N}_])[\p{L}_])\[\d{1,3}(?:[ \t]*[,;\-–][ \t]*\d{1,3})*\]`,
+			enabled: true,
+		},
+		{
+			id: "builtin-clutter-footnote-marks",
+			label: "Skip footnote marks (¹ ² ³ and * † ‡ after a word)",
+			pattern:
+				String.raw`(?<=\p{L}{3}|[.,;:!?"'”’»)\]])[¹²³⁰⁴-⁹]+` +
+				String.raw`|[†‡]+` +
+				String.raw`|(?<=[\p{L}\p{N}.,;:!?"'”’»)\]])(?<!\*\S*)\*{1,3}(?![\p{L}\p{N}*])`,
+			enabled: true,
+		},
+		{
+			id: "builtin-clutter-emails",
+			label: "Skip email addresses",
+			pattern: withSpaceBeforePunctuation(EMAIL),
+			enabled: true,
+		},
+		{
+			id: "builtin-clutter-www",
+			label: "Skip web addresses that start with www.",
+			pattern: withSpaceBeforePunctuation(WWW_ADDRESS),
+			enabled: true,
+		},
+		{
+			id: "builtin-clutter-page-numbers",
+			label: "Skip lines that are only a page number (12, Page 12, - 12 -)",
+			pattern: String.raw`(?:^|\n)[ \t]*(?:(?:page|p\.)[ \t]*)?[\-–—]?[ \t]*\d{1,4}(?:[ \t]+of[ \t]+\d{1,4})?[ \t]*[\-–—]?[ \t]*(?=\r?\n|$)`,
+			enabled: false,
+		},
+		{
+			// A switch, not a regex: see ttsClutter.ts.
+			id: REPEATED_LINES_RULE_ID,
+			label:
+				"Skip running headers and footers (short lines repeated 4 or more times in a chapter)",
+			pattern: "(?!)",
+			enabled: false,
+		},
+	] as const
+).map((preset) => ({
+	...preset,
+	kind: "regex" as const,
+	replacement: "",
+	caseSensitive: false,
+	builtIn: true,
+	group: SKIP_CLUTTER_GROUP,
 }));
 
 export type TtsTextRulesState = {
@@ -228,6 +313,7 @@ export function defaultTtsTextRulesState(): TtsTextRulesState {
 				builtIn: true,
 				group: ESSENTIALS_GROUP,
 			},
+			...SKIP_CLUTTER_PRESETS.map((r) => ({ ...r })),
 			// Default-off "Webnovel boilerplate" preset group (cloned so callers
 			// can safely mutate the returned state).
 			...WEBNOVEL_BOILERPLATE_PRESETS.map((r) => ({ ...r })),
