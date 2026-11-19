@@ -1,5 +1,6 @@
 #!/bin/bash
-# Custom deb postinstall. Providing deb.afterInstall REPLACES electron-builder's
+# Custom deb postinstall, also used as the rpm %post (rpm.afterInstall); nothing
+# here is deb-specific. Providing deb.afterInstall REPLACES electron-builder's
 # default template (app-builder-lib/templates/linux/after-install.tpl), so this
 # reproduces that template's work — the /usr/bin launcher symlink, the
 # chrome-sandbox handling, and the mime/desktop database refresh — and then adds

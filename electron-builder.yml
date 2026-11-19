@@ -128,3 +128,11 @@ linux:
 deb:
   afterInstall: assets/linux/deb-after-install.sh
   afterRemove: assets/linux/deb-after-remove.sh
+
+# Same profile for rpm (openSUSE and other AppArmor rpm distros). The install
+# script only writes it when /etc/apparmor.d and apparmor_parser exist, so it
+# is a no-op on SELinux distros like Fedora. rpm needs its own remove script:
+# its upgrade order differs from dpkg's (see rpm-after-remove.sh).
+rpm:
+  afterInstall: assets/linux/deb-after-install.sh
+  afterRemove: assets/linux/rpm-after-remove.sh
