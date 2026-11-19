@@ -80,7 +80,7 @@ function clauseBreakWithin(s: string, maxChars: number): number {
 /**
  * Turn an absolute [absStart, absEnd) slice of `full` into one or more trimmed TTS chunks.
  */
-function splitLongSentence(
+export function splitLongSentence(
 	full: string,
 	absStart: number,
 	absEnd: number,
