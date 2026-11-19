@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -59,7 +66,7 @@ test("renders a CRLF EPUB chapter with intact read-along offsets", async () => {
 		);
 
 		// Settings written by 1.14 with the GPU switched off: 1.15 must show
-		// that as the "CPU (native)" backend choice (see coerceTtsBackend).
+		// that as the "Processor" choice (see coerceTtsBackend).
 		const configPath = join(userDataDir, "app-config.json");
 		writeFileSync(configPath, JSON.stringify({ version: 2, gpuEnabled: false }));
 
@@ -164,24 +171,56 @@ test("renders a CRLF EPUB chapter with intact read-along offsets", async () => {
 			expect(offsetWarnings).toEqual([]);
 		});
 
-		await test.step("Settings → Performance: backend picker, migrated from 1.14", async () => {
+		await test.step("opening the book didn't start a model download", async () => {
+			const onnx = readdirSync(tempRoot, { recursive: true }).filter((f) =>
+				String(f).endsWith(".onnx"),
+			);
+			expect(onnx).toEqual([]);
+		});
+
+		await test.step("Settings → Voice: engine cards, and Advanced migrated from 1.14", async () => {
 			await page.getByRole("button", { name: "Settings" }).click();
-			await page.getByRole("button", { name: "Performance" }).click();
-			const picker = page.getByRole("combobox", { name: "Speech backend" });
-			await expect(picker).toContainText("CPU (native)");
-			// The benchmark is offered but never starts by itself.
-			await expect(page.getByRole("button", { name: "Run benchmark" })).toBeVisible();
+			// Settings opens on Voice: the engines are a radio group, and the model
+			// is offered for download rather than being fetched already.
+			await expect(page.getByRole("radio", { name: /Kokoro 82M/ })).toBeChecked();
+			await expect(page.getByRole("radio", { name: /Phonon 31M/ })).not.toBeChecked();
+			await expect(
+				page.getByRole("button", { name: "Download Kokoro 82M (310 MB)" }),
+			).toBeVisible();
+
+			// Hardware settings sit behind the collapsed Advanced disclosure.
+			const picker = page.getByRole("combobox", { name: "Run speech on" });
+			await expect(picker).toBeHidden();
+			await page.getByText("Advanced: speed and hardware").click();
+			await expect(picker).toContainText("Processor");
+			// The speed test is offered but never starts by itself.
+			await expect(page.getByRole("button", { name: "Run test" })).toBeVisible();
 			await expect(page.getByText("measuring…")).toHaveCount(0);
 
 			await picker.click();
-			await expect(page.getByRole("option", { name: /CPU \(WASM/ })).toBeVisible();
-			await page.getByRole("option", { name: "Auto (recommended)" }).click();
-			await expect(picker).toContainText("Auto (recommended)");
+			await expect(
+				page.getByRole("option", { name: /Processor \(compatibility mode\)/ }),
+			).toBeVisible();
+			await page.getByRole("option", { name: "Automatic (recommended)" }).click();
+			await expect(picker).toContainText("Automatic (recommended)");
 			await expect
 				.poll(() => JSON.parse(readFileSync(configPath, "utf8")).ttsBackend)
 				.toBe("auto");
 			// Kept in step for a downgrade to 1.14, which only reads this switch.
 			expect(JSON.parse(readFileSync(configPath, "utf8")).gpuEnabled).toBe(true);
+		});
+
+		await test.step("Settings tabs: General holds the crash-report switch", async () => {
+			for (const tab of ["Appearance", "Pronunciation", "Shortcuts", "General"]) {
+				await expect(page.getByRole("button", { name: tab, exact: true })).toBeVisible();
+			}
+			await page.getByRole("button", { name: "General", exact: true }).click();
+			const ask = page.getByRole("switch", { name: "Ask to send a report after a crash" });
+			await expect(ask).toBeChecked();
+			await ask.click();
+			await expect
+				.poll(() => JSON.parse(readFileSync(configPath, "utf8")).crashPromptDisabled)
+				.toBe(true);
 		});
 	} finally {
 		await electronApp?.close().catch(() => {});

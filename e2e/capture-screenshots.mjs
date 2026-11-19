@@ -73,7 +73,7 @@ async function main() {
 		console.log("no 'Try sample' button — skipping reader shot");
 	}
 
-	// 3. Settings dialog
+	// 3. Settings dialog (opens on the Voice tab)
 	const settings = page.getByRole("button", { name: "Settings" });
 	if (await settings.count()) {
 		await settings.first().click();
@@ -81,6 +81,8 @@ async function main() {
 		await shot("03-settings.png");
 
 		// 4. Flip to dark mode, then re-shoot the reader as the dark hero.
+		await page.getByRole("button", { name: "Appearance", exact: true }).click();
+		await sleep(400);
 		const dark = page.getByRole("button", { name: "Dark" });
 		if (await dark.count()) {
 			await dark.first().click();
