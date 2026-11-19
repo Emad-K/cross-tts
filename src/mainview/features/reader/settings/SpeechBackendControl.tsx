@@ -258,19 +258,32 @@ function BackendBenchmark({
 			</p>
 			{phase === "confirm" ? (
 				<div className="mt-3 rounded-md border border-border p-3">
-					<p className="text-xs">
-						This loads the voice model on each of these in turn and reads one
-						sentence twice: {toRun.map((b) => LABEL[b]).join(", ")}.{" "}
-						{usesGpu ? "It briefly uses the GPU. " : ""}
-						It unloads the current model and stops paused playback at its
-						sentence. No voice model is downloaded for it; only a small voice
-						file (under 1 MB) if the selected voice has never been used.
-					</p>
+					{toRun.length === 0 ? (
+						<p className="text-xs">
+							There is nothing to measure yet: the voice model isn&apos;t
+							downloaded, and the benchmark never downloads one. Play
+							something first.
+						</p>
+					) : (
+						<p className="text-xs">
+							This loads the voice model on each of these in turn and reads
+							one sentence twice: {toRun.map((b) => LABEL[b]).join(", ")}.{" "}
+							{usesGpu ? "It briefly uses the GPU. " : ""}
+							It unloads the current model and stops paused playback at its
+							sentence. No voice model is downloaded for it; only a small
+							voice file (under 1 MB) if the selected voice has never been
+							used.
+						</p>
+					)}
 					<div className="mt-3 flex justify-end gap-2">
 						<Button variant="outline" size="sm" onClick={() => setPhase("idle")}>
 							Not now
 						</Button>
-						<Button size="sm" disabled={blocked} onClick={() => void start()}>
+						<Button
+							size="sm"
+							disabled={blocked || toRun.length === 0}
+							onClick={() => void start()}
+						>
 							Start
 						</Button>
 					</div>
