@@ -9,6 +9,7 @@ export {
 	adjustVolume,
 	downloadVoicesAndModel,
 	ensureTtsLoaded,
+	loadTtsIfDownloaded,
 	getActiveDevice,
 	resetTtsEngine,
 	pausePlayback,

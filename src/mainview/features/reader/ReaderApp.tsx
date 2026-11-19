@@ -69,7 +69,7 @@ import {
 	buildTtsChunks,
 	prefetchTexts,
 	seekToChunkAndMaybePlay,
-	ensureTtsLoaded,
+	loadTtsIfDownloaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
 	startIdleWarm,
@@ -305,13 +305,14 @@ export function ReaderApp() {
 	// (one-time, ~17s on GPU) model load happens while the user reads instead of
 	// on their first press of play. Waits for the GPU/CPU preference to hydrate
 	// first so it loads the right weights. Idempotent; errors are already logged.
+	// Never downloads: a model that isn't on disk waits for Play (or Settings).
 	useEffect(() => {
 		if (!sessionReady || !document) return;
 		let cancelled = false;
 		void (async () => {
 			await useAppSettingsStore.getState().hydrate();
 			if (cancelled) return;
-			await ensureTtsLoaded().catch(() => {});
+			await loadTtsIfDownloaded().catch(() => {});
 		})();
 		return () => {
 			cancelled = true;

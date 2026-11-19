@@ -1,3 +1,4 @@
+import { getModelStatus, isDesktopApp, supertonicPresent } from "@/lib/desktopBridge";
 import { logError } from "../logging";
 import {
 	effectiveCpuThreads,
@@ -9,6 +10,7 @@ import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import { isExportActive } from "../audiobook/exportStore";
 import { createIdleWarmer, idleWarmKey } from "./idleWarm";
+import { canLoadWithoutDownload } from "./modelOnDisk";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
 import { isBenchmarkRunning, stopBenchmark } from "./benchmark";
 import { splitForFastStart } from "./chunkText";
@@ -70,6 +72,24 @@ export function getActiveDevice(): string | null {
 /** Load the selected engine's model with the current hardware preferences. */
 export function ensureTtsLoaded(): Promise<void> {
 	return activeEngine().ensureLoaded(backendPrefs());
+}
+
+/**
+ * Load the model in the background (a document was opened), but only when
+ * every file it may need is already on disk: a model is downloaded when the
+ * user presses Play or asks for it in Settings, never by opening a book.
+ */
+export async function loadTtsIfDownloaded(): Promise<void> {
+	// The browser build has no model folder to check; it loads as before.
+	if (!isDesktopApp()) return ensureTtsLoaded();
+	const config = useAppSettingsStore.getState().config;
+	const [status, supertonic] = await Promise.all([getModelStatus(), supertonicPresent()]);
+	const disk = status ? { status, supertonic } : null;
+	// Read the engine after the await: restoring a book may have switched it.
+	const engineId = activeEngine().id;
+	if (canLoadWithoutDownload(engineId, ttsBackendPreference(), config?.backends.native ?? false, disk)) {
+		await ensureTtsLoaded();
+	}
 }
 
 /** Load the model and fetch every voice for offline use (Kokoro only for now). */
