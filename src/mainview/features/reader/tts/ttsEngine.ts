@@ -103,6 +103,23 @@ let lastLoadMs = 0;
 let loggedFirstSynth = false;
 /** Backend of the currently loaded model, or null when nothing is loaded. */
 let activeDevice: KokoroBackend | null = null;
+/**
+ * Bumped by every teardown. A load started under an older generation was
+ * superseded by a reset and must not mark the engine ready or tear down the
+ * newer load.
+ */
+let loadGen = 0;
+
+const ENGINE_RESET = "TTS engine reset";
+const ENGINE_TIMEOUT = "TTS engine timed out";
+/** The native CPU process died; reloading starts a fresh one. */
+const NODE_DEAD_RE = /Native TTS (engine not running|process exited)/;
+/** Worker requests that get no reply in this long are treated as a hung
+ * engine. Counted from the request, so it covers the queue ahead of it. */
+const WATCHDOG_BASE_MS = 60_000;
+const WATCHDOG_MS_PER_CHAR = 500;
+/** Characters of worker requests still awaiting a reply (watchdog budget). */
+let queuedChars = 0;
 
 /** Backend of the loaded model (null if not loaded). Lets the UI avoid an
  * unnecessary GPU reload when only a CPU-only setting changed. */
@@ -154,23 +171,39 @@ function spawnWorker(): Worker {
 		}
 	};
 	w.onerror = (e) => {
-		onWorkerInitError?.(new Error(e.message || "TTS worker crashed"));
+		if (worker !== w) return;
+		const message = e.message || "TTS worker crashed";
+		if (!activeDevice) {
+			onWorkerInitError?.(new Error(message));
+			return;
+		}
+		// Crashed after load: fail what's pending instead of buffering forever;
+		// the next request reloads.
+		teardownWorker(`TTS worker crashed: ${message}`);
+		useTtsStore.getState().setModelPhase("idle");
 	};
 	return w;
 }
 
-function teardownWorker(): void {
-	if (activeDevice === "node") void ttsNodeStop();
+function teardownWorker(reason = ENGINE_RESET): void {
+	loadGen++;
+	// Unconditionally: a native load may still be in flight (activeDevice is
+	// only set once it finishes), and its cached init would ignore new settings.
+	void ttsNodeStop();
+	// Settle a load in progress so its awaiters (playback, voice download,
+	// export) don't hang forever.
+	onWorkerInitError?.(new Error(reason));
 	worker?.terminate();
 	worker = null;
 	workerReady = null;
 	activeDevice = null;
 	onWorkerReady = null;
 	onWorkerInitError = null;
-	for (const resolve of pending.values()) {
-		resolve({ kind: "error", message: "TTS engine reset" });
-	}
+	const toFail = [...pending.values()];
 	pending.clear();
+	for (const resolve of toFail) {
+		resolve({ kind: "error", message: reason });
+	}
 	// Audio differs by device (q8 CPU vs fp32 GPU) and reload, so don't keep
 	// buffers across a teardown.
 	audioBufferCache.clear();
@@ -346,7 +379,25 @@ function requestGenerate(
 	const { pronunciationRules } = getTtsRulesForEngine();
 	const id = ++reqSeq;
 	return new Promise<GenerateResult>((resolve) => {
-		pending.set(id, resolve);
+		const chars = text.length;
+		queuedChars += chars;
+		// A stalled GPU or a silently killed worker never replies; without this
+		// the loop would sit in "buffering" for good.
+		const timer = setTimeout(
+			() => {
+				const finish = pending.get(id);
+				if (!finish) return;
+				pending.delete(id);
+				finish({ kind: "error", message: ENGINE_TIMEOUT });
+				if (worker === w) teardownWorker(ENGINE_TIMEOUT);
+			},
+			WATCHDOG_BASE_MS + WATCHDOG_MS_PER_CHAR * queuedChars,
+		);
+		pending.set(id, (result) => {
+			clearTimeout(timer);
+			queuedChars -= chars;
+			resolve(result);
+		});
 		w.postMessage({
 			type: "generate",
 			id,
@@ -356,6 +407,35 @@ function requestGenerate(
 			pronunciationRules,
 		});
 	});
+}
+
+/**
+ * {@link requestGenerate}, recovering from a dead backend: when the native
+ * CPU process has exited, reload (a fresh process) and retry the chunk once.
+ * Used by both playback and export.
+ */
+async function generateWithRecovery(
+	chunkText: string,
+	voice: KokoroVoiceId,
+	speed: number,
+): Promise<GenerateResult> {
+	const device = activeDevice;
+	const result = await requestGenerate(chunkText, voice, speed);
+	if (result.kind !== "error") return result;
+	const nodeDied = device === "node" && NODE_DEAD_RE.test(result.message);
+	if (!nodeDied) return result;
+	logWarn("Native CPU synthesis stopped; restarting it.", {
+		source: "tts",
+		detail: result.message,
+	});
+	// Several in-flight requests fail together; only the first tears down,
+	// the rest wait on the same reload.
+	if (activeDevice === device) {
+		teardownWorker(result.message);
+		useTtsStore.getState().setModelPhase("idle");
+	}
+	await ensureKokoroLoaded();
+	return requestGenerate(chunkText, voice, speed);
 }
 
 /**
@@ -372,7 +452,7 @@ async function synthesizeChunkBuffer(
 	if (!isSpeakableChunkText(chunkText)) return null;
 	const key = audioCacheKey(chunkText, voice, speed, rulesSignature());
 	return audioBufferCache.getOrCreate(key, async () => {
-		const result = await requestGenerate(chunkText, voice, speed);
+		const result = await generateWithRecovery(chunkText, voice, speed);
 		if (result.kind === "error") throw new Error(result.message);
 		if (result.kind === "empty") return null;
 		return rawToBuffer(ctx, {
@@ -419,7 +499,7 @@ export async function synthesizeChunkPcm(
 	speed: number,
 ): Promise<{ audio: Float32Array; sampleRate: number } | null> {
 	if (!isSpeakableChunkText(chunkText)) return null;
-	const result = await requestGenerate(chunkText, voice, speed);
+	const result = await generateWithRecovery(chunkText, voice, speed);
 	if (result.kind === "error") throw new Error(result.message);
 	if (result.kind === "empty") return null;
 	return { audio: result.audio, sampleRate: result.samplingRate };
@@ -622,9 +702,16 @@ export async function ensureKokoroLoaded(): Promise<void> {
 		setModelPhase("loading");
 		setModelProgress(0);
 
+		const gen = loadGen;
+		/** Abort this load if a reset superseded it while it awaited. */
+		const checkCurrent = () => {
+			if (gen !== loadGen) throw new Error(ENGINE_RESET);
+		};
 		workerReady = (async () => {
 			await ensureKokoroHubEnv();
+			checkCurrent();
 			const { device, dtype } = await resolveKokoroLoadOptions();
+			checkCurrent();
 			let backend: KokoroBackend | null = null;
 			if (device === "webgpu") {
 				logInfo("Loading voice model (GPU)…", { source: "models" });
@@ -632,6 +719,7 @@ export async function ensureKokoroLoaded(): Promise<void> {
 					await initWorker(device, dtype);
 					backend = "webgpu";
 				} catch (e) {
+					checkCurrent();
 					// GPU failed — fall through to the CPU paths so the app still speaks.
 					logWarn("GPU synthesis failed to initialize; falling back to CPU.", {
 						source: "models",
@@ -641,10 +729,14 @@ export async function ensureKokoroLoaded(): Promise<void> {
 					worker = null;
 				}
 			}
-			if (!backend) backend = await initNodeBackend();
+			if (!backend) {
+				backend = await initNodeBackend();
+				checkCurrent();
+			}
 			if (!backend) {
 				logInfo("Loading voice model (CPU)…", { source: "models" });
 				await initWorker("wasm", "q8");
+				checkCurrent();
 				backend = "wasm";
 			}
 			activeDevice = backend;
@@ -662,6 +754,8 @@ export async function ensureKokoroLoaded(): Promise<void> {
 				{ source: "models" },
 			);
 		})().catch((e: unknown) => {
+			// Superseded by a reset: the newer load owns the engine state now.
+			if (gen !== loadGen) throw e;
 			const msg = e instanceof Error ? e.message : String(e);
 			teardownWorker();
 			setModelPhase("error", msg);
@@ -810,6 +904,8 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 	try {
 		await ensureKokoroLoaded();
 	} catch (e) {
+		// A reset or stop during the load is not a playback failure.
+		if (signal.aborted) return;
 		const msg = e instanceof Error ? e.message : String(e);
 		useTtsStore.setState({
 			playback: "idle",
@@ -858,6 +954,9 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				snap.speed,
 			);
 		} catch (e) {
+			// Stopped, seeked or reset meanwhile: the new owner of playback
+			// state decides what to show, not this stale loop.
+			if (signal.aborted) return;
 			const msg = e instanceof Error ? e.message : String(e);
 			useTtsStore.setState({ playback: "idle", playbackError: msg });
 			logError("Playback stopped: couldn't synthesize audio.", {
