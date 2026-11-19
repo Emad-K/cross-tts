@@ -58,6 +58,14 @@ export function ttsNodeInit(
 			error: "Native engine isn't available on Intel Macs",
 		});
 	}
+	// transformers.js 4 needs the hub's on-disk cache to hand ORT a model path,
+	// and voices come from the hub; without it, native init can't work offline.
+	if (!hubBaseUrl) {
+		return Promise.resolve({
+			ok: false,
+			error: "Local model hub isn't running",
+		});
+	}
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
 		const proc = utilityProcess.fork(join(__dirname, "ttsNodeWorker.js"), [], {
 			serviceName: "cross-tts-native-tts",
