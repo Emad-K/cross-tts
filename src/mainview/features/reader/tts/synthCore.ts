@@ -54,6 +54,15 @@ export class SynthCore<V> {
 	}
 
 	/**
+	 * Drop cached audio whenever one of `engines` resets its backend (GPU→CPU
+	 * fallback, crashed or timed-out worker), so audio from the old backend
+	 * isn't replayed after the switch.
+	 */
+	clearOnReset(engines: readonly TtsEngine[]): void {
+		for (const engine of engines) engine.onReset = () => this.clear();
+	}
+
+	/**
 	 * Synthesize one chunk, recovering from a failed backend and retrying once
 	 * when the engine says a retry may succeed (GPU fault → CPU, crashed
 	 * native process → fresh one). Used by both playback and export.

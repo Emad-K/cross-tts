@@ -5,11 +5,11 @@ import type { TtsEngine } from "./ttsEngineTypes";
 
 type Call = { text: string; voice: string; epoch?: number; backend: string };
 
-/** A fake engine: "gpu" fails until recovered to "cpu"; jobs settle by hand. */
-function fakeEngine(id: string, opts: { gpuFaults?: boolean } = {}) {
+/** A fake engine: after faultGpu(), "gpu" fails until recovered to "cpu"; jobs settle by hand. */
+function fakeEngine(id: string) {
 	const calls: Call[] = [];
 	const settle: ((r: Float32Array | Error) => void)[] = [];
-	let backend: string | null = opts.gpuFaults ? "gpu" : "cpu";
+	let backend: string | null = "cpu";
 	let loads = 0;
 	const engine: TtsEngine = {
 		id,
@@ -42,7 +42,10 @@ function fakeEngine(id: string, opts: { gpuFaults?: boolean } = {}) {
 		},
 		onReset: null,
 	};
-	return { engine, calls, settle, loads: () => loads };
+	const faultGpu = () => {
+		backend = "gpu";
+	};
+	return { engine, calls, settle, loads: () => loads, faultGpu };
 }
 
 function coreFor(getEngine: () => TtsEngine) {
@@ -85,20 +88,25 @@ describe("SynthCore with a fake engine", () => {
 	});
 
 	test("recovers from a backend fault, retries once, and drops cached audio", async () => {
-		const f = fakeEngine("k", { gpuFaults: true });
+		const f = fakeEngine("k");
 		const core = coreFor(() => f.engine);
-		let resets = 0;
-		f.engine.onReset = () => {
-			resets++;
-			core.clear();
-		};
+		core.clearOnReset([f.engine]);
+		// Cache a chunk before the backend faults.
+		const cached = core.get("a", "v1", 1, (p) => p);
+		await tick();
+		f.settle[0]!(pcm(1));
+		await cached;
+		expect(core.has("a", "v1", 1)).toBe(true);
+		f.faultGpu();
 		const out = core.get("x", "v1", 1, (p) => p);
 		await tick();
-		f.settle[0]!(pcm(2));
+		f.settle[1]!(pcm(2));
 		expect((await out)?.length).toBe(2);
-		expect(f.calls.map((c) => c.backend)).toEqual(["gpu", "cpu"]);
+		expect(f.calls.map((c) => c.backend)).toEqual(["cpu", "gpu", "cpu"]);
 		expect(f.loads()).toBe(1);
-		expect(resets).toBe(1);
+		// The fallback reset dropped audio made before the switch.
+		expect(core.has("a", "v1", 1)).toBe(false);
+		expect(core.has("x", "v1", 1)).toBe(true);
 	});
 
 	test("errors the engine can't recover from are thrown and not cached", async () => {

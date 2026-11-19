@@ -44,7 +44,7 @@ const core = new SynthCore<AudioBuffer>({
 	rulesSignature: () => useTtsRulesStore.getState().signature,
 	prepareText: textForTtsSynthesis,
 });
-for (const engine of TTS_ENGINES) engine.onReset = () => core.clear();
+core.clearOnReset(TTS_ENGINES);
 
 /** Backend of the loaded model (null if not loaded). Lets the UI avoid an
  * unnecessary GPU reload when only a CPU-only setting changed. */
