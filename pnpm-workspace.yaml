@@ -25,7 +25,12 @@ ignoredBuiltDependencies:
 # through @huggingface/transformers (onnxruntime-web / onnxruntime-node),
 # js-yaml through electron-updater (and electron-builder). Drop each once the
 # parent package ships with that version or newer.
+#
+# onnxruntime-node/web: transformers 4.3 pins node 1.30.0 and a web dev
+# snapshot; use the matching stable 1.31.1 release for both instead.
 overrides:
   protobufjs@7: ^7.6.6
   tar@7: ^7.5.23
   js-yaml@4: ^4.3.2
+  onnxruntime-node: 1.31.1
+  onnxruntime-web: 1.31.1

@@ -9,6 +9,7 @@ import type {
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
+import { hubCacheDirectory } from "./kokoroHubServer";
 import { mainLog } from "./logBridge";
 
 /**
@@ -101,7 +102,12 @@ export function ttsNodeInit(
 			}
 			resolve({ ok: false, error: `Native TTS process exited (code ${code})` });
 		});
-		proc.postMessage({ type: "init", hubBaseUrl, numThreads });
+		proc.postMessage({
+			type: "init",
+			hubBaseUrl,
+			hubCacheDir: hubCacheDirectory(),
+			numThreads,
+		});
 	});
 	return initPromise;
 }

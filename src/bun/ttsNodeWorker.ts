@@ -1,9 +1,4 @@
-import {
-	AutoTokenizer,
-	StyleTextToSpeech2Model,
-	env,
-} from "@huggingface/transformers";
-import { KokoroTTS } from "kokoro-js";
+import { env } from "@huggingface/transformers";
 import { isPlausibleAudio } from "../mainview/features/reader/tts/audioPlausibility";
 import { phonemizeForKokoro } from "../mainview/features/reader/tts/kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "../mainview/features/reader/tts/phonemeTokenSplit";
@@ -11,17 +6,27 @@ import {
 	CANCELLED,
 	SynthJobQueue,
 } from "../mainview/features/reader/tts/synthJobQueue";
-import { KOKORO_MODEL_ID } from "../mainview/features/reader/tts/kokoroVoices";
+import {
+	generatePhonemes,
+	KOKORO_SAMPLE_RATE,
+	loadKokoro,
+	voiceLoader,
+	type Kokoro,
+} from "../mainview/features/reader/tts/kokoroModel";
+import {
+	kokoroVoiceOptions,
+	voiceBinUrl,
+	voiceBinUrlFromHub,
+} from "../mainview/features/reader/tts/kokoroVoices";
 import type { KokoroVoiceId } from "../mainview/features/reader/tts/kokoroVoices";
-import type {
-	TtsNodeGenerateParams,
-	TtsNodeVoiceOption,
-} from "../shared/ttsNodeRpc";
+import type { TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
+import { hubDiskCache } from "./hubDiskCache";
 
 /**
- * Native CPU TTS backend: an Electron utility process running kokoro-js on
- * onnxruntime-node. fp32 here is ~2.5× faster than the renderer's WASM q8 path
- * (native q8 is *slower* than fp32 — dequant overhead dominates on the CPU EP).
+ * Native CPU TTS backend: an Electron utility process running Kokoro on
+ * onnxruntime-node. fp32 here is ~2.5× faster than the renderer's WASM q8
+ * path (native q8 is *slower* than fp32 — dequant overhead dominates on the
+ * CPU EP).
  * Mirrors ttsWorker.ts (the renderer WASM/WebGPU worker): same phonemization,
  * same token-limit splitting, same result shape.
  */
@@ -37,52 +42,68 @@ const MAX_PHONEME_TOKENS = 500;
 
 type GenerateJob = { type: "generate"; id: number } & TtsNodeGenerateParams;
 
-type InMessage =
-	| { type: "init"; hubBaseUrl: string | null; numThreads: number }
-	| GenerateJob;
+type InitMessage = {
+	type: "init";
+	hubBaseUrl: string | null;
+	/** Where the hub keeps the files it serves (see hubDiskCache). */
+	hubCacheDir: string;
+	numThreads: number;
+};
+
+type InMessage = InitMessage | GenerateJob;
 
 const parentPort = process.parentPort;
 
-let tts: KokoroTTS | null = null;
-let loadPromise: Promise<KokoroTTS> | null = null;
+let tts: Kokoro | null = null;
+let loadPromise: Promise<Kokoro> | null = null;
+let numThreads = 0;
+let hubBaseUrl: string | null = null;
 
-function load(
-	hubBaseUrl: string | null,
-	numThreads: number,
-): Promise<KokoroTTS> {
+const loadVoice = voiceLoader(async (id) => {
+	const res = await fetch(
+		hubBaseUrl ? voiceBinUrlFromHub(hubBaseUrl, id) : voiceBinUrl(id),
+	);
+	if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
+	return res.arrayBuffer();
+});
+
+function loadOnCpu(): Promise<Kokoro> {
+	return loadKokoro({
+		dtype: DTYPE,
+		device: "cpu",
+		// The user's thread preference (Settings → Performance) must reach the
+		// native ORT session. 0 = auto (ORT's default: one per physical core).
+		session_options: numThreads > 0 ? { intraOpNumThreads: numThreads } : {},
+		progress_callback: (info) => {
+			if (info.status === "progress") {
+				parentPort.postMessage({
+					type: "progress",
+					value: info.progress / 100,
+				});
+			}
+		},
+	});
+}
+
+function load(init: InitMessage): Promise<Kokoro> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
-		if (hubBaseUrl) {
+		hubBaseUrl = init.hubBaseUrl;
+		numThreads = init.numThreads;
+		if (init.hubBaseUrl) {
 			// Fetch through the main process's caching hub proxy so the native and
 			// renderer backends share one on-disk model cache; skip transformers.js's
 			// own FS cache to avoid storing the weights twice.
-			env.remoteHost = hubBaseUrl;
+			env.remoteHost = init.hubBaseUrl;
 			env.useFSCache = false;
+			env.useCustomCache = true;
+			env.customCache = hubDiskCache(init.hubBaseUrl, init.hubCacheDir);
 			env.allowLocalModels = false;
 		}
-		// Not KokoroTTS.from_pretrained: it doesn't forward session_options, and
-		// the user's thread preference (Settings → Performance) must reach the
-		// native ORT session. 0 = auto (ORT's default: one per physical core).
-		loadPromise = Promise.all([
-			StyleTextToSpeech2Model.from_pretrained(KOKORO_MODEL_ID, {
-				dtype: DTYPE,
-				device: "cpu",
-				session_options:
-					numThreads > 0 ? { intraOpNumThreads: numThreads } : {},
-				progress_callback: (info) => {
-					if (info.status === "progress") {
-						parentPort.postMessage({
-							type: "progress",
-							value: info.progress / 100,
-						});
-					}
-				},
-			}),
-			AutoTokenizer.from_pretrained(KOKORO_MODEL_ID),
-		])
-			.then(([model, tokenizer]) => {
-				tts = new KokoroTTS(model, tokenizer);
-				return tts;
+		loadPromise = loadOnCpu()
+			.then((model) => {
+				tts = model;
+				return model;
 			})
 			.catch((e) => {
 				loadPromise = null;
@@ -92,28 +113,16 @@ function load(
 	return loadPromise;
 }
 
-function voiceOptions(model: KokoroTTS): TtsNodeVoiceOption[] {
-	const voices = model.voices as Record<
-		string,
-		{ name: string; language?: string }
-	>;
-	return Object.keys(voices).map((id) => {
-		const meta = voices[id];
-		const lang = meta.language ? ` · ${meta.language}` : "";
-		return { id, label: `${meta.name} (${id})${lang}` };
-	});
-}
-
 parentPort.on("message", (event) => {
 	const msg = event.data as InMessage;
 
 	if (msg.type === "init") {
 		const startedAt = performance.now();
-		void load(msg.hubBaseUrl, msg.numThreads)
-			.then((model) => {
+		void load(msg)
+			.then(() => {
 				parentPort.postMessage({
 					type: "ready",
-					voices: voiceOptions(model),
+					voices: kokoroVoiceOptions(),
 					loadMs: Math.round(performance.now() - startedAt),
 				});
 			})
@@ -162,6 +171,7 @@ async function runGenerate(msg: GenerateJob): Promise<void> {
 			});
 			return;
 		}
+		const voiceData = await loadVoice(msg.voice);
 		const phonemes = await phonemizeForKokoro(
 			msg.text,
 			msg.voice as KokoroVoiceId,
@@ -176,17 +186,10 @@ async function runGenerate(msg: GenerateJob): Promise<void> {
 		// tokenizer would silently truncate and the tail would go unspoken.
 		const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
 		const audios: Float32Array[] = [];
-		let samplingRate = 24000;
 		for (const piece of pieces) {
 			if (piece.trim() === "") continue;
 			if (await jobs.yieldAndCheckStale(msg)) return cancel();
-			const { input_ids } = tts.tokenizer(piece, { truncation: true });
-			const raw = await tts.generate_from_ids(input_ids, {
-				voice: msg.voice as KokoroVoiceId,
-				speed: msg.speed,
-			});
-			samplingRate = raw.sampling_rate;
-			audios.push(raw.audio as Float32Array);
+			audios.push(await generatePhonemes(tts, piece, voiceData, msg.speed));
 		}
 		if (audios.length === 0) {
 			parentPort.postMessage({ type: "result", id: msg.id, empty: true });
@@ -207,7 +210,7 @@ async function runGenerate(msg: GenerateJob): Promise<void> {
 			type: "result",
 			id: msg.id,
 			audio: joined,
-			samplingRate,
+			samplingRate: KOKORO_SAMPLE_RATE,
 			synthMs: Math.round(performance.now() - startedAt),
 		});
 	} catch (e) {

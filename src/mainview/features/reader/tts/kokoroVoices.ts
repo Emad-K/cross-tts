@@ -1,36 +1,46 @@
-/** Voice ids shipped with Kokoro-82M v1.0 (matches `kokoro-js` runtime). */
-export const KOKORO_VOICE_IDS = [
-	"af_heart",
-	"af_alloy",
-	"af_aoede",
-	"af_bella",
-	"af_jessica",
-	"af_kore",
-	"af_nicole",
-	"af_nova",
-	"af_river",
-	"af_sarah",
-	"af_sky",
-	"am_adam",
-	"am_echo",
-	"am_eric",
-	"am_fenrir",
-	"am_liam",
-	"am_michael",
-	"am_onyx",
-	"am_puck",
-	"am_santa",
-	"bf_emma",
-	"bf_isabella",
-	"bm_george",
-	"bm_lewis",
-	"bf_alice",
-	"bf_lily",
-	"bm_daniel",
-	"bm_fable",
-] as const;
+/** Voices shipped with Kokoro-82M v1.0 (display names as in upstream kokoro-js). */
+const KOKORO_VOICES = {
+	af_heart: { name: "Heart", language: "en-us" },
+	af_alloy: { name: "Alloy", language: "en-us" },
+	af_aoede: { name: "Aoede", language: "en-us" },
+	af_bella: { name: "Bella", language: "en-us" },
+	af_jessica: { name: "Jessica", language: "en-us" },
+	af_kore: { name: "Kore", language: "en-us" },
+	af_nicole: { name: "Nicole", language: "en-us" },
+	af_nova: { name: "Nova", language: "en-us" },
+	af_river: { name: "River", language: "en-us" },
+	af_sarah: { name: "Sarah", language: "en-us" },
+	af_sky: { name: "Sky", language: "en-us" },
+	am_adam: { name: "Adam", language: "en-us" },
+	am_echo: { name: "Echo", language: "en-us" },
+	am_eric: { name: "Eric", language: "en-us" },
+	am_fenrir: { name: "Fenrir", language: "en-us" },
+	am_liam: { name: "Liam", language: "en-us" },
+	am_michael: { name: "Michael", language: "en-us" },
+	am_onyx: { name: "Onyx", language: "en-us" },
+	am_puck: { name: "Puck", language: "en-us" },
+	am_santa: { name: "Santa", language: "en-us" },
+	bf_emma: { name: "Emma", language: "en-gb" },
+	bf_isabella: { name: "Isabella", language: "en-gb" },
+	bm_george: { name: "George", language: "en-gb" },
+	bm_lewis: { name: "Lewis", language: "en-gb" },
+	bf_alice: { name: "Alice", language: "en-gb" },
+	bf_lily: { name: "Lily", language: "en-gb" },
+	bm_daniel: { name: "Daniel", language: "en-gb" },
+	bm_fable: { name: "Fable", language: "en-gb" },
+} as const;
 
-export type KokoroVoiceId = (typeof KOKORO_VOICE_IDS)[number];
+export type KokoroVoiceId = keyof typeof KOKORO_VOICES;
+
+export const KOKORO_VOICE_IDS = Object.keys(KOKORO_VOICES) as KokoroVoiceId[];
+
+/** Voice picker entries, e.g. "Heart (af_heart) · en-us". */
+export function kokoroVoiceOptions(): { id: string; label: string }[] {
+	return KOKORO_VOICE_IDS.map((id) => {
+		const { name, language } = KOKORO_VOICES[id];
+		return { id, label: `${name} (${id}) · ${language}` };
+	});
+}
 
 export const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
