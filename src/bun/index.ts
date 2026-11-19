@@ -93,7 +93,7 @@ import {
 	ttsNodeGenerate,
 	ttsNodeInit,
 } from "./ttsNode";
-import type { TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
+import type { TtsNodeEngine, TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
 import {
 	initCrashCapture,
 	notifyCrashReportsOnLoad,
@@ -241,21 +241,28 @@ const EXPORT_DENIED = {
 	error: "Export location not allowed. Choose the folder again.",
 };
 
+/** Renderer-supplied native engine id; anything unknown is Kokoro. */
+const nodeEngine = (engine: unknown): TtsNodeEngine =>
+	engine === "supertonic" ? "supertonic" : "kokoro";
+
 function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
-	ipcMain.handle("ttsNodeInit", async () =>
+	ipcMain.handle("ttsNodeInit", async (_event, engine: unknown) =>
 		ttsNodeInit(
 			await kokoroHubReady,
 			loadAppConfig().cpuThreads ?? 0,
 			loadAppConfig().cudaEnabled,
+			nodeEngine(engine),
 		),
 	);
 	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
 		ttsNodeGenerate(params),
 	);
-	ipcMain.handle("ttsNodeStop", () => stopTtsNode());
+	ipcMain.handle("ttsNodeStop", (_event, engine: unknown) =>
+		stopTtsNode(nodeEngine(engine)),
+	);
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
 	// Must work while the window is tearing down: the renderer flushes a final
 	// save on beforeunload/pagehide, which can land after mainWindow is gone.

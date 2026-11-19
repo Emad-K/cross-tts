@@ -9,6 +9,9 @@ import type { PronunciationRule } from "./ttsTextRules";
  * WASM ≈ 1×), which is the difference between smooth playback and starvation.
  */
 
+/** Engines with a native backend (one utility process entry each). */
+export type TtsNodeEngine = "kokoro" | "supertonic";
+
 export type TtsNodeVoiceOption = { id: string; label: string };
 
 export type TtsNodeInitResult =
@@ -20,6 +23,8 @@ export type TtsNodeGenerateParams = {
 	voice: string;
 	speed: number;
 	pronunciationRules: PronunciationRule[];
+	/** Supertonic denoising steps (quality/speed); ignored by Kokoro. */
+	steps?: number;
 	/**
 	 * Playback epoch. Once a newer epoch arrives, queued older-epoch jobs reply
 	 * with error "cancelled". Omitted for export, which is never cancelled.

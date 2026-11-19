@@ -6,6 +6,10 @@ import {
 	normalizedReaderText,
 } from "./chunkText";
 import type { TtsChunk } from "./chunkText";
+import {
+	clampSupertonicSteps,
+	SUPERTONIC_DEFAULT_STEPS,
+} from "./supertonicModel";
 
 export type ModelPhase = "idle" | "loading" | "ready" | "error";
 export type VoiceDownloadPhase = "idle" | "running" | "done" | "error";
@@ -27,6 +31,10 @@ type TtsState = {
 	speed: number;
 	/** Extra silence inserted between sentences during playback, in ms. */
 	sentencePauseMs: number;
+	/** Supertonic denoising steps: more = better quality, slower. */
+	supertonicSteps: number;
+	/** Engines whose model licence terms the user acknowledged (once). */
+	licencesAccepted: string[];
 	modelPhase: ModelPhase;
 	modelError: string | null;
 	modelProgress: number | null;
@@ -53,6 +61,8 @@ type TtsState = {
 	setVolumePct: (v: number) => void;
 	setSpeed: (s: number) => void;
 	setSentencePauseMs: (ms: number) => void;
+	setSupertonicSteps: (steps: number) => void;
+	setLicencesAccepted: (engineIds: string[]) => void;
 	setModelPhase: (p: ModelPhase, err?: string | null) => void;
 	setModelProgress: (v: number | null) => void;
 	setVoiceDownload: (
@@ -96,6 +106,8 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	volumePct: 80,
 	speed: 1,
 	sentencePauseMs: 0,
+	supertonicSteps: SUPERTONIC_DEFAULT_STEPS,
+	licencesAccepted: [],
 	modelPhase: "idle",
 	modelError: null,
 	modelProgress: null,
@@ -167,6 +179,11 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	setSpeed: (s) => set({ speed: Math.min(2, Math.max(0.5, s)) }),
 
 	setSentencePauseMs: (ms) => set({ sentencePauseMs: clampSentencePauseMs(ms) }),
+
+	setSupertonicSteps: (steps) =>
+		set({ supertonicSteps: clampSupertonicSteps(steps) }),
+
+	setLicencesAccepted: (licencesAccepted) => set({ licencesAccepted }),
 
 	setModelPhase: (modelPhase, err = null) =>
 		set({

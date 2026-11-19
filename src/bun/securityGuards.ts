@@ -38,6 +38,15 @@ function matchHubFile(
 	let needsHash = false;
 	let sha256: string | undefined;
 	for (const repo of repos) {
+		const pinned = `/${repo.repo}/resolve/${repo.revision}/`;
+		const file = hfPath.startsWith(pinned) ? hfPath.slice(pinned.length) : "";
+		const exact = Object.hasOwn(repo.sha256, file) ? repo.sha256[file] : undefined;
+		if (exact) {
+			// Pinned by hash: allowed whatever its extension.
+			matched = true;
+			sha256 ??= exact;
+			continue;
+		}
 		const re = new RegExp(
 			`^/${escapeRe(repo.repo)}/resolve/${escapeRe(repo.revision)}/((?:${SEG}/)*${SEG}\\.(${repo.extensions.map(escapeRe).join("|")}))$`,
 		);

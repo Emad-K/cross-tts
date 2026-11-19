@@ -41,8 +41,17 @@ export type TtsSynthOptions = {
 export interface TtsEngine {
 	readonly id: string;
 	readonly displayName: string;
-	/** `notice`: attribution shown with the licence (e.g. upstream authors). */
-	readonly licence: { name: string; url: string; notice?: string };
+	readonly licence: {
+		name: string;
+		url: string;
+		/** Attribution shown with the licence (e.g. upstream authors). */
+		notice?: string;
+		/**
+		 * Licence terms the user must acknowledge once before the engine's
+		 * model is first downloaded (e.g. OpenRAIL-M use restrictions).
+		 */
+		acknowledge?: { summary: readonly string[]; text: string };
+	};
 	readonly languages: readonly string[];
 	/** Rate of the PCM `synthesize` returns. */
 	readonly sampleRate: number;
@@ -76,6 +85,8 @@ export interface TtsEngine {
 		speed: number,
 		opts: TtsSynthOptions,
 	): AsyncIterable<Float32Array>;
+	/** Engine settings that change the audio; part of the audio cache key. */
+	cacheTag?(): string;
 	/** Unload the model and forget backend failures (settings changed). */
 	dispose(): void;
 	/** Called whenever the engine tears its backend down; audio made before may differ. */

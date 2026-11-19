@@ -58,6 +58,22 @@ describe("hubRequestPath", () => {
 		expect(hubFileSha256(`/${repo}/resolve/${rev}/onnx/model.onnx`)).toMatch(/^[0-9a-f]{64}$/);
 		expect(hubFileSha256(`/${repo}/resolve/${rev}/config.json`)).toBeUndefined();
 	});
+	test("serves hash-pinned files whatever their extension, and only those", () => {
+		const repos = [
+			{ repo: "org/d", revision: "r", extensions: ["onnx"], unhashedExtensions: [], sha256: { LICENSE: "h" } },
+		];
+		expect(hubRequestPath(`/${t}/org/d/resolve/r/LICENSE`, t, repos)).toBe("/org/d/resolve/r/LICENSE");
+		expect(hubFileSha256("/org/d/resolve/r/LICENSE", repos)).toBe("h");
+		expect(hubRequestPath(`/${t}/org/d/resolve/main/LICENSE`, t, repos)).toBeNull();
+		expect(hubRequestPath(`/${t}/org/d/resolve/r/README`, t, repos)).toBeNull();
+		expect(hubRequestPath(`/${t}/org/d/resolve/r/constructor`, t, repos)).toBeNull();
+		const st = "supertone-oss-archive/supertonic-3";
+		const strev = "aafc6e32416a594460b32413efc49d7fe4ce6d46";
+		for (const f of ["LICENSE", "onnx/vocoder.onnx", "onnx/tts.json", "voice_styles/F1.json"]) {
+			expect(hubFileSha256(`/${st}/resolve/${strev}/${f}`)).toMatch(/^[0-9a-f]{64}$/);
+		}
+		expect(hubRequestPath(`/${t}/${st}/resolve/${strev}/voice_styles/X9.json`, t)).toBeNull();
+	});
 	test("refuses any weight file without a pinned sha256, whatever its format", () => {
 		const repos = [
 			{

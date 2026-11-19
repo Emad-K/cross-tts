@@ -110,12 +110,27 @@ which is licensed **GPL-3.0-or-later**. Distributions of Cross TTS therefore
 include GPL-3.0+ code, and the eSpeak NG source is available from its
 repository linked above.
 
+The optional **Supertonic 3** voice engine (by Supertone Inc.) is not
+bundled. When you choose it, its weights are downloaded from
+[supertone-oss-archive/supertonic-3](https://huggingface.co/supertone-oss-archive/supertonic-3)
+(pinned revision, sha256-verified). The weights are licensed under
+**BigScience OpenRAIL-M**. The app shows the licence's use restrictions and
+asks you to accept them once before the first download. Those restrictions
+include no unlawful use, no impersonation without consent, and disclosing
+machine-generated content. A copy of the licence is saved next to the
+downloaded model and kept in [third_party/supertonic-3/LICENSE](third_party/supertonic-3/LICENSE).
+The inference code in `src/mainview/features/reader/tts/supertonicModel.ts`
+is adapted from Supertone's MIT-licensed
+[reference implementation](https://github.com/supertone-inc/supertonic).
+
 ---
 
 <details>
 <summary><strong>For developers</strong></summary>
 
 Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback. onnxruntime-node 1.31 has no Intel-Mac (darwin/x64) binary, so on Intel Macs the native engine is skipped and the CPU path is the WASM worker (about 2.5× slower than native).
+
+**Supertonic 3** (Settings → Playback → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
 
 **Optional CUDA (Linux/Windows x64, experimental):** Settings → Performance →
 "Use NVIDIA GPU (CUDA) for native engine" (off by default) makes the native

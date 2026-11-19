@@ -1,9 +1,10 @@
 import { kokoroEngine } from "./kokoroEngine";
 import { phononEngine } from "./phononEngine";
+import { supertonicEngine } from "./supertonicEngine";
 import type { TtsEngine } from "./ttsEngineTypes";
 
 /** Registered engines; the first is the default (and the fallback for unknown ids). */
-export const TTS_ENGINES: readonly TtsEngine[] = [kokoroEngine, phononEngine];
+export const TTS_ENGINES: readonly TtsEngine[] = [kokoroEngine, phononEngine, supertonicEngine];
 
 export function getTtsEngine(id: string): TtsEngine {
 	return TTS_ENGINES.find((e) => e.id === id) ?? TTS_ENGINES[0]!;

@@ -18,6 +18,9 @@ import {
 	DropdownMenuItem,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -36,6 +39,7 @@ import {
 	useTtsStore,
 } from "./tts";
 import { getTtsEngine } from "./tts/ttsEngines";
+import { supertonicLanguageName } from "./tts/supertonicVoices";
 import { ChapterTime } from "./listenEstimate/ChapterTime";
 import { SleepTimerControl } from "./sleepTimer/SleepTimerControl";
 
@@ -93,6 +97,18 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 		() => getTtsEngine(engineId).listVoices(),
 		[engineId],
 	);
+	/**
+	 * Supertonic's 310 voices get one submenu per language; Kokoro's 40 stay a
+	 * flat list (its default voices must not sit a level down).
+	 */
+	const voicesByLanguage = useMemo(() => {
+		if (engineId !== "supertonic") return null;
+		const groups = new Map<string, typeof menuVoices>();
+		for (const v of menuVoices) {
+			groups.set(v.language, [...(groups.get(v.language) ?? []), v]);
+		}
+		return [...groups];
+	}, [engineId, menuVoices]);
 
 	useEffect(() => {
 		if (!isDraggingProgress) {
@@ -356,14 +372,32 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							>
 								<ScrollArea className="h-72">
 									<div className="p-1">
-										{menuVoices.map((o) => (
-											<DropdownMenuItem
-												key={o.id}
-												onClick={() => setVoice(o.id)}
-											>
-												{o.label}
-											</DropdownMenuItem>
-										))}
+										{voicesByLanguage
+											? voicesByLanguage.map(([lang, voices]) => (
+													<DropdownMenuSub key={lang}>
+														<DropdownMenuSubTrigger>
+															{supertonicLanguageName(lang)}
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent>
+															{voices.map((o) => (
+																<DropdownMenuItem
+																	key={o.id}
+																	onClick={() => setVoice(o.id)}
+																>
+																	{o.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+												))
+											: menuVoices.map((o) => (
+													<DropdownMenuItem
+														key={o.id}
+														onClick={() => setVoice(o.id)}
+													>
+														{o.label}
+													</DropdownMenuItem>
+												))}
 									</div>
 								</ScrollArea>
 							</DropdownMenuContent>

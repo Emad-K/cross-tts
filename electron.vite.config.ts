@@ -18,6 +18,10 @@ export default defineConfig({
 					index: resolve(__dirname, "src/bun/index.ts"),
 					// Utility-process entry: native CPU synthesis on onnxruntime-node.
 					ttsNodeWorker: resolve(__dirname, "src/bun/ttsNodeWorker.ts"),
+					supertonicNodeWorker: resolve(
+						__dirname,
+						"src/bun/supertonicNodeWorker.ts",
+					),
 				},
 			},
 		},

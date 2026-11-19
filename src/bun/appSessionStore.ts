@@ -51,6 +51,18 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	) {
 		d.sentencePauseMs = Math.round(o.sentencePauseMs);
 	}
+	if (
+		typeof o.supertonicSteps === "number" &&
+		o.supertonicSteps >= 1 &&
+		o.supertonicSteps <= 64
+	) {
+		d.supertonicSteps = Math.round(o.supertonicSteps);
+	}
+	if (Array.isArray(o.licencesAccepted)) {
+		d.licencesAccepted = o.licencesAccepted.filter(
+			(id): id is string => typeof id === "string",
+		);
+	}
 	if (typeof o.documentPath === "string" && o.documentPath.length > 0) {
 		d.documentPath = o.documentPath;
 	} else if (o.documentPath === null) {
@@ -80,6 +92,8 @@ function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 		volumePct: web.volumePct,
 		speed: web.speed,
 		sentencePauseMs: web.sentencePauseMs,
+		supertonicSteps: web.supertonicSteps,
+		licencesAccepted: web.licencesAccepted ?? [],
 		documentPath:
 			typeof web.documentPath === "string" && web.documentPath.length > 0
 				? web.documentPath
