@@ -44,11 +44,11 @@ const { SynthCore } = await import("./synthCore");
 test("a crashed worker restarts once and both the failed and the queued job retry", async () => {
 	const core = new SynthCore<Float32Array>({
 		engine: () => phononEngine,
-		prefs: () => ({ gpu: false, gpuPower: "auto", cpuThreads: 1 }),
+		prefs: () => ({ gpu: false, gpuPower: "auto", cpuThreads: 1, gpuFp16: false }),
 		rulesSignature: () => "",
 		prepareText: (t) => t,
 	});
-	await phononEngine.ensureLoaded({ gpu: false, gpuPower: "auto", cpuThreads: 1 });
+	await phononEngine.ensureLoaded({ gpu: false, gpuPower: "auto", cpuThreads: 1, gpuFp16: false });
 	// The second is queued behind the first, as a playback prefetch would be.
 	const [a, b] = await Promise.all([
 		core.generate("Hello there.", "default", 1),
