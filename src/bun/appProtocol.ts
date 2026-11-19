@@ -13,7 +13,8 @@ import { protocol } from "electron";
 export const APP_SCHEME = "app";
 const APP_HOST = "bundle";
 
-export const APP_INDEX_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
+export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
+export const APP_INDEX_URL = `${APP_ORIGIN}/index.html`;
 
 const MIME: Record<string, string> = {
 	".html": "text/html",

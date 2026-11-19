@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import {
 	APP_INDEX_URL,
+	APP_ORIGIN,
 	handleAppRequests,
 	registerAppScheme,
 } from "./appProtocol";
+import { isAllowedOrigin, urlOrigin } from "./securityGuards";
 import { APP_SESSION_VERSION } from "../shared/appSession";
 import type { WebPersistedSlice } from "../shared/appSession";
 import {
@@ -114,6 +116,26 @@ if (process.platform === "linux") {
 	app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 }
 registerAppScheme();
+
+// Dev-only renderer server (electron-vite); ignored in packaged builds.
+const devRendererUrl = app.isPackaged
+	? undefined
+	: process.env["ELECTRON_RENDERER_URL"];
+/** Origins the app's own UI is served from. Anything else is untrusted. */
+const TRUSTED_ORIGINS = [APP_ORIGIN, urlOrigin(devRendererUrl ?? "")].filter(
+	(o): o is string => o !== null,
+);
+
+// The preload exposes `window.api` to whatever page the window shows, so the
+// window must never leave the app's own origin (e.g. a link dragged onto it),
+// open popups, or embed webviews.
+app.on("web-contents-created", (_event, wc) => {
+	wc.on("will-navigate", (e, url) => {
+		if (!isAllowedOrigin(url, TRUSTED_ORIGINS)) e.preventDefault();
+	});
+	wc.setWindowOpenHandler(() => ({ action: "deny" }));
+	wc.on("will-attach-webview", (e) => e.preventDefault());
+});
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
@@ -480,9 +502,8 @@ function createWindow(): void {
 		});
 	});
 
-	const devUrl = process.env["ELECTRON_RENDERER_URL"];
-	if (!app.isPackaged && devUrl) {
-		void mainWindow.loadURL(devUrl);
+	if (devRendererUrl) {
+		void mainWindow.loadURL(devRendererUrl);
 	} else {
 		void mainWindow.loadURL(APP_INDEX_URL);
 	}
