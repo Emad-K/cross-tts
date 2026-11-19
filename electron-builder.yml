@@ -33,10 +33,17 @@ npmRebuild: false
 # interpreter: no ELECTRON_RUN_AS_NODE, no NODE_OPTIONS, no --inspect, and no
 # loading code from outside app.asar. The TTS worker uses utilityProcess.fork,
 # which starts a Chromium utility process and doesn't need RunAsNode.
-# Flipped in scripts/after-pack-fuses.cjs (runAsNode, NodeOptions env,
-# CLI inspect, GrantFileProtocolExtraPrivileges off; OnlyLoadAppFromAsar on).
-# Move to the `electronFuses` option when upgrading to electron-builder 26+.
-afterPack: scripts/after-pack-fuses.cjs
+# electron-builder flips these right before signing.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+  # Mac builds are unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false in release.yml),
+  # and flipping fuses invalidates the arm64 ad-hoc signature: re-sign ad hoc.
+  # Only acts on .app bundles, so Windows/Linux are unaffected.
+  resetAdHocDarwinSignature: true
 
 # onnxruntime-node's native libraries can't be loaded from inside the asar.
 asarUnpack:

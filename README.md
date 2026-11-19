@@ -120,10 +120,8 @@ pnpm run dist       # package installers (or dist:win / dist:mac / dist:linux)
 ```
 
 > **Linux / Node version notes** (handled automatically, but FYI):
-> - **Node 22 is the supported version** (CI uses it). On Node 23+, Electron's
->   bundled zip extractor silently fails to unpack its binary; a `postinstall`
->   step (`scripts/ensure-electron.mjs`) re-extracts it with the system `unzip`,
->   so installs still work — but install `unzip` if you don't have it.
+> - **Node 22.12+ is required** (Electron's installer needs it; CI uses 22).
+>   The `postinstall` step runs Electron's `install-electron` to fetch its binary.
 > - On **Ubuntu 24.04+/26.04**, AppArmor restricts unprivileged user namespaces,
 >   which breaks Chromium's sandbox for source/dev runs. `pnpm dev` / `pnpm start`
 >   go through `scripts/run-electron-vite.mjs`, which detects this and launches
