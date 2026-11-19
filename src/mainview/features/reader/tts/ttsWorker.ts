@@ -19,7 +19,6 @@ import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
 import {
 	KOKORO_REMOTE_PATH_TEMPLATE,
 	kokoroVoiceOptions,
-	type KokoroVoiceId,
 } from "./kokoroVoices";
 
 /**
@@ -47,7 +46,7 @@ type GenerateMessage = {
 	type: "generate";
 	id: number;
 	text: string;
-	voice: KokoroVoiceId;
+	voice: string;
 	speed: number;
 	pronunciationRules: PronunciationRule[];
 	/** Playback epoch; older-epoch jobs are cancelled (see SynthJobQueue). */

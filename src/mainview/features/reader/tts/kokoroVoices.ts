@@ -31,11 +31,60 @@ const KOKORO_VOICES = {
 	bf_lily: { name: "Lily", language: "en-gb" },
 	bm_daniel: { name: "Daniel", language: "en-gb" },
 	bm_fable: { name: "Fable", language: "en-gb" },
+	ef_dora: { name: "Dora", language: "es" },
+	em_alex: { name: "Alex", language: "es" },
+	em_santa: { name: "Santa", language: "es" },
+	ff_siwis: { name: "Siwis", language: "fr-fr" },
+	hf_alpha: { name: "Alpha", language: "hi" },
+	hf_beta: { name: "Beta", language: "hi" },
+	hm_omega: { name: "Omega", language: "hi" },
+	hm_psi: { name: "Psi", language: "hi" },
+	if_sara: { name: "Sara", language: "it" },
+	im_nicola: { name: "Nicola", language: "it" },
+	pf_dora: { name: "Dora", language: "pt-br" },
+	pm_alex: { name: "Alex", language: "pt-br" },
+	pm_santa: { name: "Santa", language: "pt-br" },
+	// ja (jf_*, jm_*) and zh (zf_*, zm_*) voices exist too, but Kokoro needs
+	// misaki's Japanese/Chinese G2P for them, which has no JavaScript port.
 } as const;
 
 export type KokoroVoiceId = keyof typeof KOKORO_VOICES;
 
-export const KOKORO_VOICE_IDS = Object.keys(KOKORO_VOICES) as KokoroVoiceId[];
+/**
+ * Kokoro language code (first letter of a voice id) → eSpeak NG language the
+ * phonemizer is called with, as in kokoro-js / misaki's espeak fallback.
+ */
+export const KOKORO_ESPEAK_LANGS = {
+	a: "en-us",
+	b: "en",
+	e: "es",
+	f: "fr-fr",
+	h: "hi",
+	i: "it",
+	p: "pt-br",
+} as const;
+
+export type KokoroLangCode = keyof typeof KOKORO_ESPEAK_LANGS;
+
+/** Language of a voice id; unknown prefixes read as US English. */
+export function kokoroLangFromVoice(voice: string): KokoroLangCode {
+	const code = voice.at(0) ?? "a";
+	return code in KOKORO_ESPEAK_LANGS ? (code as KokoroLangCode) : "a";
+}
+
+/**
+ * eSpeak languages the bundled `phonemizer` package can phonemize. Its
+ * espeak-ng build ships English data only, so the es/fr/it/pt-br/hi voices
+ * above stay hidden until it is swapped for a build with those languages.
+ */
+const BUNDLED_ESPEAK_LANGS: ReadonlySet<string> = new Set(["en-us", "en"]);
+
+/** Voices whose language the bundled phonemizer supports (the usable ones). */
+export const KOKORO_VOICE_IDS = (
+	Object.keys(KOKORO_VOICES) as KokoroVoiceId[]
+).filter((id) =>
+	BUNDLED_ESPEAK_LANGS.has(KOKORO_ESPEAK_LANGS[kokoroLangFromVoice(id)]),
+);
 
 /** Voice picker entries, e.g. "Heart (af_heart) · en-us". */
 export function kokoroVoiceOptions(): TtsVoice[] {

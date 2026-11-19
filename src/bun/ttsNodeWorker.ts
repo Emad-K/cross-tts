@@ -19,7 +19,6 @@ import {
 	kokoroVoiceOptions,
 	voiceBinUrlFromHub,
 } from "../mainview/features/reader/tts/kokoroVoices";
-import type { KokoroVoiceId } from "../mainview/features/reader/tts/kokoroVoices";
 import type { TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
 import { cudaUnavailableReason, ortBindingDir } from "./cudaSupport";
 import { hubDiskCache } from "./hubDiskCache";
@@ -247,7 +246,7 @@ async function runGenerate(msg: GenerateJob): Promise<void> {
 		const voiceData = await loadVoice(msg.voice);
 		const phonemes = await phonemizeForKokoro(
 			msg.text,
-			msg.voice as KokoroVoiceId,
+			msg.voice,
 			msg.pronunciationRules,
 		);
 		if (phonemes.trim() === "") {

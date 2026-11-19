@@ -509,7 +509,7 @@ export const kokoroEngine: TtsEngine = {
 		name: "Apache-2.0",
 		url: "https://huggingface.co/hexgrad/Kokoro-82M",
 	},
-	languages: ["en-us", "en-gb"],
+	languages: [...new Set(kokoroVoiceOptions().map((v) => v.language))],
 	/** KOKORO_SAMPLE_RATE (not imported: kokoroModel pulls in transformers.js). */
 	sampleRate: 24_000,
 	defaultVoice: "af_heart",
