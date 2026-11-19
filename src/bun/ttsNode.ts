@@ -123,12 +123,14 @@ export function ttsNodeInit(
 			}
 		});
 		proc.on("exit", (code) => {
+			// A process swapped out for another engine was already cleaned up by
+			// stopTtsNode; its late exit mustn't fail the new process's requests.
 			if (child === proc) {
 				child = null;
 				childEngine = null;
 				initPromise = null;
+				failAllPending(`Native TTS process exited (code ${code})`);
 			}
-			failAllPending(`Native TTS process exited (code ${code})`);
 			if (code !== 0) {
 				mainLog({
 					level: "warn",
