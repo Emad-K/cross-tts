@@ -4,7 +4,6 @@ import {
 	readFileSync,
 	readdirSync,
 	statSync,
-	writeFileSync,
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { app } from "electron";
@@ -21,6 +20,7 @@ import {
 	coerceShortcutBindings,
 } from "../shared/shortcuts";
 import { coerceWatchedFolders } from "../shared/watchedFolders";
+import { backupUnreadableFile, writeFileAtomic } from "./atomicFile";
 
 const CONFIG_NAME = "app-config.json";
 const MODEL_SUBDIR = "kokoro-hf-hub";
@@ -52,6 +52,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 	try {
 		const parsed = JSON.parse(readFileSync(p, "utf8")) as unknown;
 		if (!parsed || typeof parsed !== "object") {
+			backupUnreadableFile(p);
 			cached = fallback;
 			return cached;
 		}
@@ -91,7 +92,10 @@ export function loadAppConfig(): AppConfigFileV1 {
 			coerceWatchedFolders(o.watchedFolders).filter(isAbsoluteUsableDir);
 		cached = next;
 		return cached;
-	} catch {
+	} catch (err) {
+		// Keep the broken file around: the next persist() rewrites it from defaults.
+		const bak = backupUnreadableFile(p);
+		console.error(`[config] unreadable ${p}, backed up to ${bak}:`, err);
 		cached = fallback;
 		return cached;
 	}
@@ -100,7 +104,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 function persist(config: AppConfigFileV1): void {
 	cached = config;
 	mkdirSync(defaultDataDir(), { recursive: true });
-	writeFileSync(
+	writeFileAtomic(
 		configPath(),
 		JSON.stringify({ ...config, version: APP_CONFIG_VERSION }, null, "\t"),
 	);

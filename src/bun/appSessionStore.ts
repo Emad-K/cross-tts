@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	APP_SESSION_VERSION,
@@ -11,6 +11,7 @@ import { coerceBookmarksByPath } from "../shared/bookmarks";
 import { coerceRecentBooks } from "../shared/recentBooks";
 import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 import { dataDir } from "./appConfigStore";
+import { backupUnreadableFile, writeFileAtomic } from "./atomicFile";
 
 const SESSION_NAME = "app-session.json";
 
@@ -98,9 +99,15 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 	try {
 		const raw = readFileSync(p, "utf8");
 		const parsed = JSON.parse(raw) as unknown;
-		if (!parsed || typeof parsed !== "object") return null;
+		if (!parsed || typeof parsed !== "object") {
+			backupUnreadableFile(p);
+			return null;
+		}
 		const root = parsed as Record<string, unknown>;
-		if (root.version !== APP_SESSION_VERSION) return null;
+		if (root.version !== APP_SESSION_VERSION) {
+			backupUnreadableFile(p);
+			return null;
+		}
 		let window: StoredWindowFrame | null = null;
 		if (root.window && typeof root.window === "object") {
 			const w = root.window as Record<string, unknown>;
@@ -120,7 +127,11 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 			fullScreen: root.fullScreen === true,
 			web,
 		};
-	} catch {
+	} catch (err) {
+		// The renderer falls back to defaults and its next save replaces this file,
+		// so keep a copy of the library/bookmarks rather than losing them.
+		const bak = backupUnreadableFile(p);
+		console.error(`[session] unreadable ${p}, backed up to ${bak}:`, err);
 		return null;
 	}
 }
@@ -132,7 +143,7 @@ export function saveAppSessionFile(session: AppSessionFileV1): void {
 		...session,
 		web: webForDisk(session.web),
 	};
-	writeFileSync(p, JSON.stringify(safe, null, "\t"));
+	writeFileAtomic(p, JSON.stringify(safe, null, "\t"));
 }
 
 export function pickInitialWindowFrame(

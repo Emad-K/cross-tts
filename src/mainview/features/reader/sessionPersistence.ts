@@ -37,7 +37,7 @@ function readProgress(
 	return within;
 }
 
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 2000;
 
 let scheduleSave: (() => void) | null = null;
 
