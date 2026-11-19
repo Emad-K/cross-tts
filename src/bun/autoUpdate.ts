@@ -1,7 +1,12 @@
-import { app, dialog, type BrowserWindow } from "electron";
+import {
+	type BrowserWindow,
+	type MessageBoxOptions,
+	app,
+	dialog,
+} from "electron";
 import electronUpdater from "electron-updater";
 import { IDLE_UPDATE_STATUS, type UpdateStatus } from "../shared/updateStatus";
-import { autoUpdatePref, setAutoUpdate } from "./appConfigStore";
+import { autoUpdatePref, loadAppConfig, setAutoUpdate } from "./appConfigStore";
 import { mainLog } from "./logBridge";
 import { markQuitting } from "./tray";
 
@@ -165,27 +170,37 @@ export function setAutoUpdateEnabled(enabled: boolean): void {
 
 /**
  * Wire GitHub-based auto-updates. Only runs in a packaged build (no-op in dev).
- * On first launch the user hasn't chosen yet (preference is null) — ask once,
- * persist the answer, then honor it. When enabled, new versions download in the
- * background and the renderer offers a restart-to-install.
+ * While the user hasn't chosen (preference is null, which means off) — ask
+ * once, persist the answer, then honor it. Not on the very first launch: the
+ * window is showing its welcome then, so the question waits for the next one.
+ * When enabled, new versions download in the background and the renderer
+ * offers a restart-to-install.
  */
-export async function initAutoUpdate(): Promise<void> {
+export async function initAutoUpdate(
+	window: () => BrowserWindow | null,
+): Promise<void> {
 	if (!app.isPackaged) return;
 
-	if (autoUpdatePref() === null) {
-		const result = await dialog
-			.showMessageBox({
-				type: "question",
-				buttons: ["Enable automatic updates", "Not now"],
-				defaultId: 0,
-				cancelId: 1,
-				title: "Automatic updates",
-				message: "Keep Cross TTS up to date automatically?",
-				detail:
-					"New versions download in the background and install when you restart. " +
-					"You can change this anytime in Settings → General.",
-			})
-			.catch(() => null);
+	// Read now: the renderer stores `welcomeSeen` moments after it loads.
+	if (autoUpdatePref() === null && loadAppConfig().welcomeSeen) {
+		const options: MessageBoxOptions = {
+			type: "question",
+			buttons: ["Enable automatic updates", "Not now"],
+			defaultId: 0,
+			cancelId: 1,
+			title: "Automatic updates",
+			message: "Keep Cross TTS up to date automatically?",
+			detail:
+				"New versions download in the background and install when you restart. " +
+				"You can change this anytime in Settings → General.",
+		};
+		// Attached to the window, so it can't open behind it.
+		const parent = window();
+		const result = await (
+			parent
+				? dialog.showMessageBox(parent, options)
+				: dialog.showMessageBox(options)
+		).catch(() => null);
 		setAutoUpdate(result?.response === 0);
 	}
 

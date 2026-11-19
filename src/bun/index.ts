@@ -845,7 +845,7 @@ app.whenReady().then(async () => {
 	void cudaDetected.then((note) => {
 		if (note) mainLog({ level: "info", source: "models", message: note });
 	});
-	void initAutoUpdate();
+	void initAutoUpdate(() => mainWindow);
 
 	kokoroHubReady = startKokoroHubServer(TRUSTED_ORIGINS)
 		.then((url) => {
