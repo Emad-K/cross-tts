@@ -81,7 +81,7 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 - **No supported GPU? The CPU keeps up:** the app falls back to a native CPU engine that generates speech faster than you listen on a modern multi-core processor (measured 3–4× realtime on a recent desktop CPU). Expect a few seconds of model loading per session and a brief pause before the first sentence; very old or busy machines may occasionally pause between sentences.
 - **Memory:** 4 GB RAM minimum, 8 GB comfortable.
 - **Disk:** roughly a few hundred MB — the app plus the voice files, downloaded once and cached.
-- **OS:** Windows 10/11, macOS 11+, or a current 64-bit Linux desktop.
+- **OS:** Windows 10/11, macOS 12 (Monterey)+, or a current 64-bit Linux desktop.
 - **Internet:** only for the one-time voice download and app updates. Reading and listening are **100% offline** after that.
 
 Synthesis settings (use GPU, CPU thread count) live in **Settings → Performance** if you want to tune them.
@@ -131,10 +131,8 @@ pnpm run dist       # package installers (or dist:win / dist:mac / dist:linux)
 ```
 
 > **Linux / Node version notes** (handled automatically, but FYI):
-> - **Node 22 is the supported version** (CI uses it). On Node 23+, Electron's
->   bundled zip extractor silently fails to unpack its binary; a `postinstall`
->   step (`scripts/ensure-electron.mjs`) re-extracts it with the system `unzip`,
->   so installs still work — but install `unzip` if you don't have it.
+> - **Node 22.12+ is required** (Electron's installer needs it; CI uses 22).
+>   The `postinstall` step runs Electron's `install-electron` to fetch its binary.
 > - On **Ubuntu 24.04+/26.04**, AppArmor restricts unprivileged user namespaces,
 >   which breaks Chromium's sandbox for source/dev runs. `pnpm dev` / `pnpm start`
 >   go through `scripts/run-electron-vite.mjs`, which detects this and launches

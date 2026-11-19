@@ -118,6 +118,9 @@ export function startKokoroHubServer(
 				"Cross-Origin-Resource-Policy": "cross-origin",
 				"Cache-Control": "public, max-age=31536000, immutable",
 				"Content-Type": "application/octet-stream",
+				// transformers.js grows its buffer one chunk at a time (a full copy
+				// each) without this: minutes, not seconds, for the 325 MB fp32 model.
+				"Content-Length": String(statSync(dest).size),
 				"X-Content-Type-Options": "nosniff",
 				Vary: "Origin",
 			};

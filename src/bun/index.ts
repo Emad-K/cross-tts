@@ -138,7 +138,8 @@ app.commandLine.appendSwitch(
 if (process.platform === "linux") {
 	app.commandLine.appendSwitch("enable-unsafe-webgpu");
 	app.commandLine.appendSwitch("ignore-gpu-blocklist");
-	app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+	// No ozone switch: Electron 38+ defaults to --ozone-platform=auto (native
+	// Wayland in Wayland sessions), and Chromium dropped --ozone-platform-hint.
 }
 registerAppScheme();
 
