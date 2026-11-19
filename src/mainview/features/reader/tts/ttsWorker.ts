@@ -5,6 +5,7 @@ import ortWasmUrl from "@transformers-dist/ort-wasm-simd-threaded.jsep.wasm?url"
 import type { PronunciationRule } from "@shared/ttsTextRules";
 import { isPlausibleAudio } from "./audioPlausibility";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
+import { cacheVoiceBin } from "./prefetchKokoroAssets";
 import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
 import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
@@ -140,9 +141,26 @@ async function selectGpuAdapter(power: GpuPower): Promise<void> {
 	}
 }
 
+let hubBaseUrl: string | null = null;
+const cachedVoices = new Set<string>();
+
+/**
+ * kokoro-js reads voice files from the Cache API, else fetches them straight
+ * from huggingface.co. Seed the cache from the local hub first so synthesis
+ * works offline once the hub has the file. On failure kokoro-js falls back
+ * to its own fetch, as before.
+ */
+async function ensureVoiceCached(id: string): Promise<void> {
+	if (cachedVoices.has(id)) return;
+	await cacheVoiceBin(id, hubBaseUrl)
+		.then(() => cachedVoices.add(id))
+		.catch(() => {});
+}
+
 function load(init: InitMessage): Promise<KokoroTTS> {
 	if (tts) return Promise.resolve(tts);
 	if (!loadPromise) {
+		hubBaseUrl = init.hubBaseUrl;
 		if (init.hubBaseUrl) {
 			env.remoteHost = init.hubBaseUrl;
 			env.useBrowserCache = false;
@@ -241,6 +259,7 @@ async function runGenerate(msg: GenerateMessage): Promise<void> {
 			});
 			return;
 		}
+		await ensureVoiceCached(msg.voice);
 		const phonemes = await phonemizeForKokoro(
 			msg.text,
 			msg.voice,

@@ -16,6 +16,40 @@ async function openVoiceCache(): Promise<Cache | undefined> {
 }
 
 /**
+ * Make sure one voice `.bin` is in the Cache API store kokoro-js reads.
+ *
+ * The cache key is always the canonical huggingface.co URL: that is the
+ * exact key kokoro-js looks up before falling back to fetching from
+ * huggingface.co itself. The bytes come from the local hub when there is
+ * one. Keying by the hub URL (random port, per-launch token) missed on
+ * every launch and was never seen by kokoro-js, so voices weren't offline.
+ */
+export async function cacheVoiceBin(
+	id: string,
+	hubBaseUrl: string | null,
+	signal?: AbortSignal,
+): Promise<void> {
+	const cache = await openVoiceCache();
+	const key = voiceBinUrl(id);
+	if (cache && (await cache.match(key))) return;
+	const url = hubBaseUrl ? voiceBinUrlFromHub(hubBaseUrl, id) : key;
+	const res = await fetch(url, { signal });
+	if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
+	const body = await res.arrayBuffer();
+	if (!cache) return;
+	try {
+		await cache.put(
+			key,
+			new Response(body, {
+				headers: { "Content-Type": "application/octet-stream" },
+			}),
+		);
+	} catch {
+		// ignore quota / private mode
+	}
+}
+
+/**
  * Fetch every Kokoro voice `.bin` into the Cache API (same store `kokoro-js` uses at runtime).
  */
 export async function prefetchAllVoiceBins(options?: {
@@ -24,42 +58,14 @@ export async function prefetchAllVoiceBins(options?: {
 	signal?: AbortSignal;
 }): Promise<void> {
 	const { onProgress, concurrency = 4, signal } = options ?? {};
-	const cache = await openVoiceCache();
 	const total = KOKORO_VOICE_IDS.length;
 	let loaded = 0;
 
-	const bump = () => {
-		loaded += 1;
-		onProgress?.(loaded, total);
-	};
-
 	const fetchOne = async (id: string) => {
 		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-		const hub = getKokoroHubBaseUrlSync();
-		const url = hub ? voiceBinUrlFromHub(hub, id) : voiceBinUrl(id);
-		if (cache) {
-			const hit = await cache.match(url);
-			if (hit) {
-				bump();
-				return;
-			}
-		}
-		const res = await fetch(url, { signal });
-		if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
-		const body = await res.arrayBuffer();
-		if (cache) {
-			try {
-				await cache.put(
-					url,
-					new Response(body, {
-						headers: { "Content-Type": "application/octet-stream" },
-					}),
-				);
-			} catch {
-				// ignore quota / private mode
-			}
-		}
-		bump();
+		await cacheVoiceBin(id, getKokoroHubBaseUrlSync(), signal);
+		loaded += 1;
+		onProgress?.(loaded, total);
 	};
 
 	const queue = [...KOKORO_VOICE_IDS];
