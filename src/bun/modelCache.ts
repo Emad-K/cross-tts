@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -11,9 +11,12 @@ import { MODEL_REPO, MODEL_REVISION } from "../shared/modelAssets";
  */
 
 /**
- * Stream `url` to `<dest>.download`, then rename it to `dest`. With `sha256`
- * the bytes are hashed on the way and a mismatch deletes the temp file and
- * throws, so a corrupt or swapped file never lands at `dest`.
+ * Stream `url` to a temp file next to `dest`, then rename it to `dest`. With
+ * `sha256` the bytes are hashed on the way and a mismatch deletes the temp
+ * file and throws, so a corrupt or swapped file never lands at `dest`. The
+ * temp name is unique per call: the hub and the Settings downloader can fetch
+ * the same file at once, and a shared temp would let one truncate the other's
+ * bytes after they were hashed.
  */
 export async function downloadToFile(
 	url: string,
@@ -27,7 +30,7 @@ export async function downloadToFile(
 	}
 	const total = Number(res.headers.get("content-length") || 0);
 	mkdirSync(dirname(dest), { recursive: true });
-	const tmp = `${dest}.download`;
+	const tmp = `${dest}.${randomBytes(6).toString("hex")}.download`;
 	const hash = createHash("sha256");
 	let loaded = 0;
 	try {

@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { MODEL_REPO, MODEL_REVISION } from "../shared/modelAssets";
 import { adoptLegacyModelCache, downloadToFile } from "./modelCache";
 
@@ -17,15 +17,20 @@ describe("downloadToFile", () => {
 		const dest = join(mkdtempSync(join(tmpdir(), "mc-")), "a", "f.onnx");
 		await downloadToFile(url, dest, sha);
 		expect(readFileSync(dest, "utf8")).toBe(body);
-		expect(existsSync(`${dest}.download`)).toBe(false);
+		expect(readdirSync(dirname(dest))).toEqual(["f.onnx"]);
+	});
+	test("concurrent downloads of one file don't share a temp file", async () => {
+		const dest = join(mkdtempSync(join(tmpdir(), "mc-")), "f.onnx");
+		await Promise.all([downloadToFile(url, dest, sha), downloadToFile(url, dest, sha)]);
+		expect(readFileSync(dest, "utf8")).toBe(body);
+		expect(readdirSync(dirname(dest))).toEqual(["f.onnx"]);
 	});
 	test("discards the download on a sha256 mismatch", async () => {
 		const dest = join(mkdtempSync(join(tmpdir(), "mc-")), "f.onnx");
 		await expect(downloadToFile(url, dest, "0".repeat(64))).rejects.toThrow(
 			/Checksum mismatch/,
 		);
-		expect(existsSync(dest)).toBe(false);
-		expect(existsSync(`${dest}.download`)).toBe(false);
+		expect(readdirSync(dirname(dest))).toEqual([]);
 	});
 });
 
