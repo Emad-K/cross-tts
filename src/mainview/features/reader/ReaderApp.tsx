@@ -87,11 +87,9 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 		reader.onload = () => {
 			const text =
 				typeof reader.result === "string" ? reader.result : "";
-			const path =
-				"path" in file &&
-				typeof (file as File & { path?: string }).path === "string"
-					? (file as File & { path: string }).path
-					: undefined;
+			// File.path was removed in Electron 32; the preload's webUtils bridge
+			// replaces it (null on web).
+			const path = pathForFile(file);
 			resolve({
 				format: "txt",
 				fileName: file.name,
@@ -567,15 +565,28 @@ export function ReaderApp() {
 		e.target.value = "";
 		if (!file) return;
 		const lower = file.name.toLowerCase();
-		if (!lower.endsWith(".txt") && !lower.endsWith(".epub")) return;
-		if (lower.endsWith(".epub")) return;
+		if (lower.endsWith(".epub")) {
+			showToast({ title: "EPUBs need the desktop app", variant: "destructive" });
+			return;
+		}
+		if (!lower.endsWith(".txt")) {
+			showToast({
+				title: `"${file.name}" isn't supported`,
+				description: "Only .txt and .epub files can be opened.",
+				variant: "destructive",
+			});
+			return;
+		}
 		try {
 			pendingChunkIndexRef.current = null;
 			setInitialChapterId(null);
 			setActiveChapterId(null);
 			setDocument(await readTxtFile(file));
 		} catch {
-			// Engine / toast layer can surface errors later.
+			showToast({
+				title: `Couldn't read "${file.name}"`,
+				variant: "destructive",
+			});
 		}
 	}, []);
 
