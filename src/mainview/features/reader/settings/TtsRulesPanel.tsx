@@ -688,7 +688,11 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			importUserRules(result.data, "replace");
 			closeRegexForm();
 			closePronForm();
-			setImportNotice(`Imported ${total} custom rule(s).`);
+			setImportNotice(
+				result.data.regexRules.length > 0
+					? `Imported ${total} custom rule(s). Regex rules come in disabled: review each pattern, then enable it.`
+					: `Imported ${total} custom rule(s).`,
+			);
 		} catch {
 			setImportError("Could not read the file.");
 		}

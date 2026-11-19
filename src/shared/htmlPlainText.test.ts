@@ -26,6 +26,40 @@ function referenceMap(pre: string): { canonical: string; map: number[] } {
 	return { canonical, map };
 }
 
+/**
+ * The previous fast path (re-finalizes the trailing whitespace run on every
+ * char, O(w²) on long runs). Kept as a test-only reference for the counters.
+ */
+function tailReferenceMap(pre: string): { canonical: string; map: number[] } {
+	const innerFull = finalizePlainTextInner(pre);
+	const leadingSkip = innerFull.length - innerFull.trimStart().length;
+	const canonical = innerFull.trim();
+	const canonicalLength = canonical.length;
+	const map = new Array<number>(pre.length + 1);
+	const clamp = (len: number): number =>
+		Math.min(canonicalLength, Math.max(0, len - leadingSkip));
+	let stableLen = 0;
+	let tail = "";
+	map[0] = clamp(0);
+	for (let i = 0; i < pre.length; i++) {
+		const c = pre[i]!;
+		if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+			tail += c;
+		} else {
+			if (tail) {
+				stableLen += finalizePlainTextInner(tail).length;
+				tail = "";
+			}
+			stableLen += 1;
+		}
+		const len = tail
+			? stableLen + finalizePlainTextInner(tail).length
+			: stableLen;
+		map[i + 1] = i + 1 < pre.length ? clamp(len) : canonicalLength;
+	}
+	return { canonical, map };
+}
+
 /** Deterministic LCG so the fuzz cases are reproducible. */
 function lcg(seed: number): () => number {
 	let s = seed >>> 0;
@@ -111,6 +145,33 @@ describe("buildPreToCanonicalMap fast path == naive reference", () => {
 			expect(a.canonical).toBe(b.canonical);
 			expect(a.map).toEqual(b.map);
 		}
+	});
+
+	test("fuzz: 300 strings with long whitespace runs match the old tail version", () => {
+		const rnd = lcg(0xbadf00d);
+		const ws = [" ", "\t", "\n", "\r", "\r\n"];
+		for (let n = 0; n < 300; n++) {
+			let s = "";
+			const parts = Math.floor(rnd() * 12);
+			for (let p = 0; p < parts; p++) {
+				if (rnd() < 0.4) s += rnd() < 0.5 ? "word" : "x";
+				const run = Math.floor(rnd() * 30);
+				for (let i = 0; i < run; i++) s += ws[Math.floor(rnd() * ws.length)];
+			}
+			const a = buildPreToCanonicalMap(s);
+			const b = tailReferenceMap(s);
+			expect(a.canonical).toBe(b.canonical);
+			expect(a.map).toEqual(b.map);
+		}
+	});
+
+	test("a 50k-char whitespace run stays fast (was O(w²))", () => {
+		const pre = `a${" \n\t".repeat(17_000)}b`;
+		const t0 = performance.now();
+		const { canonical, map } = buildPreToCanonicalMap(pre);
+		expect(performance.now() - t0).toBeLessThan(500);
+		expect(canonical).toBe("a\n\n\tb");
+		expect(map[pre.length]).toBe(canonical.length);
 	});
 });
 

@@ -37,9 +37,12 @@ function readProgress(
 	return within;
 }
 
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 2000;
 
 let scheduleSave: (() => void) | null = null;
+/** Set while buildWebSlice writes the library itself, so the save it is part of
+ * doesn't schedule another save (which would loop forever). */
+let writingLibraryFromSlice = false;
 
 export function touchSessionSave(): void {
 	scheduleSave?.();
@@ -74,7 +77,12 @@ export function buildWebSlice(
 			speed: t.speed,
 			updatedAt: Date.now(),
 		});
-		useLibraryStore.getState().setBooks(books);
+		writingLibraryFromSlice = true;
+		try {
+			useLibraryStore.getState().setBooks(books);
+		} finally {
+			writingLibraryFromSlice = false;
+		}
 	}
 
 	return {
@@ -260,18 +268,35 @@ export function subscribeDebouncedSessionSave(
 		}
 	};
 
+	// Window close / app quit may not fire visibilitychange, and the main process
+	// does no final save of its own. invoke() posts the IPC message right away,
+	// so a pending save still reaches main before the window is torn down.
+	const onUnload = () => {
+		if (timer === null) return;
+		clearTimeout(timer);
+		flush();
+	};
+
 	const unsubStore = useTtsStore.subscribe(schedule);
 	const unsubRules = useTtsRulesStore.subscribe(schedule);
 	const unsubBookmarks = useBookmarksStore.subscribe(schedule);
+	const unsubLibrary = useLibraryStore.subscribe(() => {
+		if (!writingLibraryFromSlice) schedule();
+	});
 	document.addEventListener("visibilitychange", onVisibility);
+	window.addEventListener("beforeunload", onUnload);
+	window.addEventListener("pagehide", onUnload);
 	scheduleSave = schedule;
 	schedule();
 
 	return () => {
 		document.removeEventListener("visibilitychange", onVisibility);
+		window.removeEventListener("beforeunload", onUnload);
+		window.removeEventListener("pagehide", onUnload);
 		unsubStore();
 		unsubRules();
 		unsubBookmarks();
+		unsubLibrary();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
 		void saveAppSessionRpc(

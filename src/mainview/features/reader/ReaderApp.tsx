@@ -10,6 +10,7 @@ import {
 import {
 	getEpubChapterContent,
 	getPendingCrashReports,
+	ipcErrorMessage,
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
@@ -86,11 +87,9 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 		reader.onload = () => {
 			const text =
 				typeof reader.result === "string" ? reader.result : "";
-			const path =
-				"path" in file &&
-				typeof (file as File & { path?: string }).path === "string"
-					? (file as File & { path: string }).path
-					: undefined;
+			// File.path was removed in Electron 32; the preload's webUtils bridge
+			// replaces it (null on web).
+			const path = pathForFile(file);
 			resolve({
 				format: "txt",
 				fileName: file.name,
@@ -509,8 +508,12 @@ export function ReaderApp() {
 					);
 					setDocument(toLoadedDocument(picked));
 				}
-			} catch {
-				inputRef.current?.click();
+			} catch (err) {
+				showToast({
+					title: "Couldn't open document",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -545,6 +548,12 @@ export function ReaderApp() {
 						: null,
 				);
 				setDocument(doc);
+			} catch (err) {
+				showToast({
+					title: "Couldn't open book",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -556,15 +565,28 @@ export function ReaderApp() {
 		e.target.value = "";
 		if (!file) return;
 		const lower = file.name.toLowerCase();
-		if (!lower.endsWith(".txt") && !lower.endsWith(".epub")) return;
-		if (lower.endsWith(".epub")) return;
+		if (lower.endsWith(".epub")) {
+			showToast({ title: "EPUBs need the desktop app", variant: "destructive" });
+			return;
+		}
+		if (!lower.endsWith(".txt")) {
+			showToast({
+				title: `"${file.name}" isn't supported`,
+				description: "Only .txt and .epub files can be opened.",
+				variant: "destructive",
+			});
+			return;
+		}
 		try {
 			pendingChunkIndexRef.current = null;
 			setInitialChapterId(null);
 			setActiveChapterId(null);
 			setDocument(await readTxtFile(file));
 		} catch {
-			// Engine / toast layer can surface errors later.
+			showToast({
+				title: `Couldn't read "${file.name}"`,
+				variant: "destructive",
+			});
 		}
 	}, []);
 
@@ -621,9 +643,14 @@ export function ReaderApp() {
 			}
 
 			let added = 0;
+			let lastError: string | null = null;
 			for (const file of supported) {
 				const path = pathForFile(file);
-				if (path && (await addBookToLibrary(path)) !== null) added++;
+				try {
+					if (path && (await addBookToLibrary(path)) !== null) added++;
+				} catch (err) {
+					lastError = ipcErrorMessage(err);
+				}
 			}
 			touchSessionSave();
 			if (added > 0) {
@@ -635,7 +662,8 @@ export function ReaderApp() {
 				const failed = supported.length - added;
 				showToast({
 					title: `Couldn't add ${failed} file${failed === 1 ? "" : "s"}`,
-					description: "They may be unreadable or invalid documents.",
+					description:
+						lastError ?? "They may be unreadable or invalid documents.",
 					variant: "destructive",
 				});
 			}

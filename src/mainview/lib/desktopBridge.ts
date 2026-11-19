@@ -70,6 +70,12 @@ export function pathForFile(file: File): string | null {
 	return path.length > 0 ? path : null;
 }
 
+/** Message of an error thrown in a main-process IPC handler, minus Electron's prefix. */
+export function ipcErrorMessage(err: unknown): string {
+	const msg = err instanceof Error ? err.message : String(err);
+	return msg.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
+}
+
 export async function readDocumentAtPath(
 	filePath: string,
 ): Promise<ReadDocumentResult | null> {

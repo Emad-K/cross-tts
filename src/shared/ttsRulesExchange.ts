@@ -211,7 +211,9 @@ export function applyImportedUserRules(
 			label: r.label,
 			pattern: r.pattern,
 			replacement: r.replacement,
-			enabled: r.enabled,
+			// Imported patterns run synchronously on every chunk, and a hostile one
+			// (e.g. `(\w+\s?)*$`) can freeze the app: the user reviews and enables.
+			enabled: false,
 			caseSensitive: r.caseSensitive,
 			builtIn: false,
 		}),

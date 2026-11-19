@@ -1,5 +1,8 @@
 import {
 	Fragment,
+	memo,
+	type Ref,
+	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useMemo,
@@ -113,6 +116,48 @@ function renderHighlightedSegments(
 	));
 }
 
+type ChunkSpanProps = {
+	index: number;
+	text: string;
+	/** Set only on the active chunk (highlighted, swept and scrolled to). */
+	activeRef: Ref<HTMLSpanElement> | null;
+	onChunkClick: (index: number) => void;
+};
+
+const ChunkSpan = memo(function ChunkSpan({
+	index,
+	text,
+	activeRef,
+	onChunkClick,
+}: ChunkSpanProps) {
+	const active = activeRef != null;
+	return (
+		<span
+			ref={activeRef ?? undefined}
+			role="button"
+			tabIndex={0}
+			className={cn(
+				"cursor-pointer rounded-sm transition-colors",
+				active && "bg-highlight text-highlight-foreground ring-1 ring-highlight",
+				active && SWEEP_CLASS,
+				!active && "hover:bg-muted/40",
+			)}
+			onClick={() => {
+				if (isTextSelectionClick(window.getSelection())) return;
+				onChunkClick(index);
+			}}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					onChunkClick(index);
+				}
+			}}
+		>
+			{text}
+		</span>
+	);
+});
+
 /**
  * Plain-text reader surface. With `chunks`, text is split into selectable read-along spans.
  */
@@ -140,53 +185,55 @@ export function TxtViewer({
 		return bindSweep(el);
 	}, [activeChunkIndex, normalized]);
 
-	const chunkBody = useMemo(() => {
+	// Latest click handler behind a stable callback, so memoized chunk spans
+	// don't re-render when the parent passes a fresh arrow function.
+	const onChunkClickRef = useRef(onChunkClick);
+	onChunkClickRef.current = onChunkClick;
+	const handleChunkClick = useCallback(
+		(index: number) => onChunkClickRef.current?.(index),
+		[],
+	);
+
+	// Text slices depend only on the chunking, not on the active sentence.
+	const segments = useMemo(() => {
 		if (!chunks?.length) return null;
-		const parts: ReactNode[] = [];
+		const out: { key: string; text: string; index: number | null }[] = [];
 		let pos = 0;
 		for (const c of chunks) {
 			if (c.start > pos) {
-				parts.push(
-					<Fragment key={`gap-${pos}`}>{normalized.slice(pos, c.start)}</Fragment>,
-				);
+				out.push({
+					key: `gap-${pos}`,
+					text: normalized.slice(pos, c.start),
+					index: null,
+				});
 			}
-			const active = activeChunkIndex === c.index;
-			parts.push(
-				<span
-					key={`chunk-${c.index}`}
-					ref={active ? activeChunkRef : undefined}
-					role="button"
-					tabIndex={0}
-					className={cn(
-						"cursor-pointer rounded-sm transition-colors",
-						active &&
-							"bg-highlight text-highlight-foreground ring-1 ring-highlight",
-						active && SWEEP_CLASS,
-						!active && "hover:bg-muted/40",
-					)}
-					onClick={() => {
-						if (isTextSelectionClick(window.getSelection())) return;
-						onChunkClick?.(c.index);
-					}}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							onChunkClick?.(c.index);
-						}
-					}}
-				>
-					{normalized.slice(c.start, c.end)}
-				</span>,
-			);
+			out.push({
+				key: `chunk-${c.index}`,
+				text: normalized.slice(c.start, c.end),
+				index: c.index,
+			});
 			pos = c.end;
 		}
 		if (pos < normalized.length) {
-			parts.push(
-				<Fragment key="tail">{normalized.slice(pos)}</Fragment>,
-			);
+			out.push({ key: "tail", text: normalized.slice(pos), index: null });
 		}
-		return parts;
-	}, [chunks, normalized, activeChunkIndex, onChunkClick]);
+		return out;
+	}, [chunks, normalized]);
+
+	// Per sentence, only the previous and the new active ChunkSpan re-render.
+	const chunkBody = segments?.map((seg) =>
+		seg.index == null ? (
+			<Fragment key={seg.key}>{seg.text}</Fragment>
+		) : (
+			<ChunkSpan
+				key={seg.key}
+				index={seg.index}
+				text={seg.text}
+				activeRef={activeChunkIndex === seg.index ? activeChunkRef : null}
+				onChunkClick={handleChunkClick}
+			/>
+		),
+	);
 
 	const paragraphBody = useMemo(() => {
 		const blocks: { block: string; start: number }[] = [];
