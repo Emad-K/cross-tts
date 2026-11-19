@@ -47,6 +47,7 @@ export function stopTtsNode(): void {
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
 	numThreads: number,
+	cuda: boolean,
 ): Promise<TtsNodeInitResult> {
 	if (initPromise) return initPromise;
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
@@ -63,6 +64,9 @@ export function ttsNodeInit(
 					}
 					break;
 				}
+				case "log":
+					mainLog({ level: msg.level, source: "models", message: msg.message });
+					break;
 				case "ready":
 					resolve({ ok: true, voices: msg.voices, loadMs: msg.loadMs });
 					break;
@@ -107,6 +111,7 @@ export function ttsNodeInit(
 			hubBaseUrl,
 			hubCacheDir: hubCacheDirectory(),
 			numThreads,
+			cuda,
 		});
 	});
 	return initPromise;

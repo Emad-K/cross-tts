@@ -521,6 +521,41 @@ function CpuThreadsControl() {
 	);
 }
 
+function CudaControl() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setCudaEnabled = useAppSettingsStore((s) => s.setCudaEnabled);
+	if (!config?.cudaSupported) return null;
+	const onToggle = async (next: boolean) => {
+		await setCudaEnabled(next);
+		// The native engine picks its execution provider when it loads.
+		if (getActiveDevice() === "node") resetKokoroEngine();
+	};
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<label
+				htmlFor={switchId}
+				className="flex cursor-pointer items-center justify-between gap-4"
+			>
+				<span className="text-sm font-medium">
+					Use NVIDIA GPU (CUDA) for native engine
+				</span>
+				<Switch
+					id={switchId}
+					checked={config.cudaEnabled}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</label>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Experimental. Needs an NVIDIA GPU with CUDA 12 and cuDNN 9 installed,
+				plus ONNX Runtime&apos;s CUDA provider libraries, which this app does
+				not ship. When any of that is missing the native engine logs why and
+				keeps using the CPU.
+			</p>
+		</div>
+	);
+}
+
 function capitalize(s: string): string {
 	return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
@@ -697,6 +732,7 @@ function PerformancePanel() {
 			</div>
 			{gpuEnabled && webgpuAvailable !== false ? <GpuPreferenceControl /> : null}
 			<CpuThreadsControl />
+			<CudaControl />
 		</SectionPane>
 	);
 }

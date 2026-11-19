@@ -87,6 +87,11 @@ export type AppRpcSchema = {
 			params: { threads: number };
 			response: AppConfigInfo;
 		};
+		/** Opt in to the CUDA execution provider for the native engine. */
+		setCudaEnabled: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
 		/** Enable/disable OS-global media shortcuts. */
 		setShortcutsEnabled: {
 			params: { enabled: boolean };

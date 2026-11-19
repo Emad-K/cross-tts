@@ -76,6 +76,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
+		if (typeof o.cudaEnabled === "boolean") next.cudaEnabled = o.cudaEnabled;
 		if (typeof o.shortcutsEnabled === "boolean") {
 			next.shortcutsEnabled = o.shortcutsEnabled;
 		}
@@ -135,6 +136,10 @@ export function setGpuPower(value: GpuPowerPreference): void {
 export function setCpuThreads(value: number): void {
 	const clean = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 	persist({ ...loadAppConfig(), cpuThreads: clean });
+}
+
+export function setCudaEnabled(value: boolean): void {
+	persist({ ...loadAppConfig(), cudaEnabled: value });
 }
 
 export function shortcutsEnabled(): boolean {
@@ -252,6 +257,10 @@ export function appConfigInfo(): AppConfigInfo {
 		gpuEnabled: config.gpuEnabled,
 		gpuPower: config.gpuPower,
 		cpuThreads: config.cpuThreads,
+		cudaEnabled: config.cudaEnabled,
+		cudaSupported:
+			process.arch === "x64" &&
+			(process.platform === "linux" || process.platform === "win32"),
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
 		autoUpdate: config.autoUpdate,
