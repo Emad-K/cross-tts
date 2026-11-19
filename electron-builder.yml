@@ -16,15 +16,20 @@ files:
   - "!**/node_modules/*/{CHANGELOG.md,README.md,README,*.flow,*.mk,*.d.ts,*.map}"
   # transformers' default model cache; fills up on dev machines (hundreds of MB).
   - "!**/node_modules/@huggingface/transformers/.cache/**"
-  # onnxruntime-node: keep only the binaries the binding actually loads.
-  # The TTS worker runs on CPU only (ttsNodeWorker device: "cpu"), so the GPU
-  # execution providers are dead weight (~330 MB); the binding links
-  # libonnxruntime.so.1, so the versioned copy is a duplicate.
-  - "!**/node_modules/onnxruntime-node/bin/**/{libonnxruntime_providers_cuda.so,libonnxruntime_providers_tensorrt.so,libonnxruntime.so.1.*}"
+  # The renderer bundles the ORT wasm/glue it uses into out/renderer; the
+  # package itself (~140 MB of dist variants) is never loaded at runtime.
+  - "!**/node_modules/onnxruntime-web/**"
+  # onnxruntime-node: never ship the CUDA/TensorRT execution providers. npm
+  # doesn't include them (a dev checkout only has them after an explicit
+  # `ONNXRUNTIME_NODE_INSTALL=cuda12` install); they are ~hundreds of MB and the
+  # opt-in CUDA setting expects the user to provide CUDA 12 + cuDNN 9 and the
+  # provider libraries. Without them the native engine logs why and uses CPU.
+  - "!**/node_modules/onnxruntime-node/bin/**/{libonnxruntime_providers_cuda.so,libonnxruntime_providers_shared.so,libonnxruntime_providers_tensorrt.so,onnxruntime_providers_cuda.dll,onnxruntime_providers_shared.dll,onnxruntime_providers_tensorrt.dll}"
   # ...and only the architecture being packaged. ${arch} is expanded per build
   # arch (x64 / arm64), so the extglob drops every *other* arch's directory and
-  # never the one this target needs.
-  - "!**/node_modules/onnxruntime-node/bin/napi-v3/*/!(${arch})/**"
+  # never the one this target needs. (onnxruntime-node >= 1.2x ships napi-v6
+  # only, and no darwin/x64 build: Intel Macs fall back to the WASM engine.)
+  - "!**/node_modules/onnxruntime-node/bin/napi-v6/*/!(${arch})/**"
 
 asar: true
 npmRebuild: false
@@ -60,7 +65,7 @@ artifactName: ${name}-${version}-${arch}.${ext}
 # only the target platform's out of each installer.
 win:
   files:
-    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{darwin,linux}/**"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**"
   icon: assets/windows/icon_256x256.png
   target:
     - target: nsis
@@ -81,7 +86,7 @@ portable:
 
 mac:
   files:
-    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{win32,linux}/**"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{win32,linux}/**"
   icon: assets/icon.iconset
   category: public.app-category.productivity
   target:
@@ -92,7 +97,7 @@ mac:
 
 linux:
   files:
-    - "!**/node_modules/onnxruntime-node/bin/napi-v3/{darwin,win32}/**"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**"
   icon: assets/linux/icon_256x256.png
   category: AudioVideo
   maintainer: Emad Kazemi <emadkazemi310@gmail.com>
