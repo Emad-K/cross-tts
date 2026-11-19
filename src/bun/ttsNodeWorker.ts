@@ -15,7 +15,6 @@ import {
 } from "../mainview/features/reader/tts/kokoroModel";
 import {
 	kokoroVoiceOptions,
-	voiceBinUrl,
 	voiceBinUrlFromHub,
 } from "../mainview/features/reader/tts/kokoroVoices";
 import type { KokoroVoiceId } from "../mainview/features/reader/tts/kokoroVoices";
@@ -71,7 +70,8 @@ let hubBaseUrl: string | null = null;
 
 const loadVoice = voiceLoader(async (id) => {
 	const res = await fetch(
-		hubBaseUrl ? voiceBinUrlFromHub(hubBaseUrl, id) : voiceBinUrl(id),
+		// Bytes always come from the pinned revision (hub, else huggingface.co).
+		voiceBinUrlFromHub(hubBaseUrl ?? "https://huggingface.co/", id),
 	);
 	if (!res.ok) throw new Error(`Failed to fetch voice ${id}: ${res.status}`);
 	return res.arrayBuffer();

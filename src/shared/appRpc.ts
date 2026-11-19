@@ -127,6 +127,11 @@ export type AppRpcSchema = {
 			params: { dir: string; fileName: string; data: Uint8Array };
 			response: { ok: boolean; path: string | null; error?: string };
 		};
+		/** Rename a fully written `<fileName>.part` to `<fileName>`. */
+		finishAudioFile: {
+			params: { dir: string; fileName: string };
+			response: { ok: boolean; path: string | null; error?: string };
+		};
 		/** Whether an audiobook track already exists (used to resume an export). */
 		audioFileExists: {
 			params: { dir: string; fileName: string };

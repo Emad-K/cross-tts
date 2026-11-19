@@ -2,6 +2,7 @@ import {
 	appendFileSync,
 	existsSync,
 	mkdirSync,
+	renameSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
@@ -347,6 +348,24 @@ function registerRpcHandlers(): void {
 			if (!path || !(data instanceof Uint8Array)) return EXPORT_DENIED;
 			try {
 				appendFileSync(path, Buffer.from(data));
+				return { ok: true, path };
+			} catch (e) {
+				return {
+					ok: false,
+					path: null,
+					error: e instanceof Error ? e.message : String(e),
+				};
+			}
+		},
+	);
+	ipcMain.handle(
+		"finishAudioFile",
+		(_event, { dir, fileName }: { dir: string; fileName: string }) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			const part = audioExportPath(dir, `${fileName}.part`, exportRoots);
+			if (!path || !part) return EXPORT_DENIED;
+			try {
+				renameSync(part, path);
 				return { ok: true, path };
 			} catch (e) {
 				return {

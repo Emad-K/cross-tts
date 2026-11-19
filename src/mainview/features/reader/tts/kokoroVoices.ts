@@ -1,3 +1,5 @@
+import { MODEL_REPO, MODEL_REVISION } from "@shared/modelAssets";
+
 /** Voices shipped with Kokoro-82M v1.0 (display names as in upstream kokoro-js). */
 const KOKORO_VOICES = {
 	af_heart: { name: "Heart", language: "en-us" },
@@ -42,8 +44,13 @@ export function kokoroVoiceOptions(): { id: string; label: string }[] {
 	});
 }
 
-export const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+export const KOKORO_MODEL_ID = MODEL_REPO;
 
+/**
+ * Cache API key voices are stored under. Kept on `main` so voices cached by
+ * earlier builds still hit; the bytes stored under it come from the pinned
+ * URL (voiceBinUrlFromHub).
+ */
 export function voiceBinUrl(voiceId: string): string {
 	return `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
 }
@@ -54,5 +61,5 @@ export function voiceBinUrlFromHub(
 	voiceId: string,
 ): string {
 	const base = hubBaseUrl.endsWith("/") ? hubBaseUrl : `${hubBaseUrl}/`;
-	return `${base}${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
+	return `${base}${KOKORO_MODEL_ID}/resolve/${MODEL_REVISION}/voices/${voiceId}.bin`;
 }

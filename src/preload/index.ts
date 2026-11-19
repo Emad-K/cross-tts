@@ -41,6 +41,7 @@ const api: AppApi = {
 		chooseExportFolder: () => ipcRenderer.invoke("chooseExportFolder"),
 		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
 		appendAudioFile: (params) => ipcRenderer.invoke("appendAudioFile", params),
+		finishAudioFile: (params) => ipcRenderer.invoke("finishAudioFile", params),
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),

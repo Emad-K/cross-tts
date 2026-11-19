@@ -1,4 +1,5 @@
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { MODEL_REVISION, MODEL_SHA256 } from "../shared/modelAssets";
 
 /**
  * Pure guards used by the main process to validate renderer-supplied URLs and
@@ -25,7 +26,8 @@ const KOKORO_REPO = "onnx-community/Kokoro-82M-v1\\.0-ONNX";
  * Map a local Kokoro hub request path (`/<token>/<repo>/resolve/<rev>/<file>`)
  * to the HuggingFace path it proxies (`/<repo>/resolve/<rev>/<file>`), or null
  * if the token is wrong or the path is anything but a model/config/voice file
- * of the Kokoro repo.
+ * of the Kokoro repo at the pinned MODEL_REVISION. ONNX files must also have a
+ * known sha256 (MODEL_SHA256) so their download can be verified.
  */
 export function hubRequestPath(pathname: string, token: string): string | null {
 	let p: string;
@@ -38,12 +40,16 @@ export function hubRequestPath(pathname: string, token: string): string | null {
 	if (!token || !p.startsWith(prefix)) return null;
 	const rest = p.slice(prefix.length);
 	const re = new RegExp(
-		`^${KOKORO_REPO}/resolve/${SEG}/(?:${SEG}/)*${SEG}\\.(?:json|onnx|bin)$`,
+		`^${KOKORO_REPO}/resolve/${MODEL_REVISION}/((?:${SEG}/)*${SEG}\\.(json|onnx|bin))$`,
 	);
-	return re.test(rest) ? `/${rest}` : null;
+	const m = re.exec(rest);
+	if (!m) return null;
+	if (m[2] === "onnx" && !MODEL_SHA256[m[1]!]) return null;
+	return `/${rest}`;
 }
 
-const AUDIO_EXT =/\.(mp3|wav|m4b)$/i;
+// An audio file, or its in-progress `<name>.part` (renamed once complete).
+const AUDIO_EXT = /\.(mp3|wav|m4b)(\.part)?$/i;
 
 /**
  * Absolute target for an audiobook export write, or null if the renderer asked

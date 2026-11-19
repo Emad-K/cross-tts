@@ -32,6 +32,9 @@ files:
   # never the one this target needs. (onnxruntime-node >= 1.2x ships napi-v6
   # only, and no darwin/x64 build: Intel Macs fall back to the WASM engine.)
   - "!**/node_modules/onnxruntime-node/bin/napi-v6/*/!(${arch})/**"
+  # main/utility only load dist/transformers.node.cjs; the web builds are dead
+  # weight (Vite bundles what the renderer needs into out/renderer).
+  - "!**/node_modules/@huggingface/transformers/dist/!(transformers.node.cjs)"
 
 asar: true
 npmRebuild: false
@@ -100,8 +103,16 @@ mac:
   category: public.app-category.productivity
   # Electron 38+ (Chromium 138+) no longer runs on macOS 11; make Finder say so.
   minimumSystemVersion: "12.0"
+  # electron-updater on macOS installs from the zip (Squirrel.Mac can't use a
+  # dmg), so ship both: dmg for first install, zip for auto-update. The zip
+  # only installs once these builds are signed; until then autoUpdate.ts only
+  # checks on macOS and points the user at the releases page.
   target:
     - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
       arch:
         - x64
         - arm64
@@ -109,6 +120,8 @@ mac:
 linux:
   files:
     - "!**/node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**"
+    # Our Linux targets are glibc-only; sharp's musl (Alpine) builds never load.
+    - "!**/node_modules/@img/*-linuxmusl-*/**"
   icon: assets/linux/icon_256x256.png
   category: AudioVideo
   maintainer: Emad Kazemi <emadkazemi310@gmail.com>
@@ -138,3 +151,11 @@ linux:
 deb:
   afterInstall: assets/linux/deb-after-install.sh
   afterRemove: assets/linux/deb-after-remove.sh
+
+# Same profile for rpm (openSUSE and other AppArmor rpm distros). The install
+# script only writes it when /etc/apparmor.d and apparmor_parser exist, so it
+# is a no-op on SELinux distros like Fedora. rpm needs its own remove script:
+# its upgrade order differs from dpkg's (see rpm-after-remove.sh).
+rpm:
+  afterInstall: assets/linux/deb-after-install.sh
+  afterRemove: assets/linux/rpm-after-remove.sh

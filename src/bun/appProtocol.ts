@@ -56,10 +56,11 @@ const COI_HEADERS: Record<string, string> = {
  * only the permissive meta policy that Vite HMR needs.
  *
  * - wasm-unsafe-eval: ONNX Runtime wasm/JSEP backends.
- * - No CDN and no blob: in script-src: the TTS worker points ORT's wasmPaths
- *   at the bundled .mjs/.wasm on app://, so ORT neither reaches
- *   cdn.jsdelivr.net nor imports its glue from a blob URL (verified: wasm
- *   synthesis works with both removed). worker-src keeps blob:.
+ * - No CDN and no blob: in script-src or worker-src: the TTS worker points
+ *   ORT's wasmPaths at the bundled .mjs/.wasm on app://, so ORT neither
+ *   reaches cdn.jsdelivr.net nor imports its glue from a blob URL, and its
+ *   pthread workers start from that app:// .mjs (verified: multi-threaded
+ *   wasm synthesis works with all three removed).
  * - 127.0.0.1:* is the local Kokoro hub; huggingface.co (+ its LFS/xet CDNs)
  *   is the fallback when the hub is down; dictionaryapi.dev and gstatic serve
  *   dictionary lookups and pronunciation audio.
@@ -67,7 +68,7 @@ const COI_HEADERS: Record<string, string> = {
 const CSP = [
 	"default-src 'self'",
 	"script-src 'self' 'wasm-unsafe-eval'",
-	"worker-src 'self' blob:",
+	"worker-src 'self'",
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' data: blob:",
 	"font-src 'self' data:",

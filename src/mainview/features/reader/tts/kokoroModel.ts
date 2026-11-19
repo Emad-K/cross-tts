@@ -5,6 +5,7 @@ import {
 	type PretrainedModelOptions,
 	type PreTrainedTokenizer,
 } from "@huggingface/transformers";
+import { MODEL_REVISION } from "@shared/modelAssets";
 import { KOKORO_MODEL_ID } from "./kokoroVoices";
 
 /**
@@ -31,8 +32,13 @@ export async function loadKokoro(
 	>,
 ): Promise<Kokoro> {
 	const [model, tokenizer] = await Promise.all([
-		StyleTextToSpeech2Model.from_pretrained(KOKORO_MODEL_ID, options),
-		AutoTokenizer.from_pretrained(KOKORO_MODEL_ID),
+		StyleTextToSpeech2Model.from_pretrained(KOKORO_MODEL_ID, {
+			...options,
+			revision: MODEL_REVISION,
+		}),
+		AutoTokenizer.from_pretrained(KOKORO_MODEL_ID, {
+			revision: MODEL_REVISION,
+		}),
 	]);
 	return { model, tokenizer };
 }

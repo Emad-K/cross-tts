@@ -80,6 +80,19 @@ import {
 	useTtsStore,
 } from "./tts";
 
+/**
+ * Apply a book's saved voice / speed, if it has any, before it opens. Every
+ * way of opening a book goes through this (library, drag-drop, file picker,
+ * session restore), so a book always plays with its own voice.
+ */
+function restoreBookVoice(path: string): void {
+	const resume = getBookResume(path);
+	if (resume?.voice && KOKORO_VOICE_IDS.includes(resume.voice as KokoroVoiceId)) {
+		useTtsStore.getState().setVoice(resume.voice as KokoroVoiceId);
+	}
+	if (resume?.speed != null) useTtsStore.getState().setSpeed(resume.speed);
+}
+
 function documentKey(doc: LoadedDocument): string {
 	return `${doc.format}:${doc.filePath ?? doc.fileName}`;
 }
@@ -202,6 +215,7 @@ export function ReaderApp() {
 			try {
 				const doc = await loadDocumentFromPath(session.documentPath);
 				if (cancelled || !doc) return;
+				restoreBookVoice(session.documentPath);
 				setDocument(doc);
 			} finally {
 				if (!cancelled) {
@@ -526,6 +540,7 @@ export function ReaderApp() {
 			try {
 				const picked = await pickDocument();
 				if (picked) {
+					restoreBookVoice(picked.filePath);
 					pendingChunkIndexRef.current = null;
 					setInitialChapterId(null);
 					setActiveChapterId(
@@ -556,16 +571,7 @@ export function ReaderApp() {
 			try {
 				const doc = await loadDocumentFromPath(path);
 				if (!doc) return;
-				// Restore this book's own voice / speed (falls back to current).
-				if (
-					resume?.voice &&
-					KOKORO_VOICE_IDS.includes(resume.voice as KokoroVoiceId)
-				) {
-					useTtsStore.getState().setVoice(resume.voice as KokoroVoiceId);
-				}
-				if (resume?.speed != null) {
-					useTtsStore.getState().setSpeed(resume.speed);
-				}
+				restoreBookVoice(path);
 				forceResumeRef.current = resume?.chunkIndex != null;
 				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
 				setInitialChapterId(resume?.chapterId ?? null);

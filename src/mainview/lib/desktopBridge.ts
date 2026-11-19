@@ -158,6 +158,15 @@ export async function appendAudioFile(
 	return b.request.appendAudioFile({ dir, fileName, data });
 }
 
+export async function finishAudioFile(
+	dir: string,
+	fileName: string,
+): Promise<{ ok: boolean; path: string | null; error?: string }> {
+	const b = bridge();
+	if (!b) return { ok: false, path: null, error: "Not in desktop app" };
+	return b.request.finishAudioFile({ dir, fileName });
+}
+
 export async function audioFileExists(
 	dir: string,
 	fileName: string,

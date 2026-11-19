@@ -69,6 +69,14 @@ Grab the file for your system from the [latest release](https://github.com/Emad-
 
 Updates arrive automatically inside the app.
 
+<a id="troubleshooting-linux"></a>
+> **Linux: the AppImage won't start on Ubuntu 24.04+.** These releases block the
+> user namespaces Chromium's sandbox needs unless an AppArmor profile allows the
+> app. The `.deb` and `.rpm` install that profile for you (on AppArmor systems;
+> Fedora uses SELinux and needs nothing), but an AppImage can't. Install the
+> `.deb` instead, or start the AppImage with `--no-sandbox` (this turns off
+> Chromium's sandbox for the app).
+
 > **macOS / Windows note:** the app isn't code-signed yet, so the first launch may show a "unidentified developer" or SmartScreen warning. On macOS: right-click the app → **Open**. On Windows: **More info → Run anyway**.
 
 ## System requirements
@@ -137,8 +145,9 @@ pnpm run dist       # package installers (or dist:win / dist:mac / dist:linux)
 >   which breaks Chromium's sandbox for source/dev runs. `pnpm dev` / `pnpm start`
 >   go through `scripts/run-electron-vite.mjs`, which detects this and launches
 >   with `--no-sandbox` *only when the sandbox can't otherwise work*. Installed
->   `.deb`/`.rpm` packages keep the sandbox on (their post-install sets the
->   `chrome-sandbox` setuid bit); the AppImage and source runs use the fallback.
+>   `.deb`/`.rpm` packages keep the sandbox on (their post-install adds an
+>   AppArmor profile granting user namespaces). The AppImage can't install one;
+>   see [Troubleshooting](#troubleshooting-linux).
 
 ### Project layout
 

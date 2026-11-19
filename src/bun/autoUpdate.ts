@@ -8,6 +8,12 @@ const { autoUpdater } = electronUpdater;
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 
+// ponytail: macOS builds are unsigned, and Squirrel.Mac refuses an update
+// whose signature doesn't match the running app, so downloading the zip would
+// only waste ~200 MB per check. Check and tell the user instead; flip this
+// once the mac builds are signed and notarized.
+const CAN_INSTALL_UPDATES = process.platform !== "darwin";
+
 function log(level: "info" | "warn", message: string, detail?: string): void {
 	mainLog({ level, source: "update", message, detail });
 }
@@ -46,6 +52,14 @@ function wireOnce(): void {
 	});
 
 	autoUpdater.on("update-available", (info) => {
+		if (!CAN_INSTALL_UPDATES) {
+			log("info", `Update ${info.version} available — download it from GitHub releases.`);
+			setStatus({
+				state: "error",
+				error: `Cross TTS ${info.version} is out. Automatic install isn't available on macOS yet — download it from the GitHub releases page.`,
+			});
+			return;
+		}
 		log("info", `Update ${info.version} available — downloading in the background…`);
 		setStatus({ state: "downloading", version: info.version });
 	});
@@ -73,8 +87,8 @@ function wireOnce(): void {
 function startChecking(): void {
 	if (timer) return;
 	wireOnce();
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.autoDownload = CAN_INSTALL_UPDATES;
+	autoUpdater.autoInstallOnAppQuit = CAN_INSTALL_UPDATES;
 
 	const check = () => {
 		autoUpdater.checkForUpdates().catch((err: unknown) => {
@@ -120,8 +134,8 @@ export function checkForUpdatesNow(): UpdateStatus {
 		return status;
 	}
 	wireOnce();
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.autoDownload = CAN_INSTALL_UPDATES;
+	autoUpdater.autoInstallOnAppQuit = CAN_INSTALL_UPDATES;
 	setStatus({ state: "checking" });
 	autoUpdater.checkForUpdates().catch((err: unknown) => {
 		const detail = err instanceof Error ? err.message : String(err);
