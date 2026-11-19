@@ -92,6 +92,7 @@ import { exportTtsRulesToFile } from "./ttsRulesIo";
 import { registerBackupHandlers } from "./backup";
 import {
 	hideInsteadOfClose,
+	refreshTray,
 	registerTrayHandlers,
 	showMainWindow,
 } from "./tray";
@@ -384,7 +385,8 @@ function registerRpcHandlers(): void {
 	registerUserDataHandlers(() => mainWindow, dataDir);
 	// Waits for the CUDA lookup so Settings lists the right backends.
 	ipcMain.handle("getAppConfig", async () => {
-		await cudaDetected;
+		// Also where a tray host that started after the app gets noticed.
+		await Promise.all([cudaDetected, refreshTray()]);
 		return appConfigInfo();
 	});
 	ipcMain.handle("setTtsBackend", (_event, { backend }: { backend: unknown }) => {

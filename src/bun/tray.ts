@@ -15,7 +15,7 @@ import {
 	loadAppConfig,
 	setKeepPlayingInBackground,
 } from "./appConfigStore";
-import { trayAvailable } from "./trayAvailability";
+import { refreshTrayAvailable, trayAvailable } from "./trayAvailability";
 
 /**
  * "Keep playing when the window is closed": a tray icon (menu bar on macOS)
@@ -112,11 +112,19 @@ export function syncTray(): void {
 }
 
 /**
+ * Ask the desktop again whether it has a tray, then match the icon to the
+ * answer. Asynchronous: the lookup can take a while on a slow session bus.
+ */
+export async function refreshTray(): Promise<void> {
+	await refreshTrayAvailable();
+	syncTray();
+}
+
+/**
  * For the window's "close" event: hides the window and returns true when the
  * app should keep playing in the background. Never hides without a tray icon.
  */
 export function hideInsteadOfClose(win: BrowserWindow): boolean {
-	// The tray host may have started (or gone) since the last look.
 	syncTray();
 	const action = closeAction({
 		keepPlaying: loadAppConfig().keepPlayingInBackground,
@@ -161,5 +169,5 @@ export function registerTrayHandlers(window: () => BrowserWindow | null): void {
 			if (menuChanged) refreshMenu();
 		},
 	);
-	syncTray();
+	void refreshTray();
 }

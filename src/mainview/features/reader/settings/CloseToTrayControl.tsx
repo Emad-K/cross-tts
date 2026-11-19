@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { Switch } from "@/components/ui/switch";
 import { useAppSettingsStore } from "./appSettingsStore";
 
@@ -11,6 +11,8 @@ export function CloseToTrayControl() {
 	const switchId = useId();
 	const hintId = useId();
 	const config = useAppSettingsStore((s) => s.config);
+	// The tray host can start after the app; ask again when this is shown.
+	useEffect(() => void useAppSettingsStore.getState().refresh(), []);
 	if (!config) return null;
 
 	const onToggle = async (enabled: boolean) => {
@@ -40,7 +42,7 @@ export function CloseToTrayControl() {
 			<p id={hintId} className="mt-3 text-xs text-muted-foreground">
 				{config.trayAvailable
 					? "Closing the window hides it and the book keeps playing. A Cross TTS icon in the system tray (the menu bar on a Mac) has Play, Next, Previous, Show window and Quit."
-					: "Not available here: this desktop doesn't show tray icons, so there would be no way to bring the window back. Closing the window quits the app. On GNOME, the AppIndicator extension adds tray icons."}
+					: "Not available here: Cross TTS couldn't find a system tray on this desktop, so there would be no way to bring the window back. Closing the window quits the app. On GNOME, the AppIndicator extension adds one."}
 			</p>
 		</div>
 	);
