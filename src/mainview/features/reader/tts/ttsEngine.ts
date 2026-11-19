@@ -69,6 +69,29 @@ let activeSources: AudioBufferSourceNode[] = [];
 let playbackAbort: AbortController | null = null;
 let playbackLoopPromise: Promise<void> | null = null;
 
+/**
+ * Perf instrumentation (console.debug, "[tts-perf]"): wall time from play/seek
+ * to the first audible sample, and the audio-clock gap between consecutive
+ * chunks beyond the configured sentence pause.
+ */
+let playRequestedAt = 0;
+let lastAudioEnd = 0;
+function notePerfStart(ctx: AudioContext, start: number, duration: number): void {
+	if (lastAudioEnd === 0) {
+		const ms =
+			performance.now() - playRequestedAt +
+			Math.max(0, start - ctx.currentTime) * 1000;
+		console.debug(
+			`[tts-perf] first-audio ${ms.toFixed(0)}ms (context ${ctx.sampleRate} Hz)`,
+		);
+	} else {
+		const pause = useTtsStore.getState().sentencePauseMs / 1000;
+		const gap = (start - lastAudioEnd - pause) * 1000;
+		console.debug(`[tts-perf] gap ${gap.toFixed(1)}ms`);
+	}
+	lastAudioEnd = start + duration;
+}
+
 /** Return true when the handler advanced to the next chapter and will resume playback. */
 type ChapterPlaybackFinishedHandler = () => boolean | Promise<boolean>;
 let chapterPlaybackFinishedHandler: ChapterPlaybackFinishedHandler | null =
@@ -303,6 +326,7 @@ function playBuffer(
 				return { seg, src };
 			});
 			startTime = ctx.currentTime + (single ? 0 : SCHEDULE_HEADROOM_S);
+			notePerfStart(ctx, startTime, duration);
 			nodes.forEach(({ seg, src }, i) => {
 				const segStart = startTime + seg.start / rate;
 				if (single) {
@@ -386,6 +410,8 @@ function interruptPlaybackForReschedule(): void {
 /** Stop any current loop and start a fresh one from the store's current chunk. */
 function startPlaybackLoopFresh(): void {
 	interruptPlaybackForReschedule();
+	playRequestedAt = performance.now();
+	lastAudioEnd = 0;
 	const ab = new AbortController();
 	playbackAbort = ab;
 	playbackLoopPromise = runPlaybackLoop(ab.signal);
