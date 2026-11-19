@@ -1,13 +1,34 @@
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import {
+	appendFileSync,
+	existsSync,
+	mkdirSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
+import {
+	app,
+	BrowserWindow,
+	dialog,
+	ipcMain,
+	Menu,
+	session,
+	shell,
+} from "electron";
 import {
 	APP_INDEX_URL,
+	APP_ORIGIN,
 	handleAppRequests,
 	registerAppScheme,
 } from "./appProtocol";
+import {
+	audioExportPath,
+	isAllowedOrigin,
+	isInsideRoot,
+	urlOrigin,
+} from "./securityGuards";
 import { APP_SESSION_VERSION } from "../shared/appSession";
-import type { WebPersistedSlice } from "../shared/appSession";
+import type { AppSessionFileV1, WebPersistedSlice } from "../shared/appSession";
 import {
 	addWatchedFolder,
 	appConfigInfo,
@@ -80,9 +101,10 @@ import {
 
 // TEST-ONLY HOOK (e2e/): point Electron's userData at a sandbox directory so
 // the Playwright smoke test runs against a clean config/session. Has no effect
-// unless the env var is set, which only the e2e harness does.
+// unless the env var is set, which only the e2e harness does, and is ignored in
+// packaged builds so it can't redirect a real install's data.
 const e2eUserData = process.env["CROSS_TTS_E2E_USER_DATA"];
-if (e2eUserData) {
+if (e2eUserData && !app.isPackaged) {
 	app.setPath("userData", e2eUserData);
 }
 
@@ -100,20 +122,44 @@ initCrashCapture();
 //      is a deprecated escape hatch that no longer works everywhere, so it can't
 //      be relied on alone.
 // Both must be set before the app is ready.
-app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 // Linux only: Chromium ships WebGPU off here (navigator.gpu is absent and the
 // GPU process falls back to software), so CPU/wasm is the only path unless we
 // force it on. These flags bring up hardware WebGPU (Vulkan) — verified on
 // Wayland + NVIDIA. Windows/macOS already expose WebGPU without them, and
 // `ignore-gpu-blocklist` there could force GPU onto genuinely-broken drivers,
 // so scope it to Linux.
+// A second appendSwitch("enable-features", …) replaces the first rather than
+// merging, so all features go in one call.
+app.commandLine.appendSwitch(
+	"enable-features",
+	process.platform === "linux" ? "SharedArrayBuffer,Vulkan" : "SharedArrayBuffer",
+);
 if (process.platform === "linux") {
-	app.commandLine.appendSwitch("enable-features", "Vulkan");
 	app.commandLine.appendSwitch("enable-unsafe-webgpu");
 	app.commandLine.appendSwitch("ignore-gpu-blocklist");
 	app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 }
 registerAppScheme();
+
+// Dev-only renderer server (electron-vite); ignored in packaged builds.
+const devRendererUrl = app.isPackaged
+	? undefined
+	: process.env["ELECTRON_RENDERER_URL"];
+/** Origins the app's own UI is served from. Anything else is untrusted. */
+const TRUSTED_ORIGINS = [APP_ORIGIN, urlOrigin(devRendererUrl ?? "")].filter(
+	(o): o is string => o !== null,
+);
+
+// The preload exposes `window.api` to whatever page the window shows, so the
+// window must never leave the app's own origin (e.g. a link dragged onto it),
+// open popups, or embed webviews.
+app.on("web-contents-created", (_event, wc) => {
+	wc.on("will-navigate", (e, url) => {
+		if (!isAllowedOrigin(url, TRUSTED_ORIGINS)) e.preventDefault();
+	});
+	wc.setWindowOpenHandler(() => ({ action: "deny" }));
+	wc.on("will-attach-webview", (e) => e.preventDefault());
+});
 
 const FALLBACK_FRAME = { width: 900, height: 700, x: 200, y: 200 };
 
@@ -164,6 +210,33 @@ async function getGpuInfo(): Promise<{ activeRenderer: string; gpus: string[] }>
 /** Resolves once the hub finished binding (or failed → null). */
 let kokoroHubReady: Promise<string | null> = Promise.resolve(null);
 let mainWindow: BrowserWindow | null = null;
+/**
+ * Folders the user picked via chooseExportFolder this session. Audiobook
+ * writes and revealPath are confined to these. The export folder isn't
+ * persisted (the dialog starts empty each time), so in-memory is enough.
+ */
+const exportRoots = new Set<string>();
+
+type WindowState = Pick<AppSessionFileV1, "window" | "maximized" | "fullScreen">;
+/** Last window geometry seen, kept so saves during teardown still have it. */
+let lastWindowState: WindowState | null = null;
+function snapshotWindowState(): WindowState | null {
+	if (!mainWindow || mainWindow.isDestroyed()) return null;
+	// Store the *normal* (restored) bounds — getBounds() on a maximized window
+	// returns the maximized rect, which restores a few px off-screen.
+	const f = mainWindow.getNormalBounds();
+	lastWindowState = {
+		window: { x: f.x, y: f.y, width: f.width, height: f.height },
+		maximized: mainWindow.isMaximized(),
+		fullScreen: mainWindow.isFullScreen(),
+	};
+	return lastWindowState;
+}
+const EXPORT_DENIED = {
+	ok: false,
+	path: null,
+	error: "Export location not allowed. Choose the folder again.",
+};
 
 function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
@@ -177,16 +250,16 @@ function registerRpcHandlers(): void {
 	);
 	ipcMain.handle("ttsNodeStop", () => stopTtsNode());
 	ipcMain.handle("loadAppSession", () => loadAppSessionFile());
-	ipcMain.handle("saveAppSession", (_event, web: WebPersistedSlice) => {
-		if (!mainWindow) return;
-		// Store the *normal* (restored) bounds — getBounds() on a maximized window
-		// returns the maximized rect, which restores a few px off-screen.
-		const f = mainWindow.getNormalBounds();
+	// Must work while the window is tearing down: the renderer flushes a final
+	// save on beforeunload/pagehide, which can land after mainWindow is gone.
+	// Window geometry then comes from the snapshot taken on "close".
+	ipcMain.handle("saveAppSession", (event, web: WebPersistedSlice) => {
+		const url = event.senderFrame?.url;
+		if (url !== undefined && !isAllowedOrigin(url, TRUSTED_ORIGINS)) return;
 		saveAppSessionFile({
 			version: APP_SESSION_VERSION,
-			window: { x: f.x, y: f.y, width: f.width, height: f.height },
-			maximized: mainWindow.isMaximized(),
-			fullScreen: mainWindow.isFullScreen(),
+			...(snapshotWindowState() ??
+				lastWindowState ?? { window: null, maximized: false, fullScreen: false }),
 			web,
 		});
 	});
@@ -233,7 +306,9 @@ function registerRpcHandlers(): void {
 			properties: ["openDirectory", "createDirectory"],
 		});
 		if (result.canceled || result.filePaths.length === 0) return null;
-		return result.filePaths[0]!;
+		const chosen = result.filePaths[0]!;
+		exportRoots.add(resolve(chosen));
+		return chosen;
 	});
 	ipcMain.handle(
 		"writeAudioFile",
@@ -241,9 +316,10 @@ function registerRpcHandlers(): void {
 			_event,
 			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
 		) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			if (!path || !(data instanceof Uint8Array)) return EXPORT_DENIED;
 			try {
 				mkdirSync(dir, { recursive: true });
-				const path = join(dir, fileName);
 				writeFileSync(path, Buffer.from(data));
 				return { ok: true, path };
 			} catch (e) {
@@ -261,8 +337,9 @@ function registerRpcHandlers(): void {
 			_event,
 			{ dir, fileName, data }: { dir: string; fileName: string; data: Uint8Array },
 		) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			if (!path || !(data instanceof Uint8Array)) return EXPORT_DENIED;
 			try {
-				const path = join(dir, fileName);
 				appendFileSync(path, Buffer.from(data));
 				return { ok: true, path };
 			} catch (e) {
@@ -276,8 +353,10 @@ function registerRpcHandlers(): void {
 	);
 	ipcMain.handle(
 		"audioFileExists",
-		(_event, { dir, fileName }: { dir: string; fileName: string }) =>
-			existsSync(join(dir, fileName)),
+		(_event, { dir, fileName }: { dir: string; fileName: string }) => {
+			const path = audioExportPath(dir, fileName, exportRoots);
+			return path !== null && existsSync(path);
+		},
 	);
 	ipcMain.handle(
 		"getBookCover",
@@ -304,7 +383,15 @@ function registerRpcHandlers(): void {
 	ipcMain.handle("stopFindInPage", () => {
 		mainWindow?.webContents.stopFindInPage("clearSelection");
 	});
+	// Only ever opens an export folder the user picked, never a file: openPath
+	// on a file launches it with its default handler.
 	ipcMain.handle("revealPath", (_event, { path }: { path: string }) => {
+		if (!isInsideRoot(path, exportRoots)) return;
+		try {
+			if (!statSync(path).isDirectory()) return;
+		} catch {
+			return;
+		}
 		void shell.openPath(path);
 	});
 	// Open a link in the user's default browser. Restricted to https so the
@@ -480,9 +567,8 @@ function createWindow(): void {
 		});
 	});
 
-	const devUrl = process.env["ELECTRON_RENDERER_URL"];
-	if (!app.isPackaged && devUrl) {
-		void mainWindow.loadURL(devUrl);
+	if (devRendererUrl) {
+		void mainWindow.loadURL(devRendererUrl);
 	} else {
 		void mainWindow.loadURL(APP_INDEX_URL);
 	}
@@ -501,6 +587,7 @@ function createWindow(): void {
 	setTtsNodeProgressTarget(mainWindow);
 	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
+	mainWindow.on("close", () => snapshotWindowState());
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
@@ -516,6 +603,19 @@ app.whenReady().then(async () => {
 	// has no menu commands; keyboard accelerators are handled in the renderer.
 	Menu.setApplicationMenu(null);
 
+	// Electron grants every permission by default. Deny all except clipboard
+	// writes (context-menu "Copy") from the app's own origin. WebGPU, audio
+	// playback, mediaSession and findInPage need no permission.
+	const allowPermission = (permission: string, url: string) =>
+		permission === "clipboard-sanitized-write" &&
+		isAllowedOrigin(url, TRUSTED_ORIGINS);
+	session.defaultSession.setPermissionRequestHandler((_wc, permission, cb, details) =>
+		cb(allowPermission(permission, details.requestingUrl)),
+	);
+	session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) =>
+		allowPermission(permission, origin),
+	);
+
 	// Serve the built renderer over app:// (with cross-origin-isolation headers)
 	// before the window loads it.
 	handleAppRequests(join(__dirname, "../renderer"));
@@ -524,7 +624,7 @@ app.whenReady().then(async () => {
 	createWindow();
 	void initAutoUpdate();
 
-	kokoroHubReady = startKokoroHubServer()
+	kokoroHubReady = startKokoroHubServer(TRUSTED_ORIGINS)
 		.then((url) => {
 			console.log(`Kokoro hub URL (for webview): ${url}`);
 			return url;

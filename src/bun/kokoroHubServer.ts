@@ -7,12 +7,14 @@ import {
 	renameSync,
 	statSync,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { modelCacheDir } from "./appConfigStore";
 import { mainLog } from "./logBridge";
+import { hubRequestPath } from "./securityGuards";
 
 const HF_ORIGIN = "https://huggingface.co";
 
@@ -97,50 +99,53 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	}
 }
 
-export function startKokoroHubServer(): Promise<string> {
+/**
+ * Start the local Kokoro model cache server. Only requests under a random
+ * per-launch path token, for files of the Kokoro repo, are served, so other
+ * local software and web pages can't use it as an open HuggingFace proxy.
+ * `allowedOrigins` get a CORS grant (the renderer fetches from app://).
+ */
+export function startKokoroHubServer(
+	allowedOrigins: readonly string[],
+): Promise<string> {
 	if (hub && hubBaseUrl) {
 		return Promise.resolve(hubBaseUrl);
 	}
 	mkdirSync(hubCacheDirectory(), { recursive: true });
 	console.log(`Kokoro HF files on disk: ${hubCacheDirectory()}`);
+	const token = randomBytes(16).toString("hex");
 
 	const server = createServer((req, res) => {
 		void (async () => {
+			const fail = (status: number, body: string) => {
+				res.writeHead(status, { "Content-Type": "text/plain" });
+				res.end(body);
+			};
 			const u = new URL(req.url ?? "/", "http://127.0.0.1");
-			if (req.method !== "GET") {
-				res.writeHead(405);
-				res.end("Method Not Allowed");
-				return;
-			}
-			const dest = safeHubFile(u.pathname);
-			if (!dest) {
-				res.writeHead(400);
-				res.end("Bad path");
-				return;
-			}
+			if (req.method !== "GET") return fail(405, "Method Not Allowed");
+			const hfPath = hubRequestPath(u.pathname, token);
+			const dest = hfPath ? safeHubFile(hfPath) : null;
+			if (!hfPath || !dest) return fail(404, "Not found");
 			try {
-				await ensureOnDisk(u.pathname, dest);
+				await ensureOnDisk(hfPath, dest);
 			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				console.error("[kokoro-hub]", msg);
-				res.writeHead(502);
-				res.end(msg);
-				return;
+				console.error("[kokoro-hub]", e instanceof Error ? e.message : String(e));
+				return fail(502, "Download failed");
 			}
-			if (!existsSync(dest)) {
-				res.writeHead(404);
-				res.end("Not found");
-				return;
-			}
+			if (!existsSync(dest)) return fail(404, "Not found");
 			const headers: Record<string, string> = {
-				"Access-Control-Allow-Origin": "*",
 				// The renderer is cross-origin isolated (COEP), so this cross-origin
 				// model fetch needs an explicit resource policy to be allowed.
 				"Cross-Origin-Resource-Policy": "cross-origin",
 				"Cache-Control": "public, max-age=31536000, immutable",
+				"Content-Type": "application/octet-stream",
+				"X-Content-Type-Options": "nosniff",
+				Vary: "Origin",
 			};
-			const ct = contentTypeFor(dest);
-			if (ct) headers["Content-Type"] = ct;
+			const origin = req.headers.origin;
+			if (origin && allowedOrigins.includes(origin)) {
+				headers["Access-Control-Allow-Origin"] = origin;
+			}
 			res.writeHead(200, headers);
 			createReadStream(dest)
 				.on("error", () => {
@@ -170,7 +175,7 @@ export function startKokoroHubServer(): Promise<string> {
 				rejectStart(new Error("Kokoro hub server failed to bind a port"));
 				return;
 			}
-			hubBaseUrl = `http://127.0.0.1:${address.port}/`;
+			hubBaseUrl = `http://127.0.0.1:${address.port}/${token}/`;
 			resolveStart(hubBaseUrl);
 		};
 		server.once("error", onError);
@@ -183,11 +188,4 @@ export function stopKokoroHubServer(): void {
 	hub?.close();
 	hub = null;
 	hubBaseUrl = null;
-}
-
-function contentTypeFor(filePath: string): string | null {
-	if (filePath.endsWith(".json")) return "application/json";
-	if (filePath.endsWith(".onnx")) return "application/octet-stream";
-	if (filePath.endsWith(".bin")) return "application/octet-stream";
-	return null;
 }

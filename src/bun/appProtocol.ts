@@ -13,7 +13,8 @@ import { protocol } from "electron";
 export const APP_SCHEME = "app";
 const APP_HOST = "bundle";
 
-export const APP_INDEX_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
+export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
+export const APP_INDEX_URL = `${APP_ORIGIN}/index.html`;
 
 const MIME: Record<string, string> = {
 	".html": "text/html",
@@ -46,6 +47,41 @@ const COI_HEADERS: Record<string, string> = {
 	"Cross-Origin-Embedder-Policy": "credentialless",
 	"Cross-Origin-Resource-Policy": "same-origin",
 };
+
+/**
+ * CSP sent as a header on every app:// response. It stacks with the meta-tag
+ * CSP in index.html (both are enforced), and unlike the meta tag it also
+ * covers worker scripts (the TTS worker and the ORT threads it spawns).
+ * The dev server (http://localhost:5173) isn't served from here, so dev keeps
+ * only the permissive meta policy that Vite HMR needs.
+ *
+ * - wasm-unsafe-eval: ONNX Runtime wasm/JSEP backends.
+ * - cdn.jsdelivr.net: transformers.js defaults ORT's wasmPaths to its CDN and
+ *   the TTS worker doesn't override it, so ORT's .mjs/.wasm come from there
+ *   (verified: without it the wasm backend fails to load). Drop it once
+ *   wasmPaths points at the bundled assets.
+ * - blob: in script-src: ORT fetches its .mjs and imports it from a blob URL
+ *   (verified: without it the wasm backend fails). worker-src blob: for the
+ *   ORT thread workers.
+ * - 127.0.0.1:* is the local Kokoro hub; huggingface.co (+ its LFS/xet CDNs)
+ *   is the fallback when the hub is down; dictionaryapi.dev and gstatic serve
+ *   dictionary lookups and pronunciation audio.
+ */
+const CSP = [
+	"default-src 'self'",
+	"script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net",
+	"worker-src 'self' blob:",
+	"style-src 'self' 'unsafe-inline'",
+	"img-src 'self' data: blob:",
+	"font-src 'self' data:",
+	"media-src 'self' blob: data:",
+	"connect-src 'self' blob: data: http://127.0.0.1:* https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.dictionaryapi.dev https://ssl.gstatic.com",
+	"object-src 'none'",
+	"frame-src 'none'",
+	"frame-ancestors 'none'",
+	"base-uri 'self'",
+	"form-action 'none'",
+].join("; ");
 
 /** Must be called before the app `ready` event. */
 export function registerAppScheme(): void {
@@ -87,6 +123,7 @@ export function handleAppRequests(rendererRoot: string): void {
 		try {
 			const data = await readFile(filePath);
 			const headers = new Headers(COI_HEADERS);
+			headers.set("Content-Security-Policy", CSP);
 			headers.set(
 				"Content-Type",
 				MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream",
