@@ -160,14 +160,17 @@ function resampleOffThread(
 			if (error) p?.reject(new Error(error));
 			else p?.resolve(out);
 		};
-		w.onerror = (e) => {
-			for (const p of resamplePending.values()) {
-				p.reject(new Error(e.message || "Resampler crashed"));
-			}
+		// A crash or an undecodable reply fails everything pending (a pending
+		// promise would otherwise sit in the audio cache forever) and drops
+		// the worker; the next call starts a fresh one.
+		const fail = (message: string) => {
+			for (const p of resamplePending.values()) p.reject(new Error(message));
 			resamplePending.clear();
 			w.terminate();
 			if (resampler === w) resampler = null;
 		};
+		w.onerror = (e) => fail(e.message || "Resampler crashed");
+		w.onmessageerror = () => fail("Resampler reply couldn't be read");
 		resampler = w;
 	}
 	// Transfer only a buffer this view owns outright; copy anything else
