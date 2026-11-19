@@ -287,9 +287,42 @@ export function applyTtsTextRules(
 ): string {
 	let out = text;
 	for (const rule of state.regexRules) {
+		const firstRun =
+			!rule.builtIn && rule.enabled && !timedRules.has(ruleTimingKey(rule));
+		if (!firstRun) {
+			out = applyRegexReplaceRule(out, rule);
+			continue;
+		}
+		timedRules.add(ruleTimingKey(rule));
+		const t0 = performance.now();
 		out = applyRegexReplaceRule(out, rule);
+		const ms = performance.now() - t0;
+		if (ms > SLOW_RULE_MS) slowRuleHandler?.(rule, ms);
 	}
 	return normalizeTtsWhitespace(out);
+}
+
+/**
+ * Time guard against catastrophic-backtracking user rules: the first time a
+ * custom rule runs it is timed, and one slower than this is reported so the
+ * app can disable it. ponytail: a regex that never returns still hangs that
+ * first chunk (JS can't interrupt it); importing rules disabled is the main
+ * defense, this catches the merely-slow ones before they run on every chunk.
+ */
+export const SLOW_RULE_MS = 50;
+const timedRules = new Set<string>();
+let slowRuleHandler: ((rule: RegexReplaceRule, ms: number) => void) | null =
+	null;
+
+function ruleTimingKey(rule: RegexReplaceRule): string {
+	return `${rule.id}\u0000${rule.pattern}\u0000${rule.caseSensitive}`;
+}
+
+/** Register who disables a slow custom rule (the rules store). */
+export function setSlowTtsRuleHandler(
+	handler: ((rule: RegexReplaceRule, ms: number) => void) | null,
+): void {
+	slowRuleHandler = handler;
 }
 
 export function isValidRegexPattern(pattern: string): boolean {

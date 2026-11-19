@@ -30,6 +30,27 @@ describe("ttsRulesExchange", () => {
 		expect(exp.version).toBe(TTS_RULES_EXPORT_VERSION);
 	});
 
+	test("imported regex rules arrive disabled even if exported enabled", () => {
+		const parsed = parseTtsRulesExport(
+			JSON.stringify({
+				format: TTS_RULES_EXPORT_FORMAT,
+				version: TTS_RULES_EXPORT_VERSION,
+				regexRules: [{ pattern: "(\\w+\\s?)*$", replacement: "", enabled: true }],
+				pronunciationRules: [],
+			}),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		const merged = applyImportedUserRules(
+			defaultTtsTextRulesState(),
+			parsed.data,
+			"append",
+			(p) => `${p}-1`,
+		);
+		const imported = merged.regexRules.find((r) => r.id === "regex-1");
+		expect(imported?.enabled).toBe(false);
+	});
+
 	test("round-trip replace keeps builtins", () => {
 		const state = defaultTtsTextRulesState();
 		state.pronunciationRules.push({
