@@ -116,6 +116,14 @@ function CudaAddonDialog({
 					The amount of GPU memory CUDA uses can&apos;t be capped. If it
 					can&apos;t start or runs out of memory, speech continues on the CPU.
 				</p>
+				{/* Read out in steps of 10%, not on every tick. */}
+				<p role="status" className="sr-only">
+					{progress === null
+						? ""
+						: progress >= 100
+							? "Verifying and unpacking"
+							: `Downloaded ${Math.floor(progress / 10) * 10}%`}
+				</p>
 				{progress !== null ? (
 					<div className="space-y-1.5">
 						<Progress value={progress} aria-label="Download progress" />
@@ -296,6 +304,15 @@ function BackendBenchmark({
 					</tbody>
 				</table>
 			) : null}
+			<p role="status" className="sr-only">
+				{phase === "running" && candidates[rows.length]
+					? `Measuring ${LABEL[candidates[rows.length]!.backend]}`
+					: phase === "done"
+						? faster
+							? `Benchmark finished. ${LABEL[faster]} was fastest.`
+							: "Benchmark finished."
+						: ""}
+			</p>
 			{faster ? (
 				<div className="mt-3 flex items-center justify-between gap-4">
 					<p className="text-xs text-muted-foreground">
