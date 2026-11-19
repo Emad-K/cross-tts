@@ -12,6 +12,7 @@ import { FindBar } from "./find/FindBar";
 import { useFindStore } from "./find/findStore";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
+import { isUnsavedPaste, savePastedText } from "./paste/usePasteText";
 import { ReaderLoadingOverlay } from "./ReaderLoadingOverlay";
 import { PlaybackControls } from "./PlaybackControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -133,6 +134,11 @@ export function ReaderShell({
 					onOpenLogs={onOpenLogs}
 					onOpenAudiobook={onOpenAudiobook}
 					showAudiobook={document?.format === "epub"}
+					onSaveToLibrary={
+						window.api && isUnsavedPaste(document)
+							? () => void savePastedText()
+							: undefined
+					}
 				/>
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 					{documentLoading ? (

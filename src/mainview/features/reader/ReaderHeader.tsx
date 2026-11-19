@@ -1,4 +1,4 @@
-import { AudioLines, Bell, Library, Plus, Settings } from "lucide-react";
+import { AudioLines, Bell, Library, Plus, Save, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,8 @@ export type ReaderHeaderProps = {
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
 	showAudiobook?: boolean;
+	/** Keep pasted text: shown only while the open document is unsaved. */
+	onSaveToLibrary?: () => void;
 	className?: string;
 };
 
@@ -26,6 +28,7 @@ export function ReaderHeader({
 	onOpenLogs,
 	onOpenAudiobook,
 	showAudiobook = false,
+	onSaveToLibrary,
 	className,
 }: ReaderHeaderProps) {
 	const unreadIssues = useLogStore((s) => s.unreadIssues);
@@ -75,6 +78,19 @@ export function ReaderHeader({
 							Add
 						</Button>
 					)}
+					{onSaveToLibrary ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2 border-border bg-transparent text-foreground hover:bg-accent"
+							onClick={onSaveToLibrary}
+							title="Save this text as a file in your library"
+						>
+							<Save className="size-4" aria-hidden />
+							Save to library
+						</Button>
+					) : null}
 					{showAudiobook ? (
 						<Button
 							type="button"

@@ -21,7 +21,12 @@ import {
 import type { CrashRecord } from "@shared/crashReport";
 import { Toaster } from "@/components/toast/Toaster";
 import { showToast } from "@/components/toast/toastStore";
-import { partitionByDocumentSupport } from "@shared/droppedFiles";
+import {
+	documentKind,
+	partitionByDocumentSupport,
+	SUPPORTED_DOCUMENT_EXTENSIONS,
+	SUPPORTED_DOCUMENT_LABEL,
+} from "@shared/droppedFiles";
 import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
 import { isExportActive } from "./audiobook/exportStore";
@@ -54,6 +59,7 @@ import {
 	touchSessionSave,
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
+import { usePasteText } from "./paste/usePasteText";
 import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
 import { getTtsEngine } from "./tts/ttsEngines";
 import {
@@ -574,6 +580,21 @@ export function ReaderApp() {
 		})();
 	}, []);
 
+	usePasteText({
+		getDocument: () => documentRef.current,
+		open: (doc) => {
+			pendingChunkIndexRef.current = null;
+			setInitialChapterId(null);
+			setActiveChapterId(null);
+			setDocument(doc);
+		},
+		replace: (doc, chunkIndex) => {
+			forceResumeRef.current = true;
+			pendingChunkIndexRef.current = chunkIndex;
+			setDocument(doc);
+		},
+	});
+
 	const openRecentBook = useCallback((path: string) => {
 		if (!isDesktopApp()) return;
 		void (async () => {
@@ -582,7 +603,15 @@ export function ReaderApp() {
 			setDocumentLoading(true);
 			try {
 				const doc = await loadDocumentFromPath(path);
-				if (!doc) return;
+				if (!doc) {
+					showToast({
+						title: "Couldn't open book",
+						description:
+							"The file wasn't found. It may have been moved, renamed or deleted.",
+						variant: "destructive",
+					});
+					return;
+				}
 				restoreBookVoice(path);
 				forceResumeRef.current = resume?.chunkIndex != null;
 				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
@@ -609,15 +638,19 @@ export function ReaderApp() {
 		const file = e.target.files?.[0];
 		e.target.value = "";
 		if (!file) return;
-		const lower = file.name.toLowerCase();
-		if (lower.endsWith(".epub")) {
-			showToast({ title: "EPUBs need the desktop app", variant: "destructive" });
-			return;
-		}
-		if (!lower.endsWith(".txt")) {
+		const kind = documentKind(file.name);
+		if (kind === null) {
 			showToast({
 				title: `"${file.name}" isn't supported`,
-				description: "Only .txt and .epub files can be opened.",
+				description: `Cross TTS opens ${SUPPORTED_DOCUMENT_LABEL}.`,
+				variant: "destructive",
+			});
+			return;
+		}
+		if (kind !== "txt") {
+			showToast({
+				title: "Only text files open in the browser",
+				description: "Use the desktop app for this file.",
 				variant: "destructive",
 			});
 			return;
@@ -646,7 +679,7 @@ export function ReaderApp() {
 						rejected.length === 1
 							? `"${rejected[0]?.name}" isn't supported`
 							: `${rejected.length} files skipped`,
-					description: "Only .txt and .epub files can be added.",
+					description: `Cross TTS opens ${SUPPORTED_DOCUMENT_LABEL}.`,
 					variant: "destructive",
 				});
 			}
@@ -659,7 +692,8 @@ export function ReaderApp() {
 				);
 				if (!txt) {
 					showToast({
-						title: "EPUBs need the desktop app",
+						title: "Only text files open in the browser",
+						description: "Use the desktop app for this file.",
 						variant: "destructive",
 					});
 					return;
@@ -716,7 +750,7 @@ export function ReaderApp() {
 		[openRecentBook],
 	);
 
-	// Whole-window drag-and-drop: every view accepts .txt/.epub drops.
+	// Whole-window drag-and-drop: every view accepts document drops.
 	useEffect(() => {
 		let depth = 0;
 		const hasFiles = (e: DragEvent) =>
@@ -763,7 +797,7 @@ export function ReaderApp() {
 			<input
 				ref={inputRef}
 				type="file"
-				accept=".txt,.epub,text/plain,application/epub+zip"
+				accept={SUPPORTED_DOCUMENT_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
 				className="sr-only"
 				aria-hidden
 				tabIndex={-1}
@@ -826,7 +860,7 @@ export function ReaderApp() {
 					<div className="rounded-xl border-2 border-dashed border-primary px-10 py-8 text-center">
 						<p className="text-lg font-medium">Drop books to add them</p>
 						<p className="mt-1 text-sm text-muted-foreground">
-							.epub and .txt files
+							{SUPPORTED_DOCUMENT_LABEL}
 						</p>
 					</div>
 				</div>
