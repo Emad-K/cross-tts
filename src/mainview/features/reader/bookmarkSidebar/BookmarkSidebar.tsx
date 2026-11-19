@@ -59,17 +59,17 @@ export function BookmarkSidebar({ open, className }: BookmarkSidebarProps) {
 		>
 			{/* Clears the floating bookmarks toggle pinned at the page corner. */}
 			<div className="h-11 shrink-0" aria-hidden />
+			{/* Two toggle buttons, not ARIA tabs: no arrow-key pattern to promise. */}
 			<div
-				role="tablist"
-				aria-label="Bookmarks and notes"
+				role="group"
+				aria-label="Show bookmarks or notes"
 				className="flex shrink-0 gap-1 border-b border-border px-2 py-2"
 			>
 				{tabs.map((t) => (
 					<button
 						key={t.id}
 						type="button"
-						role="tab"
-						aria-selected={tab === t.id}
+						aria-pressed={tab === t.id}
 						onClick={() => setTab(t.id)}
 						className={cn(
 							"flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
