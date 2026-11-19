@@ -1,6 +1,7 @@
-import { Cpu, Gauge, Zap } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Gauge } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { TtsBackend } from "@shared/appConfig";
+import { MODEL_BYTES } from "@shared/modelAssets";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -21,13 +22,12 @@ import {
 	cudaAddonCancel,
 	cudaAddonInstall,
 	cudaAddonRemove,
-	getModelStatus,
 	onCudaAddonProgress,
-	supertonicPresent,
 } from "@/lib/desktopBridge";
 import { isExportPhaseActive, useExportStore } from "../audiobook/exportStore";
 import { getTtsEngine, resetTtsEngine, useTtsStore } from "../tts";
-import type { RunningBackend } from "../tts/backendChoice";
+import { BACKEND_LABEL, RUNNING_LABEL, type RunningBackend } from "../tts/backendChoice";
+import type { ModelsOnDisk } from "../tts/modelOnDisk";
 import {
 	type BenchmarkCandidate,
 	type BenchmarkRow,
@@ -36,20 +36,16 @@ import {
 	runBenchmark,
 } from "../tts/benchmark";
 import { effectiveCpuThreads, useAppSettingsStore } from "./appSettingsStore";
+import { mb } from "./SectionPane";
 
-const LABEL: Record<TtsBackend, string> = {
-	auto: "Auto (recommended)",
-	webgpu: "GPU (WebGPU)",
-	cuda: "NVIDIA GPU (CUDA)",
-	dml: "GPU (DirectML, experimental)",
-	cpu: "CPU (native)",
-	wasm: "CPU (WASM, compatibility)",
-};
+const LABEL = BACKEND_LABEL;
 
-const mb = (bytes: number) => Math.round(bytes / 1_048_576);
-
-/** Which model files are on disk; null until the main process answered. */
-type ModelsOnDisk = { fp32: boolean; q8: boolean; supertonic: boolean };
+/** Store a backend choice and drop the loaded model, so the next play loads the chosen one. */
+async function applyBackend(backend: TtsBackend): Promise<void> {
+	await useAppSettingsStore.getState().setTtsBackend(backend);
+	// Backends use different model weights and processes.
+	resetTtsEngine();
+}
 
 /**
  * Confirm, download and verify the CUDA add-on. Nothing is downloaded until
@@ -106,9 +102,10 @@ function CudaAddonDialog({
 				onInteractOutside={(e) => downloading && e.preventDefault()}
 				onEscapeKeyDown={(e) => downloading && e.preventDefault()}
 			>
-				<DialogTitle>Download the NVIDIA CUDA add-on?</DialogTitle>
+				<DialogTitle>Download the NVIDIA add-on?</DialogTitle>
 				<DialogDescription>
-					Speech on NVIDIA CUDA needs ONNX Runtime&apos;s CUDA libraries, which
+					Running speech on an NVIDIA graphics card needs extra libraries (ONNX
+					Runtime&apos;s CUDA build), which
 					are too large to ship with the app. This is a one-time {mb(bytes)} MB
 					download from nuget.org (about 330 MB on disk), checked against a
 					known checksum before it is used.
@@ -117,8 +114,8 @@ function CudaAddonDialog({
 						: ""}
 				</DialogDescription>
 				<p className="text-xs text-muted-foreground">
-					The amount of GPU memory CUDA uses can&apos;t be capped. If it
-					can&apos;t start or runs out of memory, speech continues on the CPU.
+					How much graphics-card memory it uses can&apos;t be capped. If it
+					can&apos;t start or runs out of memory, speech continues on the processor.
 				</p>
 				{/* Read out in steps of 10%, not on every tick. */}
 				<p role="status" className="sr-only">
@@ -232,7 +229,7 @@ function BackendBenchmark({
 			<div className="flex items-center justify-between gap-4">
 				<span className="flex items-center gap-2 text-sm font-medium">
 					<Gauge className="size-4 text-muted-foreground" aria-hidden />
-					Benchmark
+					Test speed on this computer
 				</span>
 				{phase === "running" ? (
 					<Button variant="outline" size="sm" onClick={() => abort.current?.abort()}>
@@ -245,7 +242,7 @@ function BackendBenchmark({
 						disabled={blocked}
 						onClick={() => setPhase("confirm")}
 					>
-						{phase === "done" ? "Run again" : "Run benchmark"}
+						{phase === "done" ? "Run again" : "Run test"}
 					</Button>
 				) : null}
 			</div>
@@ -254,21 +251,21 @@ function BackendBenchmark({
 					? exporting
 						? "Wait for the audiobook export to finish first."
 						: "Pause playback first."
-					: "Times one sentence on each backend this computer has, so you can pick the fastest. It only runs when you start it."}
+					: "Times one sentence on each option this computer has, so you can pick the fastest. It only runs when you start it."}
 			</p>
 			{phase === "confirm" ? (
 				<div className="mt-3 rounded-md border border-border p-3">
 					{toRun.length === 0 ? (
 						<p className="text-xs">
 							There is nothing to measure yet: the voice model isn&apos;t
-							downloaded, and the benchmark never downloads one. Play
+							downloaded, and the test never downloads one. Play
 							something first.
 						</p>
 					) : (
 						<p className="text-xs">
 							This loads the voice model on each of these in turn and reads
 							one sentence twice: {toRun.map((b) => LABEL[b]).join(", ")}.{" "}
-							{usesGpu ? "It briefly uses the GPU. " : ""}
+							{usesGpu ? "It briefly uses the graphics card. " : ""}
 							It unloads the current model and stops paused playback at its
 							sentence. No voice model is downloaded for it; only a small
 							voice file (under 1 MB) if the selected voice has never been
@@ -293,7 +290,7 @@ function BackendBenchmark({
 				<table className="mt-3 w-full text-left text-xs tabular-nums">
 					<thead className="text-muted-foreground">
 						<tr>
-							<th className="py-1 font-medium">Backend</th>
+							<th className="py-1 font-medium">Runs on</th>
 							<th className="py-1 font-medium">Load</th>
 							<th className="py-1 font-medium">First sentence</th>
 							<th className="py-1 font-medium">Speed</th>
@@ -332,8 +329,8 @@ function BackendBenchmark({
 					? `Measuring ${LABEL[candidates[rows.length]!.backend]}`
 					: phase === "done"
 						? faster
-							? `Benchmark finished. ${LABEL[faster]} was fastest.`
-							: "Benchmark finished."
+							? `Speed test finished. ${LABEL[faster]} was fastest.`
+							: "Speed test finished."
 						: ""}
 			</p>
 			{faster ? (
@@ -350,58 +347,78 @@ function BackendBenchmark({
 	);
 }
 
-/**
- * Settings → Performance: where speech synthesis runs. "Auto" keeps the
- * app's own order; the other entries are listed only where they can work.
- */
-export function SpeechBackendControl() {
+/** "Test speed on this computer", offered when there are two options to compare. */
+export function SpeedTest({ disk }: { disk: ModelsOnDisk | null }) {
 	const config = useAppSettingsStore((s) => s.config);
 	const webgpuAvailable = useAppSettingsStore((s) => s.webgpuAvailable);
-	const setTtsBackend = useAppSettingsStore((s) => s.setTtsBackend);
-	const setConfig = useAppSettingsStore((s) => s.setConfig);
 	const engineId = useTtsStore((s) => s.engineId);
-	// Re-render when a model loads or unloads, for the "running on" line.
-	useTtsStore((s) => s.modelPhase);
-	const [models, setModels] = useState<ModelsOnDisk | null>(null);
-	const [addonOpen, setAddonOpen] = useState(false);
+	if (!config || !disk) return null;
+	const candidates = benchmarkCandidates(engineId, {
+		webgpu: webgpuAvailable === true,
+		backends: config.backends,
+		fp32: disk.status.gpu.present,
+		q8: disk.status.cpu.present,
+		supertonic: disk.supertonic,
+	});
+	if (candidates.length < 2) return null;
+	return <BackendBenchmark candidates={candidates} onUse={(b) => void applyBackend(b)} />;
+}
 
-	useEffect(() => {
-		let cancelled = false;
-		void Promise.all([getModelStatus(), supertonicPresent()]).then(
-			([status, supertonic]) => {
-				if (cancelled || !status) return;
-				setModels({ fp32: status.gpu.present, q8: status.cpu.present, supertonic });
-			},
-		);
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	if (!config) return null;
-	const { backends } = config;
-	const value = config.ttsBackend;
-	const cudaMb = mb(config.cudaAddonBytes);
-
-	const apply = async (backend: TtsBackend) => {
-		await setTtsBackend(backend);
-		// Backends use different model weights and processes: drop the loaded
-		// model so the next play loads the chosen one.
-		resetTtsEngine();
-	};
-
-	const onChange = (next: TtsBackend) => {
-		if (next === "cuda" && backends.cuda !== "ready") setAddonOpen(true);
-		else void apply(next);
-	};
-
-	const removeAddon = async () => {
-		// Unload first (this also stops a running benchmark): removing stops
+/** Frees the disk space of the NVIDIA (CUDA) add-on, when it is installed. */
+export function RemoveCudaAddon() {
+	const installed = useAppSettingsStore((s) => s.config?.backends.cuda === "ready");
+	const setConfig = useAppSettingsStore((s) => s.setConfig);
+	if (!installed) return null;
+	const remove = async () => {
+		// Unload first (this also stops a running speed test): removing stops
 		// the native engine, which may have the libraries loaded.
 		resetTtsEngine();
 		const next = await cudaAddonRemove();
 		if (next) setConfig(next);
 		resetTtsEngine();
+	};
+	return (
+		<div className="mt-3 flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/20 p-4">
+			<span className="text-sm font-medium">NVIDIA add-on</span>
+			<Button variant="outline" size="sm" onClick={() => void remove()}>
+				Remove NVIDIA add-on (frees about 330 MB)
+			</Button>
+		</div>
+	);
+}
+
+/**
+ * Settings → Voice → Advanced: where speech synthesis runs. "Automatic" keeps
+ * the app's own order; the other entries are listed only where they can work.
+ */
+export function SpeechBackendControl({ disk }: { disk: ModelsOnDisk | null }) {
+	const labelId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const webgpuAvailable = useAppSettingsStore((s) => s.webgpuAvailable);
+	const engineId = useTtsStore((s) => s.engineId);
+	// Re-render when a model loads or unloads, for the "running on" line.
+	useTtsStore((s) => s.modelPhase);
+	const [addonOpen, setAddonOpen] = useState(false);
+
+	if (!config) return null;
+	const { backends } = config;
+	const value = config.ttsBackend;
+	const engine = getTtsEngine(engineId);
+
+	if (!engine.runningOn) {
+		return (
+			<div className="rounded-lg border border-border bg-muted/20 p-4">
+				<div className="text-sm font-medium">Run speech on</div>
+				<p className="mt-2 text-xs text-muted-foreground">
+					{engine.displayName} always runs on the processor.
+				</p>
+			</div>
+		);
+	}
+
+	const onChange = (next: TtsBackend) => {
+		if (next === "cuda" && backends.cuda !== "ready") setAddonOpen(true);
+		else void applyBackend(next);
 	};
 
 	const options: { id: TtsBackend; show: boolean; hint?: string }[] = [
@@ -410,7 +427,10 @@ export function SpeechBackendControl() {
 		{
 			id: "cuda",
 			show: backends.cuda !== "unavailable",
-			hint: backends.cuda === "needs-addon" ? `${cudaMb} MB add-on` : undefined,
+			hint:
+				backends.cuda === "needs-addon"
+					? `${mb(config.cudaAddonBytes)} MB add-on`
+					: undefined,
 		},
 		{ id: "dml", show: backends.dml },
 		{ id: "cpu", show: backends.native },
@@ -418,46 +438,31 @@ export function SpeechBackendControl() {
 			id: "wasm",
 			show: true,
 			hint:
-				engineId === "kokoro" && models && !models.q8
-					? "downloads 88 MB on first use"
+				engineId === "kokoro" && disk && !disk.status.cpu.present
+					? `downloads ${mb(MODEL_BYTES.cpu)} MB on first use`
 					: undefined,
 		},
 	];
 
-	const engine = getTtsEngine(engineId);
-	const running = engine.runningOn?.() ?? null;
+	const running = engine.runningOn();
 	const gpuChoice = value === "webgpu" || value === "cuda" || value === "dml";
-	const note = !engine.runningOn
-		? `${engine.displayName} always runs on the CPU (WASM); this setting applies to the other voice engines.`
-		: engineId === "supertonic" && (value === "cuda" || value === "dml")
-			? `Supertonic 3 doesn't use ${value === "cuda" ? "CUDA" : "DirectML"} yet; with this choice it runs on the CPU (native).`
+	const note =
+		engineId === "supertonic" && (value === "cuda" || value === "dml")
+			? `${engine.displayName} can't use ${value === "cuda" ? "the NVIDIA add-on" : "DirectML"} yet; with this choice it runs on the processor.`
 			: value === "auto"
-				? "Uses the GPU through WebGPU when there is one, otherwise the CPU."
+				? "Uses the graphics card when there is one, otherwise the processor."
 				: gpuChoice
-					? "If this backend can't start, speech falls back to the CPU and tells you."
+					? "If this can't start, speech falls back to the processor and tells you."
 					: null;
-
-	const candidates = benchmarkCandidates(engineId, {
-		webgpu: webgpuAvailable === true,
-		backends,
-		fp32: models?.fp32 ?? false,
-		q8: models?.q8 ?? false,
-		supertonic: models?.supertonic ?? false,
-	});
 
 	return (
 		<>
 			<div className="rounded-lg border border-border bg-muted/20 p-4">
-				<div className="mb-3 flex items-center gap-2 text-sm font-medium">
-					{value === "cpu" || value === "wasm" ? (
-						<Cpu className="size-4 text-muted-foreground" aria-hidden />
-					) : (
-						<Zap className="size-4 text-amber-400" aria-hidden />
-					)}
-					Speech backend
+				<div id={labelId} className="mb-3 text-sm font-medium">
+					Run speech on
 				</div>
 				<Select value={value} onValueChange={(v) => onChange(v as TtsBackend)}>
-					<SelectTrigger className="w-full" aria-label="Speech backend">
+					<SelectTrigger className="w-full" aria-labelledby={labelId}>
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -473,35 +478,20 @@ export function SpeechBackendControl() {
 				</Select>
 				{config.ttsBackendChosen === "cuda" && value !== "cuda" ? (
 					<p className="mt-3 text-xs text-amber-500">
-						NVIDIA CUDA was selected, but it can&apos;t run right now
+						{LABEL.cuda} was selected, but it can&apos;t run right now
 						{backends.cuda === "needs-addon"
-							? ": its add-on needs to be downloaded again (app updates can require a new one). Pick NVIDIA GPU (CUDA) to download it."
+							? `: its add-on needs to be downloaded again (app updates can require a new one). Pick ${LABEL.cuda} to download it.`
 							: ": the CUDA 13 and cuDNN 9 libraries weren't found."}{" "}
-						Using Auto meanwhile.
+						Using Automatic meanwhile.
 					</p>
 				) : null}
 				{note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
-				{engine.runningOn ? (
-					<p className="mt-1.5 text-xs text-muted-foreground">
-						{running
-							? `Now running on: ${LABEL[running]}.`
-							: "The voice model loads on the next playback."}
-					</p>
-				) : null}
-				{backends.cuda === "ready" ? (
-					<Button
-						variant="outline"
-						size="sm"
-						className="mt-3"
-						onClick={() => void removeAddon()}
-					>
-						Remove CUDA add-on (frees about 330 MB)
-					</Button>
-				) : null}
+				<p className="mt-1.5 text-xs text-muted-foreground">
+					{running
+						? `Now running on: ${RUNNING_LABEL[running]}.`
+						: "The voice model loads on the next playback."}
+				</p>
 			</div>
-			{candidates.length >= 2 && models ? (
-				<BackendBenchmark candidates={candidates} onUse={(b) => void apply(b)} />
-			) : null}
 			<CudaAddonDialog
 				open={addonOpen}
 				bytes={config.cudaAddonBytes}
@@ -509,7 +499,7 @@ export function SpeechBackendControl() {
 				onInstalled={() => {
 					setAddonOpen(false);
 					// Only now, with the verified add-on in place, is CUDA selected.
-					void apply("cuda");
+					void applyBackend("cuda");
 				}}
 			/>
 		</>

@@ -32,6 +32,7 @@ const AudiobookExportDialog = lazy(() =>
 		default: m.AudiobookExportDialog,
 	})),
 );
+import type { SettingsSectionId } from "./settings/SectionPane";
 const SettingsDialog = lazy(() =>
 	import("./settings/SettingsDialog").then((m) => ({
 		default: m.SettingsDialog,
@@ -172,7 +173,8 @@ export function ReaderApp() {
 	const [initialChapterId, setInitialChapterId] = useState<string | null>(null);
 	const [documentLoading, setDocumentLoading] = useState(false);
 	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
-	const [settingsOpen, setSettingsOpen] = useState(false);
+	/** The Settings tab to open on; null while Settings is closed. */
+	const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(null);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
 	/** Unreported crashes from previous runs; non-empty shows the crash dialog. */
@@ -781,7 +783,8 @@ export function ReaderApp() {
 				onOpenFile={openFilePicker}
 				onOpenLibrary={document ? goToLibrary : undefined}
 				onOpenBook={openRecentBook}
-				onOpenSettings={() => setSettingsOpen(true)}
+				onOpenSettings={() => setSettingsSection("voice")}
+				onOpenVoiceSettings={() => setSettingsSection("voice")}
 				onOpenLogs={() => setLogsOpen(true)}
 				onOpenAudiobook={() => setAudiobookOpen(true)}
 				onLoadSample={() => {
@@ -793,9 +796,13 @@ export function ReaderApp() {
 			/>
 			{/* Heavy, on-demand dialogs are code-split: their chunks (and deps like
 			    the MP3 encoder) load on first open, not at startup. */}
-			{settingsOpen ? (
+			{settingsSection ? (
 				<Suspense fallback={null}>
-					<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+					<SettingsDialog
+						open
+						initialSection={settingsSection}
+						onOpenChange={(open) => !open && setSettingsSection(null)}
+					/>
 				</Suspense>
 			) : null}
 			{logsOpen ? (

@@ -28,6 +28,7 @@ export type ReaderShellProps = {
 	onOpenLibrary?: () => void;
 	onOpenBook?: (path: string) => void;
 	onOpenSettings?: () => void;
+	onOpenVoiceSettings?: () => void;
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
 	onLoadSample?: () => void;
@@ -48,6 +49,7 @@ export function ReaderShell({
 	onOpenLibrary,
 	onOpenBook,
 	onOpenSettings,
+	onOpenVoiceSettings,
 	onOpenLogs,
 	onOpenAudiobook,
 	onLoadSample,
@@ -205,7 +207,7 @@ export function ReaderShell({
 						</Button>
 					) : null}
 				</main>
-				{hasDoc ? <PlaybackControls /> : null}
+				{hasDoc ? <PlaybackControls onMoreVoices={onOpenVoiceSettings} /> : null}
 			</div>
 		</TooltipProvider>
 	);

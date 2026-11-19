@@ -420,7 +420,7 @@ function InlinePronForm({
 }
 
 /**
- * Text-cleanup and pronunciation rules editor. Rendered as a section inside the
+ * Pronunciation fixes and text-cleanup rules editor (Settings → Pronunciation). Rendered as a section inside the
  * unified Settings dialog (see {@link SettingsDialog}).
  */
 export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
@@ -819,12 +819,15 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4">
 				<h2 className="text-base font-semibold leading-none">
-					Text &amp; pronunciation rules
+					Pronunciation
 				</h2>
 				<p className="text-sm text-muted-foreground">
-					Clean up chunk text before speech. Highlights still use the original
-					text. Pronunciation overrides inject IPA phonemes (English voices
-					only; not markdown).
+					Fix how words are said and skip clutter before reading.
+				</p>
+				<p className="text-xs text-muted-foreground">
+					Highlights still use the original text. Pronunciation fixes are
+					written in IPA phonemes (English voices only); text cleanup rules
+					are regex patterns.
 				</p>
 				<div className="flex flex-wrap items-center gap-2 pt-2">
 					<Button
@@ -874,58 +877,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 					<Accordion
 						type="single"
 						collapsible
-						defaultValue="regex"
+						defaultValue="pronunciation"
 						className="w-full"
 					>
-						<RulesAccordionSection
-							value="regex"
-							title="Text cleanup (regex)"
-							ruleCount={regexRules.length}
-							isEmpty={regexRules.length === 0}
-							emptyMessage="No regex rules yet. Add a rule to clean up text before speech."
-							addLabel="Add rule"
-							addFormOpen={regexFormKey === "add"}
-							onAddClick={() =>
-								regexFormKey === "add" ? closeRegexForm() : openAddRegex()
-							}
-							list={
-								<>
-									<ul className="space-y-1.5">
-										{ungroupedRegexRules.map(renderRegexRule)}
-									</ul>
-									{regexGroups.map(([group, rules]) => (
-										<RuleGroupSection
-											key={group}
-											title={group}
-											enabledCount={rules.filter((r) => r.enabled).length}
-											totalCount={rules.length}
-											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
-											onSetAllEnabled={(enabled) =>
-												setRegexGroupEnabled(group, enabled)
-											}
-										>
-											{rules.map(renderRegexRule)}
-										</RuleGroupSection>
-									))}
-								</>
-							}
-							footer={
-								regexFormKey === "add" ? (
-									<InlineRegexForm
-										draft={regexDraft}
-										error={regexError}
-										submitLabel="Add rule"
-										onDraftChange={(patch) => {
-											setRegexDraft((d) => ({ ...d, ...patch }));
-											setRegexError(null);
-										}}
-										onSubmit={submitRegexAdd}
-										onCancel={closeRegexForm}
-									/>
-								) : null
-							}
-						/>
-
 						<RulesAccordionSection
 							value="pronunciation"
 							title="Pronunciation fixes"
@@ -970,6 +924,55 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 										}}
 										onSubmit={submitPronAdd}
 										onCancel={closePronForm}
+									/>
+								) : null
+							}
+						/>
+
+						<RulesAccordionSection
+							value="regex"
+							title="Text cleanup"
+							ruleCount={regexRules.length}
+							isEmpty={regexRules.length === 0}
+							emptyMessage="No cleanup rules yet. Add a rule (a regex pattern) to clean up text before speech."
+							addLabel="Add rule"
+							addFormOpen={regexFormKey === "add"}
+							onAddClick={() =>
+								regexFormKey === "add" ? closeRegexForm() : openAddRegex()
+							}
+							list={
+								<>
+									<ul className="space-y-1.5">
+										{ungroupedRegexRules.map(renderRegexRule)}
+									</ul>
+									{regexGroups.map(([group, rules]) => (
+										<RuleGroupSection
+											key={group}
+											title={group}
+											enabledCount={rules.filter((r) => r.enabled).length}
+											totalCount={rules.length}
+											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+											onSetAllEnabled={(enabled) =>
+												setRegexGroupEnabled(group, enabled)
+											}
+										>
+											{rules.map(renderRegexRule)}
+										</RuleGroupSection>
+									))}
+								</>
+							}
+							footer={
+								regexFormKey === "add" ? (
+									<InlineRegexForm
+										draft={regexDraft}
+										error={regexError}
+										submitLabel="Add rule"
+										onDraftChange={(patch) => {
+											setRegexDraft((d) => ({ ...d, ...patch }));
+											setRegexError(null);
+										}}
+										onSubmit={submitRegexAdd}
+										onCancel={closeRegexForm}
 									/>
 								) : null
 							}
