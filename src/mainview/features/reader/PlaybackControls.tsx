@@ -31,6 +31,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { OutputDeviceControl } from "./OutputDeviceControl";
 import {
 	seekProgressPercent,
 	setVolumeLive,
@@ -337,6 +338,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 
 					<div className="flex shrink-0 flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-end">
 						<div className="flex w-28 shrink-0 items-center gap-2 sm:w-32">
+							<OutputDeviceControl />
 							<Volume2
 								className="size-4 shrink-0 text-muted-foreground"
 								aria-hidden

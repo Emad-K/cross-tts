@@ -138,8 +138,29 @@ function getAudioGraph(): { ctx: AudioContext; gain: GainNode } {
 		audioContext = new AudioContext();
 		gainNode = audioContext.createGain();
 		gainNode.connect(audioContext.destination);
+		applyOutputDevice();
 	}
 	return { ctx: audioContext, gain: gainNode! };
+}
+
+let outputSinkId = "";
+
+function applyOutputDevice(): void {
+	// setSinkId is Chromium 110+ and missing from older DOM typings.
+	const ctx = audioContext as
+		| (AudioContext & { setSinkId?: (id: string) => Promise<void> })
+		| null;
+	if (!ctx?.setSinkId) return;
+	// A device unplugged mid-call rejects; the picker then re-resolves on the
+	// devicechange event, so there is nothing to do here.
+	void ctx.setSinkId(outputSinkId).catch(() => {});
+}
+
+/** Route playback to an audio output device ("" = the system default). */
+export function setOutputDevice(sinkId: string): void {
+	if (sinkId === outputSinkId) return;
+	outputSinkId = sinkId;
+	applyOutputDevice();
 }
 
 function applyVolumeFromStore(): void {
