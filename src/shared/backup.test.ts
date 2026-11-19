@@ -4,6 +4,7 @@ import {
 	type BackupLibrary,
 	backupSummary,
 	buildBackup,
+	isNetworkPath,
 	mergeBackup,
 	parseBackup,
 } from "./backup";
@@ -101,6 +102,22 @@ describe("backup round trip", () => {
 });
 
 describe("parseBackup rejects and cleans", () => {
+	test("isNetworkPath catches every two-separator prefix", () => {
+		for (const p of [
+			"\\\\host\\share\\a.epub",
+			"//host/share/a.epub",
+			"\\/host/share/a.epub",
+			"/\\host\\share\\a.epub",
+			"\\\\?\\UNC\\host\\share\\a.epub",
+			"\\\\.\\pipe\\x",
+		]) {
+			expect(isNetworkPath(p)).toBe(true);
+		}
+		for (const p of ["/home/u/a.epub", "C:\\Books\\a.epub", "C:/Books/a.epub"]) {
+			expect(isNetworkPath(p)).toBe(false);
+		}
+	});
+
 	test("other files", () => {
 		for (const text of ["not json", "[]", "{}", '{"format":"cross-tts-tts-rules","version":1}']) {
 			expect(parseBackup(text).ok).toBe(false);

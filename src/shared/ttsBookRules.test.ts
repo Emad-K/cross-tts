@@ -106,15 +106,26 @@ test("coerceTtsTextRulesState keeps a rule's book", () => {
 	);
 });
 
-test("export and import keep a rule's book", () => {
-	const file = buildTtsRulesExport(state);
-	const parsed = parseTtsRulesExport(JSON.stringify(file));
+test("the shareable export leaves out this-book rules and their paths", () => {
+	const json = JSON.stringify(buildTtsRulesExport(state));
+	expect(json).not.toContain(".epub");
+	const parsed = parseTtsRulesExport(json);
 	if (!parsed.ok) throw new Error(parsed.error);
-	expect(parsed.data.regexRules.map((r) => r.book)).toEqual([
-		"/a.epub",
+	expect(parsed.data.regexRules.map((r) => r.book)).toEqual([undefined]);
+	expect(parsed.data.pronunciationRules.map((r) => r.book)).toEqual([
 		undefined,
-		"/b.epub",
 	]);
+});
+
+test("import still honours a book field written by an older export", () => {
+	const parsed = parseTtsRulesExport(
+		JSON.stringify({
+			...buildTtsRulesExport({ regexRules: [], pronunciationRules: [] }),
+			regexRules: [{ label: "x", pattern: "cat", replacement: "lion", book: "/a.epub" }],
+			pronunciationRules: [{ word: "Kvothe", phonetic: "kvoʊθ", book: "/a.epub" }],
+		}),
+	);
+	if (!parsed.ok) throw new Error(parsed.error);
 	let n = 0;
 	const next = applyImportedUserRules(
 		{ regexRules: [], pronunciationRules: [] },
@@ -122,14 +133,6 @@ test("export and import keep a rule's book", () => {
 		"replace",
 		(prefix) => `${prefix}-${n++}`,
 	);
-	expect(next.regexRules.map((r) => r.book)).toEqual([
-		"/a.epub",
-		undefined,
-		"/b.epub",
-	]);
-	expect(next.pronunciationRules.map((r) => r.book)).toEqual([
-		undefined,
-		"/a.epub",
-		"/b.epub",
-	]);
+	expect(next.regexRules.map((r) => r.book)).toEqual(["/a.epub"]);
+	expect(next.pronunciationRules.map((r) => r.book)).toEqual(["/a.epub"]);
 });

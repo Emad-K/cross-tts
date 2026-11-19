@@ -48,7 +48,11 @@ function bookField(book: unknown): { book?: string } {
 	return typeof book === "string" && book ? { book } : {};
 }
 
-/** User-added rules only (excludes built-in defaults). */
+/**
+ * User-added, all-books rules only. Built-in defaults are excluded, and so are
+ * this-book rules: their scope is the book's absolute path, which would leak
+ * the user's name and folders into a file meant for sharing. Backups keep them.
+ */
 export function buildTtsRulesExport(
 	state: TtsTextRulesState,
 ): TtsRulesExportFile {
@@ -57,23 +61,21 @@ export function buildTtsRulesExport(
 		version: TTS_RULES_EXPORT_VERSION,
 		exportedAt: new Date().toISOString(),
 		regexRules: state.regexRules
-			.filter((r) => !r.builtIn)
+			.filter((r) => !r.builtIn && !r.book)
 			.map((r) => ({
 				label: r.label,
 				pattern: r.pattern,
 				replacement: r.replacement,
 				enabled: r.enabled,
 				caseSensitive: r.caseSensitive,
-				...bookField(r.book),
 			})),
 		pronunciationRules: state.pronunciationRules
-			.filter((r) => !r.builtIn)
+			.filter((r) => !r.builtIn && !r.book)
 			.map((r) => ({
 				word: r.word,
 				phonetic: r.phonetic,
 				caseSensitive: r.caseSensitive,
 				enabled: r.enabled,
-				...bookField(r.book),
 			})),
 	};
 }

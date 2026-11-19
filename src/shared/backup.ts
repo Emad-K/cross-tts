@@ -93,7 +93,9 @@ function sanitizeRules(raw: unknown): TtsTextRulesState {
  * connects to that host, so a backup file must not be able to name any.
  */
 export function isNetworkPath(path: string): boolean {
-	return /^(\\\\|\/\/)/.test(path);
+	// Any two leading separators, in any mix (\\host, //host, \/host, /\host,
+	// \\?\UNC\, \\.\): Windows resolves all of them as UNC or device paths.
+	return /^[\\/]{2}/.test(path);
 }
 
 function withoutNetworkPaths<T>(byPath: Record<string, T>): Record<string, T> {
