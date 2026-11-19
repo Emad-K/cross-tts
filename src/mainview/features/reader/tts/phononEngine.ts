@@ -39,6 +39,8 @@ import { useTtsStore } from "./ttsStore";
 const SAMPLE_RATE = 24_000;
 const ENGINE_RESET = "TTS engine reset";
 const ENGINE_TIMEOUT = "TTS engine timed out";
+/** Jobs orphaned by recover()'s restart fail with this, and retry without another one. */
+const ENGINE_RESTARTED = "Phonon restarted";
 /** No audio piece (80 ms of speech) for this long means the worker hung. */
 const STALL_MS = 30_000;
 /** Measured on an 8-core desktop: 3 threads is fastest; more get slower. */
@@ -301,17 +303,16 @@ export const phononEngine: TtsEngine = {
 	},
 	/** A hung or crashed worker: start a fresh one and retry. */
 	recover(_backend, message) {
+		// Queued jobs the restart below orphaned: just retry on the new instance.
+		if (message === ENGINE_RESTARTED) return true;
 		if (message !== ENGINE_TIMEOUT && !message.startsWith("phonon-tts worker failed")) {
 			return false;
 		}
-		// Several queued jobs fail together; only the first tears down.
-		if (tts || loading) {
-			logWarn("Phonon stopped responding; restarting it.", {
-				source: "tts",
-				detail: message,
-			});
-			teardown(message);
-		}
+		logWarn("Phonon stopped responding; restarting it.", {
+			source: "tts",
+			detail: message,
+		});
+		teardown(ENGINE_RESTARTED);
 		return true;
 	},
 	dispose() {
