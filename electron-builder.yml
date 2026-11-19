@@ -22,6 +22,9 @@ files:
   # Same for phonon-tts (its worker and wasm builds are bundled by Vite); only
   # its licence files ship.
   - "!**/node_modules/phonon-tts/!(LICENSE-APACHE|LICENSE-MIT|THIRD_PARTY_LICENSES.md)"
+  # mammoth (Word documents) runs from lib/ in the main process; its prebuilt
+  # browser bundles (~1.2 MB) are never loaded.
+  - "!**/node_modules/mammoth/mammoth.browser*.js"
   # onnxruntime-node: never ship the CUDA/TensorRT execution providers. npm
   # doesn't include them (a dev checkout only has them after an explicit
   # `ONNXRUNTIME_NODE_INSTALL=cuda12` install) and they are hundreds of MB. The
@@ -47,7 +50,8 @@ npmRebuild: false
 
 # Licence notices for code the installers bundle without its npm package's own
 # licence file: the onnxruntime-web wasm/glue in out/renderer (the npm package
-# has none) and the Supertonic helper ported into supertonicModel.ts. Also the
+# has none), pdf.js (Vite bundles it; the package itself is a devDependency)
+# and the Supertonic helper ported into supertonicModel.ts. Also the
 # Supertonic 3 weights licence the app asks users to accept.
 extraResources:
   - from: third_party
