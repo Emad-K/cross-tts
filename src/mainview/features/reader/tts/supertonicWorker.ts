@@ -24,7 +24,7 @@ import {
 
 type InitMessage = {
 	type: "init";
-	hubBaseUrl: string | null;
+	hubBaseUrl: string;
 	device: "webgpu" | "wasm";
 	numThreads: number;
 };
@@ -41,26 +41,32 @@ let loadPromise: Promise<void> | null = null;
 let gpuDevice: GPUDevice | null = null;
 let gpuLostReason: string | null = null;
 
-/** Fetch a model graph, reporting bytes towards the whole model's size. */
+/**
+ * Fetch a model graph, reporting bytes towards the whole model's size. Chunks
+ * go straight into one buffer sized from Content-Length (the hub always sends
+ * it), so the 257 MB vector estimator is never held twice before ORT copies it.
+ */
 async function fetchGraph(url: string, onBytes: (n: number) => void): Promise<Uint8Array> {
 	const res = await fetch(url);
 	if (!res.ok || !res.body) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-	const parts: Uint8Array[] = [];
-	let size = 0;
+	const size = Number(res.headers.get("Content-Length"));
+	if (!(size > 0)) {
+		const bytes = new Uint8Array(await res.arrayBuffer());
+		onBytes(bytes.length);
+		return bytes;
+	}
+	const bytes = new Uint8Array(size);
+	let offset = 0;
 	const reader = res.body.getReader();
 	for (;;) {
 		const { done, value } = await reader.read();
 		if (done) break;
-		parts.push(value);
-		size += value.length;
+		if (offset + value.length > size) throw new Error(`${url} is larger than its Content-Length`);
+		bytes.set(value, offset);
+		offset += value.length;
 		onBytes(value.length);
 	}
-	const bytes = new Uint8Array(size);
-	let offset = 0;
-	for (const p of parts) {
-		bytes.set(p, offset);
-		offset += p.length;
-	}
+	if (offset !== size) throw new Error(`${url} ended after ${offset} of ${size} bytes`);
 	return bytes;
 }
 

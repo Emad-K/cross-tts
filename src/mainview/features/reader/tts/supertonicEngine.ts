@@ -72,7 +72,7 @@ function teardown(reason = ENGINE_RESET): void {
 
 function startWorker(
 	device: "webgpu" | "wasm",
-	hubBaseUrl: string | null,
+	hubBaseUrl: string,
 	prefs: TtsBackendPrefs,
 ): Promise<void> {
 	const w = new Worker(new URL("./supertonicWorker.ts", import.meta.url), {
@@ -159,6 +159,11 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		}
 		const hubBaseUrl = await getKokoroHubBaseUrl();
 		checkCurrent();
+		if (!hubBaseUrl) {
+			// Only the hub verifies the pinned sha256s and keeps the ~400 MB on
+			// disk; a plain HuggingFace fetch would do neither.
+			throw new Error("Supertonic 3 needs the local model hub, which isn't running.");
+		}
 		logInfo("Loading Supertonic 3…", { source: "models" });
 		let backend: Backend | null = (await initNode()) ? "node" : null;
 		checkCurrent();

@@ -55,10 +55,13 @@ export const SUPERTONIC_ONNX_BYTES = 398_075_273;
 export const supertonicRepoPath = (file: string) =>
 	`${SUPERTONIC_REPO}/resolve/${SUPERTONIC_REVISION}/${file}`;
 
-/** URL of a model file through the local hub (else HuggingFace). */
-export function supertonicFileUrl(hubBaseUrl: string | null, file: string): string {
-	const base = hubBaseUrl ?? "https://huggingface.co/";
-	return `${base.endsWith("/") ? base : `${base}/`}${supertonicRepoPath(file)}`;
+/**
+ * URL of a model file through the local hub. There is no remote fallback: only
+ * the hub checks the files' sha256 pins and keeps them on disk.
+ */
+export function supertonicFileUrl(hubBaseUrl: string, file: string): string {
+	const base = hubBaseUrl.endsWith("/") ? hubBaseUrl : `${hubBaseUrl}/`;
+	return `${base}${supertonicRepoPath(file)}`;
 }
 
 /** Config, character table and every voice style; parsed once per load. */
