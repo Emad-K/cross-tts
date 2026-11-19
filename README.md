@@ -95,8 +95,8 @@ MIT © Emad Kazemi — see [LICENSE](LICENSE).
 ### Third-party components
 
 Installers bundle third-party packages under their own licences. One worth
-calling out: [phonemizer](https://www.npmjs.com/package/phonemizer) (pulled in
-by kokoro-js for text-to-phoneme conversion) is published as Apache-2.0 but is
+calling out: [phonemizer](https://www.npmjs.com/package/phonemizer) (used for
+text-to-phoneme conversion) is published as Apache-2.0 but is
 built on and ships a compiled copy of [eSpeak NG](https://github.com/espeak-ng/espeak-ng),
 which is licensed **GPL-3.0-or-later**. Distributions of Cross TTS therefore
 include GPL-3.0+ code, and the eSpeak NG source is available from its
@@ -107,7 +107,16 @@ repository linked above.
 <details>
 <summary><strong>For developers</strong></summary>
 
-Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [kokoro-js](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) on ONNX Runtime — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback.
+Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback.
+
+**Optional CUDA (Linux/Windows x64, experimental):** Settings → Performance →
+"Use NVIDIA GPU (CUDA) for native engine" (off by default) makes the native
+engine try ONNX Runtime's CUDA execution provider. It needs CUDA 12 and cuDNN 9
+on the machine *and* ONNX Runtime's CUDA provider libraries next to the
+binding, which installers don't ship (hundreds of MB; npm only offers them for
+Linux x64 via `ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js`
+in a dev checkout). When anything is missing, or a CUDA run fails, the engine
+logs why and continues on the CPU.
 
 ```bash
 pnpm install
