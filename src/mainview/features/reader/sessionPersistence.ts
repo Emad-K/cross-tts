@@ -86,6 +86,8 @@ export function buildWebSlice(
 		volumePct: t.volumePct,
 		speed: t.speed,
 		sentencePauseMs: t.sentencePauseMs,
+		supertonicSteps: t.supertonicSteps,
+		licencesAccepted: t.licencesAccepted,
 		documentPath: doc?.filePath ?? null,
 		activeChapterId: chapterId,
 		currentChunkIndex: t.currentChunkIndex,
@@ -165,6 +167,13 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 		};
 	}
 	const { web } = file;
+	// Before the engine: a restored engine may need its licence acknowledged.
+	if (Array.isArray(web.licencesAccepted)) {
+		useTtsStore.getState().setLicencesAccepted(web.licencesAccepted);
+	}
+	if (typeof web.supertonicSteps === "number") {
+		useTtsStore.getState().setSupertonicSteps(web.supertonicSteps);
+	}
 	// Unknown or missing engine ids (sessions from before engines) → default.
 	const engine = getTtsEngine(web.engine ?? "kokoro");
 	useTtsStore.getState().setEngine(engine.id, coerceEngineVoice(engine, web.voice));

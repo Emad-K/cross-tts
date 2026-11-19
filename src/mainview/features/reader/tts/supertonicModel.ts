@@ -10,6 +10,10 @@
  * vocoder → 44.1 kHz mono PCM.
  */
 
+import { SUPERTONIC_REPO, SUPERTONIC_REVISION } from "@shared/modelAssets";
+import { isPlausibleAudio } from "./audioPlausibility";
+import { CANCELLED } from "./synthJobQueue";
+
 export const SUPERTONIC_SAMPLE_RATE = 44_100;
 /** Denoising steps the upstream examples default to (quality/speed knob). */
 export const SUPERTONIC_DEFAULT_STEPS = 8;
@@ -44,6 +48,49 @@ export const SUPERTONIC_STYLES = [
 ] as const;
 export const supertonicStylePath = (style: string) =>
 	`voice_styles/${style}.json`;
+/** Combined size of the four ONNX graphs, for download progress. */
+export const SUPERTONIC_ONNX_BYTES = 398_075_273;
+
+/** Repo-relative path of a model file at the pinned revision. */
+export const supertonicRepoPath = (file: string) =>
+	`${SUPERTONIC_REPO}/resolve/${SUPERTONIC_REVISION}/${file}`;
+
+/** URL of a model file through the local hub (else HuggingFace). */
+export function supertonicFileUrl(hubBaseUrl: string | null, file: string): string {
+	const base = hubBaseUrl ?? "https://huggingface.co/";
+	return `${base.endsWith("/") ? base : `${base}/`}${supertonicRepoPath(file)}`;
+}
+
+/** Config, character table and every voice style; parsed once per load. */
+export type SupertonicAssets = {
+	cfg: SupertonicConfig;
+	indexer: number[];
+	styles: Map<string, SupertonicStyle>;
+};
+
+/**
+ * Fetch the small files a load needs. The model's LICENSE is fetched too, so
+ * the hub keeps a copy of it in the downloaded model directory.
+ */
+export async function loadSupertonicAssets(
+	fetchText: (file: string) => Promise<string>,
+): Promise<SupertonicAssets> {
+	const [cfg, indexer, styles] = await Promise.all([
+		fetchText(SUPERTONIC_CONFIG).then(JSON.parse),
+		fetchText(SUPERTONIC_INDEXER).then(JSON.parse),
+		Promise.all(
+			SUPERTONIC_STYLES.map((s) =>
+				fetchText(supertonicStylePath(s)).then((t) => parseVoiceStyle(JSON.parse(t))),
+			),
+		),
+		fetchText("LICENSE"),
+	]);
+	return {
+		cfg,
+		indexer,
+		styles: new Map(SUPERTONIC_STYLES.map((s, i) => [s, styles[i]])),
+	};
+}
 
 // --- Minimal ORT surface (identical in onnxruntime-web and -node) ----------
 
@@ -276,4 +323,62 @@ export async function synthesizeSupertonic(
 		offset += a.length + gap;
 	}
 	return joined;
+}
+
+// --- One request, as both workers run it ------------------------------------
+
+/** `<lang>:<style>` voice id (see supertonicVoices.ts) → its parts, or null. */
+export function parseSupertonicVoice(
+	id: string,
+): { lang: string; style: string } | null {
+	const [lang, style, extra] = id.split(":");
+	if (extra !== undefined || !lang || !style) return null;
+	if (!(SUPERTONIC_LANGS as readonly string[]).includes(lang)) return null;
+	if (!(SUPERTONIC_STYLES as readonly string[]).includes(style)) return null;
+	return { lang, style };
+}
+
+export function clampSupertonicSteps(steps: number): number {
+	if (!Number.isFinite(steps)) return SUPERTONIC_DEFAULT_STEPS;
+	return Math.min(SUPERTONIC_MAX_STEPS, Math.max(SUPERTONIC_MIN_STEPS, Math.round(steps)));
+}
+
+export type SupertonicJob = { text: string; voice: string; speed: number; steps: number };
+
+export type SupertonicRuntime = {
+	Tensor: OrtTensorCtor;
+	sessions: SupertonicSessions;
+	assets: SupertonicAssets;
+};
+
+/**
+ * Synthesize one request into the workers' reply shape. `isStale` runs before
+ * every piece (it should yield so newer messages are read); a stale request
+ * replies `CANCELLED`. Implausible audio (NaN, clipping, silence) is an error
+ * so it is never played or cached.
+ */
+export async function runSupertonicJob(
+	rt: SupertonicRuntime,
+	job: SupertonicJob,
+	isStale: () => Promise<boolean>,
+): Promise<{ audio?: Float32Array; empty?: true; error?: string }> {
+	const v = parseSupertonicVoice(job.voice);
+	const style = v && rt.assets.styles.get(v.style);
+	if (!v || !style) return { error: `Unknown Supertonic voice: ${job.voice}` };
+	const pcm = await synthesizeSupertonic(
+		rt.Tensor,
+		rt.sessions,
+		rt.assets.cfg,
+		rt.assets.indexer,
+		job.text,
+		v.lang,
+		style,
+		clampSupertonicSteps(job.steps),
+		job.speed,
+		isStale,
+	);
+	if (pcm === null) return { error: CANCELLED };
+	if (pcm.length === 0) return { empty: true };
+	if (!isPlausibleAudio(pcm)) return { error: "bad-output" };
+	return { audio: pcm };
 }
