@@ -158,6 +158,9 @@ Kokoro engine. Any of them falls back to the CPU when it can't start, and
   never installs them. Picking it downloads a one-time 234 MB add-on (ONNX
   Runtime's CUDA provider libraries, SHA-512 pinned) from nuget.org into the
   app-data folder. That click is the only time the app contacts nuget.org.
+  The checksum is checked at download time only: the unpacked libraries sit
+  in your own app-data folder and are loaded from there afterwards, like any
+  other file your user account can change.
 
 ```bash
 pnpm install

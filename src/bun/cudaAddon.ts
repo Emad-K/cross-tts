@@ -47,7 +47,13 @@ export function cudaAddonDir(userData: string, pkg = CUDA_ADDON): string {
 	return join(userData, ROOT, pkg.ortVersion);
 }
 
-/** The marker is written last, so a half-finished install never counts. */
+/**
+ * The marker is written last, so a half-finished install never counts.
+ * ponytail: the unpacked libraries aren't re-hashed on later launches. They
+ * live in the user's own folder, so a same-user process could swap them (as
+ * it could the app's config); NuGet publishes no per-file hash to pin, and
+ * re-hashing 284 MB on every start isn't worth it for no privilege boundary.
+ */
 export function cudaAddonInstalled(userData: string, pkg = CUDA_ADDON): boolean {
 	return existsSync(join(cudaAddonDir(userData, pkg), MARKER));
 }
