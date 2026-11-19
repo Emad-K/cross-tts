@@ -8,12 +8,15 @@
 # postinst, so the profile is removed here and immediately reinstalled by the new
 # deb-after-install.sh — no gap in coverage after the upgrade completes.
 #
-# ${executable} is macro-expanded by electron-builder at build time; do not add
-# other dollar-brace tokens.
+# ${executable} and ${sanitizedProductName} are macro-expanded by
+# electron-builder at build time; do not add other dollar-brace tokens.
+#
+# update-alternatives --remove takes the registered target (/opt/...), not the
+# /usr/bin link; given the link it exits 0 and removes nothing.
 
 # --- Remove the /usr/bin launcher (default template) ---
 if type update-alternatives >/dev/null 2>&1; then
-    update-alternatives --remove '${executable}' '/usr/bin/${executable}'
+    update-alternatives --remove '${executable}' '/opt/${sanitizedProductName}/${executable}'
 else
     rm -f '/usr/bin/${executable}'
 fi

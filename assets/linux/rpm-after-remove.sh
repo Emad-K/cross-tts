@@ -6,8 +6,9 @@
 # 0 = real removal, 1+ = upgrade. Only clean up on removal.
 #
 # The AppArmor part is a no-op on SELinux distros (Fedora, RHEL): there is no
-# profile file to remove. ${executable} is macro-expanded by electron-builder
-# at build time; do not add other dollar-brace tokens.
+# profile file to remove. ${executable} and ${sanitizedProductName} are
+# macro-expanded by electron-builder at build time; do not add other
+# dollar-brace tokens.
 
 if [ "$1" != "0" ]; then
     exit 0
@@ -15,7 +16,7 @@ fi
 
 # --- Remove the /usr/bin launcher (default template) ---
 if type update-alternatives >/dev/null 2>&1; then
-    update-alternatives --remove '${executable}' '/usr/bin/${executable}'
+    update-alternatives --remove '${executable}' '/opt/${sanitizedProductName}/${executable}'
 else
     rm -f '/usr/bin/${executable}'
 fi
