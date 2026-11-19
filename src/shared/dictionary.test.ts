@@ -121,13 +121,16 @@ describe("parseDictionaryResponse", () => {
 		).toEqual([]);
 	});
 
-	it("normalizes protocol-relative audio URLs and drops http/empty ones", () => {
+	it("normalizes protocol-relative audio URLs and drops http/empty/unknown-host ones", () => {
 		const entries = parseDictionaryResponse([
 			{
 				word: "hej",
 				phonetics: [
 					{ text: "/hɛj/", audio: "//ssl.gstatic.com/dictionary/hej.mp3" },
 					{ audio: "http://insecure.example/x.mp3" },
+					{ audio: "https://evil.example/x.mp3" },
+					{ audio: "https://ssl.gstatic.com.evil.example/x.mp3" },
+					{ audio: "https://user@evil.example/ssl.gstatic.com/x.mp3" },
 					{ audio: "" },
 				],
 				meanings: [
