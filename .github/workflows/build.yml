@@ -3,7 +3,8 @@ name: Build
 # PR gate only. Installers are built by release.yml, never here: packaging
 # three OSes on every PR and every merge cost ~30 runner-minutes (macOS bills
 # 10x, Windows 2x) to produce files nobody downloaded. One Linux job covers
-# typecheck, unit tests, the electron-vite build and the Electron e2e smoke.
+# typecheck, unit tests, the electron-vite build, the Electron e2e smoke and
+# an unpacked Linux package build.
 # No push-to-main trigger: the PR run already validated the merged code, and
 # release.yml owns main.
 on:
@@ -67,6 +68,15 @@ jobs:
 
       - name: E2E smoke (Playwright + Electron)
         run: xvfb-run --auto-servernum -- pnpm run test:e2e
+
+      # Packaging smoke: electron-builder config, file filters and per-arch
+      # native binaries otherwise first run in release.yml, after the version
+      # bump is on main. Unpacked Linux dirs only (~1 min); Windows and macOS
+      # packaging still only run at release.
+      - name: Package smoke (Linux x64 + arm64, unpacked)
+        run: |
+          pnpm exec electron-builder --linux dir --x64 --arm64 --publish never
+          test -d release/linux-arm64-unpacked/resources/app.asar.unpacked/node_modules/@img/sharp-linux-arm64
 
       - name: Upload Playwright traces on failure
         if: failure()
