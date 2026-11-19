@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
+	DialogFooter,
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
@@ -60,6 +62,7 @@ import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
 import {
 	coerceEngineVoice,
+	ensureTtsLoaded,
 	getActiveDevice,
 	getTtsEngine,
 	MAX_SENTENCE_PAUSE_MS,
@@ -67,6 +70,12 @@ import {
 	TTS_ENGINES,
 	useTtsStore,
 } from "../tts";
+import {
+	SUPERTONIC_DEFAULT_STEPS,
+	SUPERTONIC_MAX_STEPS,
+	SUPERTONIC_MIN_STEPS,
+} from "../tts/supertonicModel";
+import type { TtsEngine } from "../tts/ttsEngineTypes";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
@@ -854,21 +863,88 @@ function formatPauseMs(ms: number): string {
 	return `${ms} ms`;
 }
 
+/** An engine's licence terms; with `onAccept`, the one-time acknowledgement. */
+function LicenceDialog({
+	engine,
+	open,
+	onOpenChange,
+	onAccept,
+}: {
+	engine: TtsEngine;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onAccept?: () => void;
+}) {
+	const terms = engine.licence.acknowledge;
+	if (!terms) return null;
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+				<DialogTitle>
+					{engine.displayName} — {engine.licence.name} licence
+				</DialogTitle>
+				<DialogDescription>
+					The {engine.displayName} model is downloaded from HuggingFace and
+					licensed to you by its authors under {engine.licence.name}, not by
+					Cross TTS. Its terms forbid using the model or its output to:
+				</DialogDescription>
+				<ScrollArea className="min-h-0 flex-1 pr-3">
+					<ul className="list-disc space-y-1 pl-5 text-sm">
+						{terms.summary.map((r) => (
+							<li key={r}>{r}</li>
+						))}
+					</ul>
+					<details className="mt-4 text-xs">
+						<summary className="cursor-pointer font-medium">
+							Full licence text
+						</summary>
+						<pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+							{terms.text}
+						</pre>
+					</details>
+					<p className="mt-3 text-xs text-muted-foreground">
+						A copy of the licence is saved next to the downloaded model.
+					</p>
+				</ScrollArea>
+				<DialogFooter className="gap-2">
+					<Button variant="outline" onClick={() => onOpenChange(false)}>
+						{onAccept ? "Cancel" : "Close"}
+					</Button>
+					{onAccept ? (
+						<Button onClick={onAccept}>Accept and use {engine.displayName}</Button>
+					) : null}
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
 function EngineControl() {
 	const engineId = useTtsStore((s) => s.engineId);
 	const voice = useTtsStore((s) => s.voice);
 	const setEngine = useTtsStore((s) => s.setEngine);
+	const accepted = useTtsStore((s) => s.licencesAccepted);
+	const steps = useTtsStore((s) => s.supertonicSteps);
+	const modelPhase = useTtsStore((s) => s.modelPhase);
+	const modelProgress = useTtsStore((s) => s.modelProgress);
 	const engine = getTtsEngine(engineId);
+	/** Engine waiting for its licence to be accepted before it's selected. */
+	const [pending, setPending] = useState<TtsEngine | null>(null);
+	const [viewLicence, setViewLicence] = useState(false);
+	const [stepsDraft, setStepsDraft] = useState<number | null>(null);
+
+	const select = (next: TtsEngine) =>
+		setEngine(next.id, coerceEngineVoice(next, voice));
+	const onPick = (id: string) => {
+		const next = getTtsEngine(id);
+		if (next.licence.acknowledge && !accepted.includes(next.id)) setPending(next);
+		else select(next);
+	};
 
 	return (
 		<div className="mb-3 rounded-lg border border-border bg-muted/20 p-4">
 			<div className="mb-3 text-sm font-medium">Voice engine</div>
-			<Select
-				value={engine.id}
-				onValueChange={(id) =>
-					setEngine(id, coerceEngineVoice(getTtsEngine(id), voice))
-				}
-			>
+			<Select value={engine.id} onValueChange={onPick}>
 				<SelectTrigger className="w-full" aria-label="Voice engine">
 					<SelectValue />
 				</SelectTrigger>
@@ -882,9 +958,99 @@ function EngineControl() {
 			</Select>
 			<p className="mt-3 text-xs text-muted-foreground">
 				{engine.listVoices().length} voices · {engine.languages.join(", ")} ·{" "}
-				{engine.licence.name} licence. Each book remembers its engine and
-				voice.
+				{engine.licence.name} licence
+				{engine.licence.acknowledge ? (
+					<>
+						{" "}
+						(
+						<button
+							type="button"
+							className="underline underline-offset-2 hover:text-foreground"
+							onClick={() => setViewLicence(true)}
+						>
+							terms
+						</button>
+						)
+					</>
+				) : null}
+				. Each book remembers its engine and voice.
 			</p>
+			{engine.id === "supertonic" ? (
+				<div className="mt-4 space-y-4">
+					<div>
+						<div className="flex items-center justify-between gap-4 text-sm font-medium">
+							<span>Quality</span>
+							<span className="text-xs tabular-nums text-muted-foreground">
+								{stepsDraft ?? steps} steps
+							</span>
+						</div>
+						<Slider
+							className="mt-3"
+							aria-label="Supertonic quality (denoising steps)"
+							min={SUPERTONIC_MIN_STEPS}
+							max={SUPERTONIC_MAX_STEPS}
+							step={1}
+							value={[stepsDraft ?? steps]}
+							onValueChange={(v) => setStepsDraft(v[0] ?? steps)}
+							onValueCommit={(v) => {
+								setStepsDraft(null);
+								useTtsStore.getState().setSupertonicSteps(v[0] ?? steps);
+							}}
+						/>
+						<p className="mt-2 text-xs text-muted-foreground">
+							Denoising steps per sentence. More sounds cleaner but takes
+							longer; {SUPERTONIC_DEFAULT_STEPS} is the model&apos;s
+							default.
+						</p>
+					</div>
+					<div className="flex items-center gap-3">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2"
+							disabled={modelPhase === "loading" || modelPhase === "ready"}
+							onClick={() => void ensureTtsLoaded().catch(() => {})}
+						>
+							{modelPhase === "loading" ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden />
+							) : modelPhase === "ready" ? (
+								<CheckCircle2 className="size-4" aria-hidden />
+							) : (
+								<Download className="size-4" aria-hidden />
+							)}
+							{modelPhase === "ready" ? "Model ready" : "Download model (~400 MB)"}
+						</Button>
+						{modelPhase === "loading" && modelProgress !== null ? (
+							<Progress
+								className="h-1.5 flex-1"
+								value={Math.round(modelProgress * 100)}
+							/>
+						) : null}
+					</div>
+				</div>
+			) : null}
+			<LicenceDialog
+				engine={engine}
+				open={viewLicence}
+				onOpenChange={setViewLicence}
+			/>
+			{pending ? (
+				<LicenceDialog
+					engine={pending}
+					open
+					onOpenChange={(open) => {
+						if (!open) setPending(null);
+					}}
+					onAccept={() => {
+						const { licencesAccepted, setLicencesAccepted } =
+							useTtsStore.getState();
+						setLicencesAccepted([...licencesAccepted, pending.id]);
+						select(pending);
+						setPending(null);
+					}}
+				/>
+			) : null}
 		</div>
 	);
 }
