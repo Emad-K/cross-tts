@@ -41,7 +41,8 @@ export type TtsSynthOptions = {
 export interface TtsEngine {
 	readonly id: string;
 	readonly displayName: string;
-	readonly licence: { name: string; url: string };
+	/** `notice`: attribution shown with the licence (e.g. upstream authors). */
+	readonly licence: { name: string; url: string; notice?: string };
 	readonly languages: readonly string[];
 	/** Rate of the PCM `synthesize` returns. */
 	readonly sampleRate: number;

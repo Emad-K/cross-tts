@@ -19,6 +19,9 @@ files:
   # The renderer bundles the ORT wasm/glue it uses into out/renderer; the
   # package itself (~140 MB of dist variants) is never loaded at runtime.
   - "!**/node_modules/onnxruntime-web/**"
+  # Same for phonon-tts (its worker and wasm builds are bundled by Vite); only
+  # its licence files ship.
+  - "!**/node_modules/phonon-tts/!(LICENSE-APACHE|LICENSE-MIT|THIRD_PARTY_LICENSES.md)"
   # onnxruntime-node: never ship the CUDA/TensorRT execution providers. npm
   # doesn't include them (a dev checkout only has them after an explicit
   # `ONNXRUNTIME_NODE_INSTALL=cuda12` install); they are ~hundreds of MB and the
