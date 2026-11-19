@@ -99,32 +99,37 @@ export const HUB_REPOS: Readonly<Record<string, readonly HubRepo[]>> = {
 export type HubFile = { repo: string; revision: string; path: string };
 
 /**
- * What Settings → Storage downloads per model kind: the weights (whose size
- * says whether the model is present) and the small files loading needs.
+ * What Settings → Storage downloads per model kind: the weights, the small
+ * files loading needs (the model is present only when all are on disk), and
+ * optional files that may 404.
  */
 export const MODEL_FILES: Record<
 	ModelKind,
-	{ weights: HubFile; sidecars: readonly HubFile[] }
+	{ weights: HubFile; sidecars: readonly HubFile[]; optional: readonly HubFile[] }
 > = (() => {
 	const kokoro = (path: string): HubFile => ({
 		repo: MODEL_REPO,
 		revision: MODEL_REVISION,
 		path,
 	});
-	const kokoroSidecars = [
-		"config.json",
-		"tokenizer.json",
-		"tokenizer_config.json",
-		"special_tokens_map.json",
-	].map(kokoro);
+	const kokoroSidecars = ["config.json", "tokenizer.json"].map(kokoro);
+	const kokoroOptional = ["tokenizer_config.json", "special_tokens_map.json"].map(kokoro);
 	const phonon = (path: string): HubFile => ({
 		repo: PHONON_REPO,
 		revision: PHONON_REVISION,
 		path,
 	});
 	return {
-		cpu: { weights: kokoro(MODEL_ONNX.cpu), sidecars: kokoroSidecars },
-		gpu: { weights: kokoro(MODEL_ONNX.gpu), sidecars: kokoroSidecars },
+		cpu: {
+			weights: kokoro(MODEL_ONNX.cpu),
+			sidecars: kokoroSidecars,
+			optional: kokoroOptional,
+		},
+		gpu: {
+			weights: kokoro(MODEL_ONNX.gpu),
+			sidecars: kokoroSidecars,
+			optional: kokoroOptional,
+		},
 		phonon: {
 			weights: phonon(PHONON_WEIGHTS),
 			sidecars: [
@@ -136,6 +141,7 @@ export const MODEL_FILES: Record<
 					path: phononVoicePath(id),
 				})),
 			],
+			optional: [],
 		},
 	};
 })();

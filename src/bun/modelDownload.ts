@@ -33,8 +33,13 @@ function fileBytes(p: string): number {
 export function modelStatus(): ModelStatusMap {
 	const out = {} as ModelStatusMap;
 	for (const kind of MODEL_KINDS) {
-		const bytes = fileBytes(filePath(MODEL_FILES[kind].weights));
-		out[kind] = { present: bytes >= MIN_WEIGHTS_BYTES, bytes };
+		const { weights, sidecars } = MODEL_FILES[kind];
+		const bytes = fileBytes(filePath(weights));
+		out[kind] = {
+			present:
+				bytes >= MIN_WEIGHTS_BYTES && sidecars.every((f) => fileBytes(filePath(f)) >= 1),
+			bytes,
+		};
 	}
 	return out;
 }
@@ -51,23 +56,26 @@ function fetchToDisk(
 	);
 }
 
-/** Download a model's weights (with progress) plus its sidecar files. */
+/**
+ * Download whatever of a model's files is missing: the weights (with
+ * progress), then its sidecars. A sidecar that fails fails the download.
+ */
 export async function downloadModel(
 	kind: ModelKind,
 	onProgress: (loaded: number, total: number) => void,
 ): Promise<void> {
-	const { weights, sidecars } = MODEL_FILES[kind];
-	if (fileBytes(filePath(weights)) >= MIN_WEIGHTS_BYTES) {
-		onProgress(1, 1);
-		return;
-	}
-	await fetchToDisk(weights, onProgress);
+	const { weights, sidecars, optional } = MODEL_FILES[kind];
+	if (fileBytes(filePath(weights)) >= MIN_WEIGHTS_BYTES) onProgress(1, 1);
+	else await fetchToDisk(weights, onProgress);
 	for (const f of sidecars) {
+		if (fileBytes(filePath(f)) < 1) await fetchToDisk(f);
+	}
+	for (const f of optional) {
 		if (fileBytes(filePath(f)) >= 1) continue;
 		try {
 			await fetchToDisk(f);
 		} catch {
-			// Optional file (404), or fetched again on demand by the hub.
+			// May not exist upstream (404).
 		}
 	}
 }
