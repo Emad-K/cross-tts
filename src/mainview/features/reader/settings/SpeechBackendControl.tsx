@@ -53,7 +53,8 @@ type ModelsOnDisk = { fp32: boolean; q8: boolean; supertonic: boolean };
 
 /**
  * Confirm, download and verify the CUDA add-on. Nothing is downloaded until
- * "Download" is clicked; closing the dialog cancels a download in progress.
+ * "Download" is clicked. Cancel (or the close button) stops a download in
+ * progress; a stray click outside or Esc doesn't.
  */
 function CudaAddonDialog({
 	open,
@@ -99,7 +100,11 @@ function CudaAddonDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && close()}>
-			<DialogContent className="max-w-md">
+			<DialogContent
+				className="max-w-md"
+				onInteractOutside={(e) => downloading && e.preventDefault()}
+				onEscapeKeyDown={(e) => downloading && e.preventDefault()}
+			>
 				<DialogTitle>Download the NVIDIA CUDA add-on?</DialogTitle>
 				<DialogDescription>
 					Speech on NVIDIA CUDA needs ONNX Runtime&apos;s CUDA libraries, which
