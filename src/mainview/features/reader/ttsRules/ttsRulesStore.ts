@@ -6,6 +6,7 @@ import {
 	type TtsTextRulesState,
 	coerceTtsTextRulesState,
 	defaultTtsTextRulesState,
+	effectiveTtsRules,
 	setSlowTtsRuleHandler,
 	ttsTextRulesSignature,
 } from "@shared/ttsTextRules";
@@ -18,14 +19,27 @@ import {
 } from "@shared/ttsRulesExchange";
 
 type TtsRulesStore = TtsTextRulesState & {
+	/**
+	 * Signature of the rules in effect for {@link currentBook} (not of every
+	 * stored rule), so cached audio is reused until the rules that actually
+	 * apply change, and is dropped when another book's rules take over.
+	 */
 	signature: string;
+	/** Path of the open book; its "This book" rules apply on top of the rest. */
+	currentBook: string | null;
+	setCurrentBook: (path: string | null) => void;
 	hydrate: (raw: unknown) => void;
 	setRegexEnabled: (id: string, enabled: boolean) => void;
 	/** Enable/disable every regex rule in a builtin preset group (single update). */
 	setRegexGroupEnabled: (group: string, enabled: boolean) => void;
 	updateRegexRule: (
 		id: string,
-		patch: Partial<Pick<RegexReplaceRule, "label" | "pattern" | "replacement" | "caseSensitive">>,
+		patch: Partial<
+			Pick<
+				RegexReplaceRule,
+				"label" | "pattern" | "replacement" | "caseSensitive" | "book"
+			>
+		>,
 	) => void;
 	addRegexRule: (rule: Omit<RegexReplaceRule, "kind" | "builtIn">) => void;
 	removeRegexRule: (id: string) => void;
@@ -35,7 +49,7 @@ type TtsRulesStore = TtsTextRulesState & {
 	updatePronunciationRule: (
 		id: string,
 		patch: Partial<
-			Pick<PronunciationRule, "word" | "phonetic" | "caseSensitive">
+			Pick<PronunciationRule, "word" | "phonetic" | "caseSensitive" | "book">
 		>,
 	) => void;
 	addPronunciationRule: (
@@ -48,20 +62,33 @@ type TtsRulesStore = TtsTextRulesState & {
 	) => void;
 };
 
-function withSignature(state: TtsTextRulesState): TtsTextRulesState & {
-	signature: string;
-} {
-	return { ...state, signature: ttsTextRulesSignature(state) };
+function withSignature(
+	state: TtsTextRulesState,
+	book: string | null,
+): TtsTextRulesState & { signature: string } {
+	return {
+		...state,
+		signature: ttsTextRulesSignature(effectiveTtsRules(state, book)),
+	};
 }
 
 export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
-	const initial = withSignature(defaultTtsTextRulesState());
+	const initial = withSignature(defaultTtsTextRulesState(), null);
+	const sign = (state: TtsTextRulesState) =>
+		withSignature(state, get().currentBook);
 	return {
 		...initial,
-		hydrate: (raw) => set(withSignature(coerceTtsTextRulesState(raw))),
+		currentBook: null,
+		setCurrentBook: (currentBook) =>
+			set((s) =>
+				s.currentBook === currentBook
+					? s
+					: { currentBook, ...withSignature(s, currentBook) },
+			),
+		hydrate: (raw) => set(sign(coerceTtsTextRulesState(raw))),
 		setRegexEnabled: (id, enabled) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					regexRules: s.regexRules.map((r) =>
 						r.id === id ? { ...r, enabled } : r,
@@ -70,7 +97,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		setRegexGroupEnabled: (group, enabled) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					regexRules: s.regexRules.map((r) =>
 						r.group === group && r.enabled !== enabled
@@ -81,7 +108,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		updateRegexRule: (id, patch) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					regexRules: s.regexRules.map((r) =>
 						r.id === id && !r.builtIn ? { ...r, ...patch } : r,
@@ -90,7 +117,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		addRegexRule: (rule) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					regexRules: [
 						...s.regexRules,
@@ -102,7 +129,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			const target = get().regexRules.find((r) => r.id === id);
 			if (!target || target.builtIn) return;
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					regexRules: s.regexRules.filter((r) => r.id !== id),
 				}),
@@ -110,7 +137,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 		},
 		setPronunciationEnabled: (id, enabled) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					pronunciationRules: s.pronunciationRules.map((r) =>
 						r.id === id ? { ...r, enabled } : r,
@@ -119,7 +146,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		setPronunciationGroupEnabled: (group, enabled) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					pronunciationRules: s.pronunciationRules.map((r) =>
 						r.group === group && r.enabled !== enabled
@@ -130,7 +157,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		updatePronunciationRule: (id, patch) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					pronunciationRules: s.pronunciationRules.map((r) =>
 						r.id === id ? { ...r, ...patch } : r,
@@ -139,7 +166,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			),
 		addPronunciationRule: (rule) =>
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					pronunciationRules: [
 						...s.pronunciationRules,
@@ -151,7 +178,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 			const target = get().pronunciationRules.find((r) => r.id === id);
 			if (target?.builtIn) return;
 			set((s) =>
-				withSignature({
+				sign({
 					...s,
 					pronunciationRules: s.pronunciationRules.filter(
 						(r) => r.id !== id,
@@ -161,7 +188,7 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 		},
 		importUserRules: (file, mode) =>
 			set((s) =>
-				withSignature(
+				sign(
 					applyImportedUserRules(s, file, mode, (prefix) =>
 						`${prefix}-${crypto.randomUUID()}`,
 					),
@@ -187,7 +214,8 @@ setSlowTtsRuleHandler((rule, ms) => {
 	}, 0);
 });
 
+/** The rules in effect for the open book: all-books rules plus its own. */
 export function getTtsRulesForEngine(): TtsTextRulesState {
-	const { regexRules, pronunciationRules } = useTtsRulesStore.getState();
-	return { regexRules, pronunciationRules };
+	const s = useTtsRulesStore.getState();
+	return effectiveTtsRules(s, s.currentBook);
 }

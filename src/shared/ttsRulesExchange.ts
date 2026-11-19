@@ -14,6 +14,8 @@ export type TtsRulesExportRegexRule = {
 	replacement: string;
 	enabled: boolean;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; absent means all books. */
+	book?: string;
 };
 
 export type TtsRulesExportPronunciationRule = {
@@ -21,6 +23,8 @@ export type TtsRulesExportPronunciationRule = {
 	phonetic: string;
 	caseSensitive: boolean;
 	enabled: boolean;
+	/** Book path the rule is limited to; absent means all books. */
+	book?: string;
 };
 
 export type TtsRulesExportFile = {
@@ -39,6 +43,11 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+/** A rule's per-book scope as an optional field (omitted for all-books rules). */
+function bookField(book: unknown): { book?: string } {
+	return typeof book === "string" && book ? { book } : {};
+}
+
 /** User-added rules only (excludes built-in defaults). */
 export function buildTtsRulesExport(
 	state: TtsTextRulesState,
@@ -55,6 +64,7 @@ export function buildTtsRulesExport(
 				replacement: r.replacement,
 				enabled: r.enabled,
 				caseSensitive: r.caseSensitive,
+				...bookField(r.book),
 			})),
 		pronunciationRules: state.pronunciationRules
 			.filter((r) => !r.builtIn)
@@ -63,6 +73,7 @@ export function buildTtsRulesExport(
 				phonetic: r.phonetic,
 				caseSensitive: r.caseSensitive,
 				enabled: r.enabled,
+				...bookField(r.book),
 			})),
 	};
 }
@@ -93,6 +104,7 @@ function parseRegexExportItem(
 			typeof item.replacement === "string" ? item.replacement : "",
 		enabled: item.enabled !== false,
 		caseSensitive: item.caseSensitive === true,
+		...bookField(item.book),
 	};
 }
 
@@ -109,6 +121,7 @@ function parsePronunciationExportItem(
 		phonetic,
 		caseSensitive: item.caseSensitive === true,
 		enabled: item.enabled !== false,
+		...bookField(item.book),
 	};
 }
 
@@ -216,6 +229,7 @@ export function applyImportedUserRules(
 			enabled: false,
 			caseSensitive: r.caseSensitive,
 			builtIn: false,
+			...bookField(r.book),
 		}),
 	);
 
@@ -227,6 +241,7 @@ export function applyImportedUserRules(
 			phonetic: r.phonetic,
 			caseSensitive: r.caseSensitive,
 			enabled: r.enabled,
+			...bookField(r.book),
 		}));
 
 	return {
