@@ -36,7 +36,7 @@ function matchHubRepo(
 		);
 		const m = re.exec(hfPath);
 		if (!m) continue;
-		if (m[2] === "onnx" && !repo.sha256[m[1]!]) return null;
+		if (!repo.unhashedExtensions.includes(m[2]!) && !repo.sha256[m[1]!]) return null;
 		return { repo, file: m[1]! };
 	}
 	return null;
@@ -46,8 +46,9 @@ function matchHubRepo(
  * Map a local hub request path (`/<token>/<repo>/resolve/<rev>/<file>`) to the
  * HuggingFace path it proxies (`/<repo>/resolve/<rev>/<file>`), or null if the
  * token is wrong or the path isn't an allowed file of an allowlisted repo at
- * its pinned revision (HUB_REPOS). ONNX files must also have a known sha256
- * so their download can be verified.
+ * its pinned revision (HUB_REPOS). Files outside the repo's
+ * `unhashedExtensions` must also have a known sha256 so their download can be
+ * verified.
  */
 export function hubRequestPath(
 	pathname: string,

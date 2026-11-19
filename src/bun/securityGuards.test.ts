@@ -41,8 +41,8 @@ describe("hubRequestPath", () => {
 	});
 	test("serves each engine's own repos, revisions and extensions", () => {
 		const repos = [
-			{ repo: "org/a", revision: "r1", extensions: ["json"], sha256: {} },
-			{ repo: "org/b", revision: "r2", extensions: ["onnx"], sha256: { "m.onnx": "h" } },
+			{ repo: "org/a", revision: "r1", extensions: ["json"], unhashedExtensions: ["json"], sha256: {} },
+			{ repo: "org/b", revision: "r2", extensions: ["onnx"], unhashedExtensions: [], sha256: { "m.onnx": "h" } },
 		];
 		expect(hubRequestPath(`/${t}/org/a/resolve/r1/x.json`, t, repos)).toBe("/org/a/resolve/r1/x.json");
 		expect(hubRequestPath(`/${t}/org/a/resolve/r2/x.json`, t, repos)).toBeNull();
@@ -51,6 +51,21 @@ describe("hubRequestPath", () => {
 		expect(hubFileSha256("/org/b/resolve/r2/m.onnx", repos)).toBe("h");
 		expect(hubFileSha256(`/${repo}/resolve/${rev}/onnx/model.onnx`)).toMatch(/^[0-9a-f]{64}$/);
 		expect(hubFileSha256(`/${repo}/resolve/${rev}/config.json`)).toBeUndefined();
+	});
+	test("refuses any weight file without a pinned sha256, whatever its format", () => {
+		const repos = [
+			{
+				repo: "org/c",
+				revision: "r",
+				extensions: ["json", "gguf", "safetensors"],
+				unhashedExtensions: ["json"],
+				sha256: { "ok.gguf": "h" },
+			},
+		];
+		expect(hubRequestPath(`/${t}/org/c/resolve/r/config.json`, t, repos)).toBe("/org/c/resolve/r/config.json");
+		expect(hubRequestPath(`/${t}/org/c/resolve/r/ok.gguf`, t, repos)).toBe("/org/c/resolve/r/ok.gguf");
+		expect(hubRequestPath(`/${t}/org/c/resolve/r/other.gguf`, t, repos)).toBeNull();
+		expect(hubRequestPath(`/${t}/org/c/resolve/r/model.safetensors`, t, repos)).toBeNull();
 	});
 });
 
