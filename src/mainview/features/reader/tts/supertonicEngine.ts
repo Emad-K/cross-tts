@@ -9,6 +9,7 @@ import {
 	ttsNodeStop,
 } from "@/lib/desktopBridge";
 import { logError, logInfo, logWarn } from "../logging";
+import { announceFallback, loadPlan } from "./backendChoice";
 import { softwareAdapterReason } from "./gpuAdapter";
 import { SUPERTONIC_LANGS, SUPERTONIC_SAMPLE_RATE } from "./supertonicModel";
 import {
@@ -23,7 +24,8 @@ import type {
 import { useTtsStore } from "./ttsStore";
 
 /**
- * Supertonic 3 behind the TtsEngine interface. Backends, in preference order:
+ * Supertonic 3 behind the TtsEngine interface. Backends, in the default order
+ * (backendChoice.ts has the order for the other backend choices):
  * native onnxruntime-node utility process (src/bun/supertonicNodeWorker.ts;
  * measured ~7× realtime on an 8-core CPU) → WebGPU renderer worker → WASM
  * renderer worker (supertonicWorker.ts). Native comes first because it is
@@ -172,28 +174,35 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 			throw new Error("Supertonic 3 needs the local model hub, which isn't running.");
 		}
 		logInfo("Loading Supertonic 3…", { source: "models" });
-		let backend: Backend | null = (await initNode()) ? "node" : null;
-		checkCurrent();
-		if (!backend && prefs.gpu && !gpuFailed && (await hasWebgpu(prefs.gpuPower))) {
-			try {
-				await startWorker("webgpu", hubBaseUrl, prefs);
-				backend = "webgpu";
-			} catch (e) {
+		let backend: Backend | null = null;
+		const plan = loadPlan(supertonicEngine.id, prefs.backend);
+		for (const step of prefs.noFallback ? plan.slice(0, 1) : plan) {
+			if (step === "cpu") {
+				backend = (await initNode()) ? "node" : null;
 				checkCurrent();
-				logWarn("Supertonic on the GPU failed to load; using the CPU.", {
-					source: "models",
-					detail: e instanceof Error ? e.message : String(e),
-				});
-				worker?.terminate();
-				worker = null;
+			} else if (step === "webgpu") {
+				if (gpuFailed || !(await hasWebgpu(prefs.gpuPower))) continue;
+				checkCurrent();
+				try {
+					await startWorker("webgpu", hubBaseUrl, prefs);
+					backend = "webgpu";
+				} catch (e) {
+					checkCurrent();
+					logWarn("Supertonic on the GPU failed to load; using the CPU.", {
+						source: "models",
+						detail: e instanceof Error ? e.message : String(e),
+					});
+					worker?.terminate();
+					worker = null;
+				}
+			} else if (step === "wasm") {
+				await startWorker("wasm", hubBaseUrl, prefs);
+				backend = "wasm";
 			}
+			checkCurrent();
+			if (backend) break;
 		}
-		checkCurrent();
-		if (!backend) {
-			await startWorker("wasm", hubBaseUrl, prefs);
-			backend = "wasm";
-		}
-		checkCurrent();
+		if (!backend) throw new Error("No speech backend could start.");
 		active = backend;
 		setModelPhase("ready");
 		setModelProgress(1);
@@ -201,6 +210,7 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 			`Supertonic 3 ready (${backend}) — loaded in ${((performance.now() - startedAt) / 1000).toFixed(1)}s.`,
 			{ source: "models" },
 		);
+		announceFallback(supertonicEngine.id, prefs.backend, runningOn()!);
 	})().catch((e: unknown) => {
 		if (gen !== loadGen) throw e;
 		const message = e instanceof Error ? e.message : String(e);
@@ -210,6 +220,10 @@ function ensureLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		throw e;
 	});
 	return ready;
+}
+
+function runningOn() {
+	return active === "node" ? "cpu" : active;
 }
 
 function requestWorker(
@@ -332,6 +346,7 @@ export const supertonicEngine: TtsEngine = {
 	listVoices: supertonicVoiceOptions,
 	ensureLoaded,
 	activeBackend: () => active,
+	runningOn,
 	synthesize,
 	recover,
 	cacheTag: () => String(useTtsStore.getState().supertonicSteps),

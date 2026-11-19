@@ -1,11 +1,20 @@
-import type { AppApi, FoundInPageResult } from "@shared/appRpc";
+import type {
+	AppApi,
+	CudaAddonInstallResult,
+	FoundInPageResult,
+} from "@shared/appRpc";
 import type {
 	TtsNodeEngine,
+	TtsNodeEp,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
 } from "@shared/ttsNodeRpc";
-import type { AppConfigInfo, GpuPowerPreference } from "@shared/appConfig";
+import type {
+	AppConfigInfo,
+	GpuPowerPreference,
+	TtsBackend,
+} from "@shared/appConfig";
 import type { Appearance } from "@shared/appearance";
 import type { ForwardedLogEntry } from "@shared/logEntry";
 import type {
@@ -109,12 +118,37 @@ export async function getAppConfig(): Promise<AppConfigInfo | null> {
 	return b.request.getAppConfig();
 }
 
-export async function setGpuEnabled(
-	enabled: boolean,
+export async function setTtsBackend(
+	backend: TtsBackend,
 ): Promise<AppConfigInfo | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.setGpuEnabled({ enabled });
+	return b.request.setTtsBackend({ backend });
+}
+
+/** Download the CUDA add-on (234 MB, from nuget.org). Null on web. */
+export async function cudaAddonInstall(): Promise<CudaAddonInstallResult | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.cudaAddonInstall();
+}
+
+export async function cudaAddonCancel(): Promise<void> {
+	await bridge()?.request.cudaAddonCancel();
+}
+
+export async function cudaAddonRemove(): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.cudaAddonRemove();
+}
+
+export function onCudaAddonProgress(
+	listener: (progress: { loaded: number; total: number }) => void,
+): () => void {
+	const b = bridge();
+	if (!b?.onCudaAddonProgress) return () => {};
+	return b.onCudaAddonProgress(listener);
 }
 
 export async function setGpuPower(
@@ -216,6 +250,11 @@ export async function getGpuInfo(): Promise<{
 	return b.request.getGpuInfo();
 }
 
+/** Whether Supertonic 3's model is on disk. False on web. */
+export async function supertonicPresent(): Promise<boolean> {
+	return (await bridge()?.request.supertonicPresent()) ?? false;
+}
+
 export async function getModelStatus(): Promise<ModelStatusMap | null> {
 	const b = bridge();
 	if (!b) return null;
@@ -245,14 +284,6 @@ export async function setCpuThreads(
 	const b = bridge();
 	if (!b) return null;
 	return b.request.setCpuThreads({ threads });
-}
-
-export async function setCudaEnabled(
-	enabled: boolean,
-): Promise<AppConfigInfo | null> {
-	const b = bridge();
-	if (!b) return null;
-	return b.request.setCudaEnabled({ enabled });
 }
 
 export async function setGpuFp16(
@@ -443,13 +474,17 @@ export function subscribeToCrashReports(
 	return b.onCrashReports(listener);
 }
 
-/** Start the native (onnxruntime-node) CPU TTS backend. Null on web (no bridge). */
+/**
+ * Start the native (onnxruntime-node) TTS backend on execution provider `ep`
+ * (the CPU when it can't run here). Null on web (no bridge).
+ */
 export async function ttsNodeInit(
 	engine: TtsNodeEngine = "kokoro",
+	ep: TtsNodeEp = "cpu",
 ): Promise<TtsNodeInitResult | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.ttsNodeInit(engine);
+	return b.request.ttsNodeInit({ engine, ep });
 }
 
 /** Synthesize one chunk on the native CPU backend. Null on web (no bridge). */

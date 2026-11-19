@@ -33,15 +33,16 @@ import type { AppSessionFileV1, WebPersistedSlice } from "../shared/appSession";
 import {
 	addWatchedFolder,
 	appConfigInfo,
+	backendAvailability,
+	defaultDataDir,
 	dataDir,
 	loadAppConfig,
 	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
 	setCpuThreads,
-	setCudaEnabled,
 	setDataDir,
-	setGpuEnabled,
+	setTtsBackend,
 	setGpuFp16,
 	setGpuPower,
 	setShortcutBinding,
@@ -52,7 +53,7 @@ import {
 	setShortcutTarget,
 	unregisterGlobalShortcuts,
 } from "./globalShortcuts";
-import { downloadModel, modelStatus } from "./modelDownload";
+import { downloadModel, modelStatus, supertonicPresent } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
 import type { Appearance } from "../shared/appearance";
 import { MODEL_KINDS, MODEL_LABEL, type ModelKind } from "../shared/modelAssets";
@@ -90,11 +91,23 @@ import {
 } from "./kokoroHubServer";
 import {
 	setTtsNodeProgressTarget,
+	clearTtsNodeGpuCrash,
 	stopTtsNode,
 	ttsNodeGenerate,
 	ttsNodeInit,
 } from "./ttsNode";
-import type { TtsNodeEngine, TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
+import type {
+	TtsNodeEngine,
+	TtsNodeEp,
+	TtsNodeGenerateParams,
+} from "../shared/ttsNodeRpc";
+import {
+	cudaAddonDir,
+	installCudaAddon,
+	pruneCudaAddons,
+	removeCudaAddon,
+} from "./cudaAddon";
+import { detectCuda, ortBindingDir } from "./cudaSupport";
 import {
 	initCrashCapture,
 	notifyCrashReportsOnLoad,
@@ -267,17 +280,40 @@ const EXPORT_DENIED = {
 const nodeEngine = (engine: unknown): TtsNodeEngine =>
 	engine === "supertonic" ? "supertonic" : "kokoro";
 
+/**
+ * Renderer-requested execution provider, limited to what this machine can
+ * run (Kokoro only; anything else is the CPU).
+ */
+function nodeEp(engine: TtsNodeEngine, ep: unknown): TtsNodeEp {
+	if (engine !== "kokoro") return "cpu";
+	const backends = backendAvailability();
+	if (ep === "cuda" && backends.cuda === "ready") return "cuda";
+	if (ep === "dml" && backends.dml) return "dml";
+	return "cpu";
+}
+
+/** Settles once the startup CUDA library lookup is done (cudaSupport.ts). */
+let cudaDetected: Promise<string | null> = Promise.resolve(null);
+
+/** The CUDA add-on download in progress, if any (Settings → Performance). */
+let cudaAddonAbort: AbortController | null = null;
+
 function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
-	ipcMain.handle("ttsNodeInit", async (_event, engine: unknown) =>
-		ttsNodeInit(
-			await kokoroHubReady,
-			loadAppConfig().cpuThreads ?? 0,
-			loadAppConfig().cudaEnabled,
-			nodeEngine(engine),
-		),
+	ipcMain.handle(
+		"ttsNodeInit",
+		async (_event, params: { engine?: unknown; ep?: unknown } | undefined) => {
+			const engine = nodeEngine(params?.engine);
+			return ttsNodeInit(
+				await kokoroHubReady,
+				loadAppConfig().cpuThreads ?? 0,
+				engine,
+				nodeEp(engine, params?.ep),
+				cudaAddonDir(defaultDataDir()),
+			);
+		},
 	);
 	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
 		ttsNodeGenerate(params),
@@ -319,9 +355,61 @@ function registerRpcHandlers(): void {
 			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
 		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
 	);
-	ipcMain.handle("getAppConfig", () => appConfigInfo());
-	ipcMain.handle("setGpuEnabled", (_event, { enabled }: { enabled: boolean }) => {
-		setGpuEnabled(enabled);
+	// Waits for the CUDA lookup so Settings lists the right backends.
+	ipcMain.handle("getAppConfig", async () => {
+		await cudaDetected;
+		return appConfigInfo();
+	});
+	ipcMain.handle("setTtsBackend", (_event, { backend }: { backend: unknown }) => {
+		setTtsBackend(backend);
+		clearTtsNodeGpuCrash();
+		return appConfigInfo();
+	});
+	// The only request the app makes to nuget.org, and only on this click.
+	ipcMain.handle("cudaAddonInstall", async (event) => {
+		if (backendAvailability().cuda !== "needs-addon" || cudaAddonAbort) {
+			return { ok: false, error: "The CUDA add-on can't be installed right now." };
+		}
+		const abort = new AbortController();
+		cudaAddonAbort = abort;
+		let lastSent = 0;
+		try {
+			await installCudaAddon({
+				userData: defaultDataDir(),
+				bindingDir: ortBindingDir(),
+				signal: abort.signal,
+				onProgress: (loaded, total) => {
+					// About ten updates a second is plenty for a progress bar.
+					if (loaded < total && Date.now() - lastSent < 100) return;
+					lastSent = Date.now();
+					if (!event.sender.isDestroyed()) {
+						event.sender.send("app:cuda-addon-progress", { loaded, total });
+					}
+				},
+			});
+			mainLog({ level: "info", source: "models", message: "CUDA add-on installed." });
+			return { ok: true, config: appConfigInfo() };
+		} catch (e) {
+			const error = e instanceof Error ? e.message : String(e);
+			if (!abort.signal.aborted) {
+				mainLog({
+					level: "error",
+					source: "models",
+					message: "Couldn't install the CUDA add-on.",
+					detail: error,
+				});
+			}
+			return { ok: false, error, cancelled: abort.signal.aborted };
+		} finally {
+			cudaAddonAbort = null;
+		}
+	});
+	ipcMain.handle("cudaAddonCancel", () => cudaAddonAbort?.abort());
+	ipcMain.handle("cudaAddonRemove", () => {
+		// The native engine may have the libraries loaded.
+		stopTtsNode();
+		if (!cudaAddonAbort) removeCudaAddon(defaultDataDir());
+		if (loadAppConfig().ttsBackend === "cuda") setTtsBackend("auto");
 		return appConfigInfo();
 	});
 	ipcMain.handle(
@@ -462,6 +550,7 @@ function registerRpcHandlers(): void {
 	});
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
+	ipcMain.handle("supertonicPresent", () => supertonicPresent());
 	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {
 		if (!MODEL_KINDS.includes(kind)) return modelStatus();
 		const send = (loaded: number, total: number, done: boolean, error?: string) => {
@@ -492,10 +581,6 @@ function registerRpcHandlers(): void {
 	});
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
-		return appConfigInfo();
-	});
-	ipcMain.handle("setCudaEnabled", (_event, { enabled }: { enabled: boolean }) => {
-		setCudaEnabled(enabled === true);
 		return appConfigInfo();
 	});
 	ipcMain.handle("setGpuFp16", (_event, { enabled }: { enabled: boolean }) => {
@@ -683,8 +768,14 @@ app.whenReady().then(async () => {
 	// before the window loads it.
 	handleAppRequests(join(__dirname, "../renderer"));
 
+	pruneCudaAddons(defaultDataDir());
+	cudaDetected = detectCuda();
+
 	registerRpcHandlers();
 	createWindow();
+	void cudaDetected.then((note) => {
+		if (note) mainLog({ level: "info", source: "models", message: note });
+	});
 	void initAutoUpdate();
 
 	kokoroHubReady = startKokoroHubServer(TRUSTED_ORIGINS)

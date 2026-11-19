@@ -1,4 +1,8 @@
-import type { AppConfigInfo, GpuPowerPreference } from "./appConfig";
+import type {
+	AppConfigInfo,
+	GpuPowerPreference,
+	TtsBackend,
+} from "./appConfig";
 import type { Appearance } from "./appearance";
 import type { ForwardedLogEntry } from "./logEntry";
 import type {
@@ -13,6 +17,7 @@ import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type { CrashRecord } from "./crashReport";
 import type {
 	TtsNodeEngine,
+	TtsNodeEp,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -59,8 +64,22 @@ export type AppRpcSchema = {
 			params: void;
 			response: AppConfigInfo;
 		};
-		setGpuEnabled: {
-			params: { enabled: boolean };
+		/** Choose where speech synthesis runs. */
+		setTtsBackend: {
+			params: { backend: TtsBackend };
+			response: AppConfigInfo;
+		};
+		/** Download and verify the CUDA add-on; progress via onCudaAddonProgress. */
+		cudaAddonInstall: {
+			params: void;
+			response: CudaAddonInstallResult;
+		};
+		cudaAddonCancel: {
+			params: void;
+			response: void;
+		};
+		cudaAddonRemove: {
+			params: void;
 			response: AppConfigInfo;
 		};
 		/** Choose which GPU to prefer (multi-GPU machines). */
@@ -78,6 +97,11 @@ export type AppRpcSchema = {
 			params: void;
 			response: ModelStatusMap;
 		};
+		/** Whether Supertonic 3's model is on disk (it has no Storage row). */
+		supertonicPresent: {
+			params: void;
+			response: boolean;
+		};
 		/** Download a model's weights; progress arrives via onModelProgress. */
 		downloadModel: {
 			params: { kind: ModelKind };
@@ -86,11 +110,6 @@ export type AppRpcSchema = {
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {
 			params: { threads: number };
-			response: AppConfigInfo;
-		};
-		/** Opt in to the CUDA execution provider for the native engine. */
-		setCudaEnabled: {
-			params: { enabled: boolean };
 			response: AppConfigInfo;
 		};
 		/** Opt in to Kokoro's fp16 weights on WebGPU. */
@@ -235,7 +254,7 @@ export type AppRpcSchema = {
 		};
 		/** Start the native (onnxruntime-node) CPU TTS backend; loads the model. */
 		ttsNodeInit: {
-			params: TtsNodeEngine;
+			params: { engine: TtsNodeEngine; ep?: TtsNodeEp };
 			response: TtsNodeInitResult;
 		};
 		/** Synthesize one chunk on the native CPU backend. */
@@ -285,7 +304,15 @@ export type AppApi = {
 	onCrashReports: (listener: (records: CrashRecord[]) => void) => () => void;
 	/** Subscribe to native-TTS model-load progress (0..1) from the main process. */
 	onTtsNodeProgress: (listener: (value: number) => void) => () => void;
+	/** Subscribe to CUDA add-on download progress (bytes). */
+	onCudaAddonProgress: (
+		listener: (progress: { loaded: number; total: number }) => void,
+	) => () => void;
 };
+
+export type CudaAddonInstallResult =
+	| { ok: true; config: AppConfigInfo }
+	| { ok: false; error: string; cancelled?: boolean };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */
 export type FoundInPageResult = {

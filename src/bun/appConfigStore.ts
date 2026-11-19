@@ -7,13 +7,17 @@ import {
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { app } from "electron";
-import { cudaSupported } from "./cudaSupport";
+import { CUDA_ADDON, cudaAddonInstalled } from "./cudaAddon";
+import { cudaSystemReady, ortBindingDir } from "./cudaSupport";
 import {
 	APP_CONFIG_VERSION,
 	type AppConfigFileV1,
 	type AppConfigInfo,
+	type BackendAvailability,
 	type GpuPowerPreference,
+	coerceTtsBackend,
 	defaultAppConfig,
+	effectiveTtsBackend,
 } from "../shared/appConfig";
 import { type Appearance, coerceAppearance } from "../shared/appearance";
 import {
@@ -58,15 +62,10 @@ export function loadAppConfig(): AppConfigFileV1 {
 			return cached;
 		}
 		const o = parsed as Record<string, unknown>;
-		const storedVersion = typeof o.version === "number" ? o.version : 1;
 		const next = { ...fallback };
 		if (isAbsoluteUsableDir(o.dataDir)) next.dataDir = o.dataDir;
-		// Only honor a stored GPU choice from the current schema. Older configs
-		// (v1, GPU-off default) are migrated to the new GPU-on default; the user's
-		// choice sticks again once they toggle it (which persists v2).
-		if (storedVersion >= APP_CONFIG_VERSION && typeof o.gpuEnabled === "boolean") {
-			next.gpuEnabled = o.gpuEnabled;
-		}
+		// Also maps the 1.14 settings (GPU switch, CUDA opt-in) to a backend.
+		next.ttsBackend = coerceTtsBackend(o);
 		if (
 			o.gpuPower === "auto" ||
 			o.gpuPower === "high-performance" ||
@@ -77,7 +76,6 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.cpuThreads === "number" && Number.isFinite(o.cpuThreads)) {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
-		if (typeof o.cudaEnabled === "boolean") next.cudaEnabled = o.cudaEnabled;
 		if (typeof o.gpuFp16 === "boolean") next.gpuFp16 = o.gpuFp16;
 		if (typeof o.shortcutsEnabled === "boolean") {
 			next.shortcutsEnabled = o.shortcutsEnabled;
@@ -109,7 +107,16 @@ function persist(config: AppConfigFileV1): void {
 	mkdirSync(defaultDataDir(), { recursive: true });
 	writeFileAtomic(
 		configPath(),
-		JSON.stringify({ ...config, version: APP_CONFIG_VERSION }, null, "\t"),
+		JSON.stringify(
+			{
+				...config,
+				// For a downgrade to 1.14, which only knows this switch.
+				gpuEnabled: config.ttsBackend === "auto" || config.ttsBackend === "webgpu",
+				version: APP_CONFIG_VERSION,
+			},
+			null,
+			"\t",
+		),
 	);
 }
 
@@ -123,12 +130,34 @@ export function modelCacheDir(): string {
 	return join(dataDir(), MODEL_SUBDIR);
 }
 
-export function gpuEnabled(): boolean {
-	return loadAppConfig().gpuEnabled;
+let nativeEngine: boolean | null = null;
+
+/** Which speech backends this machine can offer (see BackendAvailability). */
+export function backendAvailability(): BackendAvailability {
+	if (nativeEngine === null) {
+		try {
+			nativeEngine = existsSync(ortBindingDir());
+		} catch {
+			nativeEngine = false;
+		}
+	}
+	return {
+		native: nativeEngine,
+		dml: nativeEngine && process.platform === "win32",
+		cuda: !nativeEngine || !cudaSystemReady()
+			? "unavailable"
+			: cudaAddonInstalled(defaultDataDir())
+				? "ready"
+				: "needs-addon",
+	};
 }
 
-export function setGpuEnabled(value: boolean): void {
-	persist({ ...loadAppConfig(), gpuEnabled: value });
+/** Store a backend choice; one this machine can't run is ignored. */
+export function setTtsBackend(value: unknown): void {
+	const choice = coerceTtsBackend({ ttsBackend: value });
+	if (choice !== value) return;
+	if (effectiveTtsBackend(choice, backendAvailability()) !== choice) return;
+	persist({ ...loadAppConfig(), ttsBackend: choice });
 }
 
 export function setGpuPower(value: GpuPowerPreference): void {
@@ -138,10 +167,6 @@ export function setGpuPower(value: GpuPowerPreference): void {
 export function setCpuThreads(value: number): void {
 	const clean = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 	persist({ ...loadAppConfig(), cpuThreads: clean });
-}
-
-export function setCudaEnabled(value: boolean): void {
-	persist({ ...loadAppConfig(), cudaEnabled: value });
 }
 
 export function setGpuFp16(value: boolean): void {
@@ -255,16 +280,18 @@ export function appConfigInfo(): AppConfigInfo {
 	const resolved = dataDir();
 	const def = defaultDataDir();
 	const modelBytes = dirSizeBytes(modelCacheDir());
+	const backends = backendAvailability();
 	return {
 		appVersion: app.getVersion(),
 		dataDir: resolved,
 		defaultDataDir: def,
 		isDefaultDataDir: resolved === def,
-		gpuEnabled: config.gpuEnabled,
+		ttsBackend: effectiveTtsBackend(config.ttsBackend, backends),
+		ttsBackendChosen: config.ttsBackend,
+		backends,
+		cudaAddonBytes: CUDA_ADDON.bytes,
 		gpuPower: config.gpuPower,
 		cpuThreads: config.cpuThreads,
-		cudaEnabled: config.cudaEnabled,
-		cudaSupported: cudaSupported(),
 		gpuFp16: config.gpuFp16,
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,

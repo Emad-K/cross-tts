@@ -8,6 +8,7 @@ import type {
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeEngine,
+	TtsNodeEp,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
 import { hubCacheDirectory } from "./kokoroHubServer";
@@ -24,6 +25,13 @@ import { mainLog } from "./logBridge";
 let child: UtilityProcess | null = null;
 /** Engine the running process serves (one native engine at a time). */
 let childEngine: TtsNodeEngine | null = null;
+/** Execution provider the running process was started for. */
+let childEp: TtsNodeEp = "cpu";
+/**
+ * The process died while on a GPU provider (driver crash, out of memory).
+ * Until the settings change, start it on the CPU instead of crashing again.
+ */
+let gpuCrashed = false;
 let initPromise: Promise<TtsNodeInitResult> | null = null;
 let seq = 0;
 const pending = new Map<number, (result: TtsNodeGenerateResult) => void>();
@@ -50,6 +58,11 @@ export function stopTtsNode(engine?: TtsNodeEngine): void {
 	initPromise = null;
 }
 
+/** The backend setting changed: give the GPU provider another chance. */
+export function clearTtsNodeGpuCrash(): void {
+	gpuCrashed = false;
+}
+
 /** Utility-process entry per engine (electron.vite.config.ts inputs). */
 const WORKER_ENTRY: Record<TtsNodeEngine, string> = {
 	kokoro: "ttsNodeWorker.js",
@@ -59,11 +72,14 @@ const WORKER_ENTRY: Record<TtsNodeEngine, string> = {
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
 	numThreads: number,
-	cuda: boolean,
 	engine: TtsNodeEngine = "kokoro",
+	requestedEp: TtsNodeEp = "cpu",
+	/** Folder of the CUDA add-on (cudaAddon.ts); required for "cuda". */
+	cudaDir?: string,
 ): Promise<TtsNodeInitResult> {
-	if (initPromise && childEngine === engine) return initPromise;
-	if (childEngine !== engine) stopTtsNode();
+	const ep = gpuCrashed ? "cpu" : requestedEp;
+	if (initPromise && childEngine === engine && childEp === ep) return initPromise;
+	stopTtsNode();
 	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
 	// WASM engine. Say so instead of spawning a process that can't load it.
 	if (process.platform === "darwin" && process.arch === "x64") {
@@ -83,9 +99,23 @@ export function ttsNodeInit(
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
 		const proc = utilityProcess.fork(join(__dirname, WORKER_ENTRY[engine]), [], {
 			serviceName: "cross-tts-native-tts",
+			// ORT loads its providers from the folder libonnxruntime came from,
+			// and the installed app's folder is read-only: put the add-on's copy
+			// first on the loader path. Ahead of any existing value (AppImage).
+			...(ep === "cuda" && cudaDir
+				? {
+						env: {
+							...process.env,
+							LD_LIBRARY_PATH: [cudaDir, process.env.LD_LIBRARY_PATH]
+								.filter(Boolean)
+								.join(":"),
+						},
+					}
+				: {}),
 		});
 		child = proc;
 		childEngine = engine;
+		childEp = ep;
 		proc.on("message", (msg) => {
 			switch (msg?.type) {
 				case "progress": {
@@ -99,7 +129,12 @@ export function ttsNodeInit(
 					mainLog({ level: msg.level, source: "models", message: msg.message });
 					break;
 				case "ready":
-					resolve({ ok: true, voices: msg.voices, loadMs: msg.loadMs });
+					resolve({
+						ok: true,
+						voices: msg.voices,
+						loadMs: msg.loadMs,
+						device: msg.device ?? "cpu",
+					});
 					break;
 				case "initError":
 					stopTtsNode();
@@ -117,6 +152,7 @@ export function ttsNodeInit(
 							audio: msg.audio,
 							samplingRate: msg.samplingRate,
 							synthMs: msg.synthMs,
+							device: msg.device ?? "cpu",
 						});
 					break;
 				}
@@ -126,6 +162,7 @@ export function ttsNodeInit(
 			// A process swapped out for another engine was already cleaned up by
 			// stopTtsNode; its late exit mustn't fail the new process's requests.
 			if (child === proc) {
+				if (code !== 0 && ep !== "cpu") gpuCrashed = true;
 				child = null;
 				childEngine = null;
 				initPromise = null;
@@ -145,7 +182,7 @@ export function ttsNodeInit(
 			hubBaseUrl,
 			hubCacheDir: hubCacheDirectory(),
 			numThreads,
-			cuda,
+			ep,
 		});
 	});
 	return initPromise;

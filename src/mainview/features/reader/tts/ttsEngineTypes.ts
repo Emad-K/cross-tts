@@ -1,4 +1,5 @@
-import type { GpuPowerPreference } from "@shared/appConfig";
+import type { GpuPowerPreference, TtsBackend } from "@shared/appConfig";
+import type { RunningBackend } from "./backendChoice";
 
 /**
  * A text-to-speech model the reader can play and export with. The
@@ -20,8 +21,13 @@ export type TtsVoice = {
 
 /** Hardware preferences from Settings → Performance. */
 export type TtsBackendPrefs = {
-	/** Use the GPU when one is usable. */
-	gpu: boolean;
+	/** The backend choice; decides the load order (backendChoice.ts). */
+	backend: TtsBackend;
+	/**
+	 * Fail instead of trying the next backend in the order (benchmark runs:
+	 * a fallback would be mislabelled and could download another model).
+	 */
+	noFallback?: boolean;
 	gpuPower: GpuPowerPreference;
 	/** CPU inference threads (already resolved from "auto"). */
 	cpuThreads: number;
@@ -63,6 +69,11 @@ export interface TtsEngine {
 	ensureLoaded(prefs: TtsBackendPrefs): Promise<void>;
 	/** Backend running requests now (e.g. "webgpu", "node"); null when not loaded. */
 	activeBackend(): string | null;
+	/**
+	 * The loaded backend in Settings terms (which GPU provider, native CPU or
+	 * WASM); null when not loaded. Engines with a single backend omit it.
+	 */
+	runningOn?(): RunningBackend | null;
 	/**
 	 * Mono PCM at `sampleRate` for already rule-processed text; null when there
 	 * is nothing to speak. Throws Error(message) on failure, Error(CANCELLED)

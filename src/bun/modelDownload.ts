@@ -6,6 +6,9 @@ import { hubFileSha256 } from "./securityGuards";
 import {
 	MODEL_FILES,
 	MODEL_KINDS,
+	SUPERTONIC_REPO,
+	SUPERTONIC_REVISION,
+	SUPERTONIC_SHA256,
 	type HubFile,
 	type ModelKind,
 	type ModelStatusMap,
@@ -42,6 +45,21 @@ export function modelStatus(): ModelStatusMap {
 		};
 	}
 	return out;
+}
+
+/**
+ * True when all of Supertonic 3's ONNX graphs are on disk (the hub only
+ * puts a file there once its sha256 checked out).
+ */
+export function supertonicPresent(): boolean {
+	return Object.keys(SUPERTONIC_SHA256)
+		.filter((path) => path.endsWith(".onnx"))
+		.every(
+			(path) =>
+				fileBytes(
+					filePath({ repo: SUPERTONIC_REPO, revision: SUPERTONIC_REVISION, path }),
+				) >= 1,
+		);
 }
 
 function fetchToDisk(

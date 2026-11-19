@@ -1,13 +1,14 @@
 import { logError } from "../logging";
 import {
 	effectiveCpuThreads,
-	isGpuPreferenceEnabled,
+	ttsBackendPreference,
 	useAppSettingsStore,
 } from "../settings/appSettingsStore";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
+import { isBenchmarkRunning } from "./benchmark";
 import { splitForFastStart } from "./chunkText";
 import { SynthCore } from "./synthCore";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
@@ -31,7 +32,7 @@ function activeEngine(): TtsEngine {
 
 function backendPrefs(): TtsBackendPrefs {
 	return {
-		gpu: isGpuPreferenceEnabled(),
+		backend: ttsBackendPreference(),
 		gpuPower: useAppSettingsStore.getState().config?.gpuPower ?? "auto",
 		cpuThreads: effectiveCpuThreads(),
 		gpuFp16: useAppSettingsStore.getState().config?.gpuFp16 ?? false,
@@ -778,6 +779,8 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 export async function startOrResumePlayback(): Promise<void> {
 	const { playback, chunks } = useTtsStore.getState();
 	if (chunks.length === 0) return;
+	// The benchmark (Settings) is loading and unloading the engine.
+	if (isBenchmarkRunning()) return;
 
 	if (
 		playback === "playing" ||

@@ -237,7 +237,7 @@ const queue: SynthJobQueue<Job> = new SynthJobQueue<Job>(async (job): Promise<vo
 		if (queue.isStale(job) || job.signal?.aborted) throw new Error(CANCELLED);
 		const inst = await instanceFor(
 			durationDeltaForSpeed(job.speed),
-			lastPrefs ?? { gpu: false, gpuPower: "auto", cpuThreads: MAX_THREADS, gpuFp16: false },
+			lastPrefs ?? { backend: "wasm", gpuPower: "auto", cpuThreads: MAX_THREADS, gpuFp16: false },
 		);
 		const chunks: Float32Array[] = [];
 		for (const piece of splitForPhonon(job.text)) {
