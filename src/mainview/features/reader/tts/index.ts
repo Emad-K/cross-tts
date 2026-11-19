@@ -20,6 +20,7 @@ export {
 	setChapterPlaybackFinishedHandler,
 	setVolumeLive,
 	skipChunk,
+	startIdleWarm,
 	startOrResumePlayback,
 	stopPlaybackUi,
 	synthesizeChunkPcm,

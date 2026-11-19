@@ -7,6 +7,8 @@ import {
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
+import { isExportActive } from "../audiobook/exportStore";
+import { createIdleWarmer, idleWarmKey } from "./idleWarm";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
 import { isBenchmarkRunning } from "./benchmark";
 import { splitForFastStart } from "./chunkText";
@@ -85,9 +87,14 @@ let playbackLoopPromise: Promise<void> | null = null;
 /**
  * Perf instrumentation (console.debug, "[tts-perf]"): wall time from play/seek
  * to the first audible sample, and the audio-clock gap between consecutive
- * chunks beyond the configured sentence pause.
+ * chunks beyond the configured sentence pause. First-audio is split into
+ * `load` (model load; ~0 when preloaded), `synth` (waiting on the first
+ * audio; ~0 on a cache hit) and `wait` (the rest: resuming the audio context
+ * and the output latency).
  */
 let playRequestedAt = 0;
+let firstAudioLoadMs = 0;
+let firstAudioSynthMs = 0;
 function notePerfStart(
 	ctx: AudioContext,
 	start: number,
@@ -97,8 +104,11 @@ function notePerfStart(
 		const ms =
 			performance.now() - playRequestedAt +
 			Math.max(0, start - ctx.currentTime) * 1000;
+		const wait = Math.max(0, ms - firstAudioLoadMs - firstAudioSynthMs);
 		console.debug(
-			`[tts-perf] first-audio ${ms.toFixed(0)}ms (context ${ctx.sampleRate} Hz)`,
+			`[tts-perf] first-audio ${ms.toFixed(0)}ms ` +
+				`(load ${firstAudioLoadMs.toFixed(0)}, synth ${firstAudioSynthMs.toFixed(0)}, ` +
+				`wait ${wait.toFixed(0)}; context ${ctx.sampleRate} Hz)`,
 		);
 	} else {
 		console.debug(`[tts-perf] gap ${((start - expected) * 1000).toFixed(1)}ms`);
@@ -280,6 +290,52 @@ export function prefetchTexts(texts: string[]): void {
 		if (!isSpeakableChunkText(text)) continue;
 		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
 	}
+}
+
+/**
+ * Synthesize the sentence the next press of play starts on, split exactly as
+ * the loop's fast start splits it. Play then takes its normal fast-start path
+ * and finds both parts in the cache: same split, same seam, same audio. The
+ * run also absorbs the phonemizer, voice-file and GPU shader warm-up.
+ */
+function warmResumePosition(): void {
+	const { playback, chunks, currentChunkIndex, voice, speed } =
+		useTtsStore.getState();
+	// Only with no loop alive. A paused loop already holds its audio; one that
+	// was dropped by a seek while paused has nothing made for the new place.
+	if (playback !== "idle" && !(playback === "paused" && !playbackLoopPromise)) {
+		return;
+	}
+	// An export owns the engine; don't queue playback work between its chunks.
+	if (isExportActive()) return;
+	if (!activeEngine().activeBackend()) return;
+	const text = chunks[currentChunkIndex]?.text;
+	if (!text || !isSpeakableChunkText(text)) return;
+	if (core.has(text, voice, speed) || core.inFlight(text, voice, speed)) return;
+	// With no loop alive, the only playback jobs still queued are warm-ups for
+	// places the listener has left: a new epoch makes the engine drop them.
+	core.epoch++;
+	const createsContext = !audioContext;
+	prefetchTexts(splitForFastStart(text));
+	// Making buffers needs a context but not a running one. Keep it suspended
+	// until play, so an idle app doesn't hold the audio device open.
+	if (createsContext) void audioContext?.suspend();
+}
+
+/**
+ * Keep the resume position warm while nothing plays: once the model is
+ * loaded, and again (debounced) whenever the position, voice, speed or engine
+ * changes while idle or paused. Never loads a model itself. Returns the
+ * function that stops it.
+ */
+export function startIdleWarm(): () => void {
+	const update = createIdleWarmer(warmResumePosition);
+	update(idleWarmKey(useTtsStore.getState()));
+	const unsubscribe = useTtsStore.subscribe((s) => update(idleWarmKey(s)));
+	return () => {
+		unsubscribe();
+		update(null);
+	};
 }
 
 /**
@@ -606,6 +662,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		});
 		return;
 	}
+	firstAudioLoadMs = performance.now() - playRequestedAt;
 
 	const { ctx, gain } = getAudioGraph();
 	applyVolumeFromStore();
@@ -659,6 +716,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				!core.inFlight(chunk.text, snap.voice, snap.speed);
 			const parts = fastStart ? splitForFastStart(chunk.text) : [chunk.text];
 			coldStart = false;
+			const synthFrom = performance.now();
 			const made = parts.map((text) =>
 				synthesizeChunkBuffer(ctx, text, snap.voice, snap.speed),
 			);
@@ -705,6 +763,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				}
 				ready = true;
 				if (signal.aborted) break;
+				if (!prev) firstAudioSynthMs = performance.now() - synthFrom;
 
 				const text = parts[k]!;
 				const from = doneChars / chunk.text.length;
