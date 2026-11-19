@@ -111,6 +111,27 @@ if (e2eUserData && !app.isPackaged) {
 	app.setPath("userData", e2eUserData);
 }
 
+// Electron 38+ opens a native Wayland window, and Chromium can't combine that
+// with the Vulkan feature set below ("'--ozone-platform=wayland' is not
+// compatible with Vulkan"): the window flickers and nothing is readable (GNOME
+// Wayland + NVIDIA). The platform is chosen before this script runs, so
+// appendSwitch is too late — relaunch once under X11/XWayland, as Electron <38
+// ran. An explicit --ozone-platform (e.g. =wayland) opts out.
+if (
+	process.platform === "linux" &&
+	process.env["WAYLAND_DISPLAY"] &&
+	// Not commandLine.hasSwitch: Electron injects its auto-picked platform.
+	!process.argv.some((a) => a.startsWith("--ozone-platform")) &&
+	!e2eUserData
+) {
+	app.relaunch({
+		// An AppImage's execPath lives in its mount, which vanishes on exit.
+		execPath: process.env["APPIMAGE"] || process.execPath,
+		args: [...process.argv.slice(1), "--ozone-platform=x11"],
+	});
+	app.exit(0);
+}
+
 // Last-resort crash capture, installed as early as possible: records go to
 // <dataDir>/crashes/ and the user is asked (opt-in) on the next launch whether
 // to report them on GitHub. Nothing is ever sent automatically.
