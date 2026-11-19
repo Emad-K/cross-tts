@@ -109,6 +109,7 @@ export class SynthCore<V> {
 		const key = this.key(chunkText, voice, speed);
 		const { sampleRate } = this.deps.engine();
 		if (!this.cache.has(key)) this.wantedAtEpoch.set(key, this.epoch);
+		const engine = this.deps.engine();
 		return this.cache.getOrCreate(key, async () => {
 			try {
 				for (;;) {
@@ -132,7 +133,18 @@ export class SynthCore<V> {
 						throw e;
 					}
 					if (!pcm) return null;
-					return await toValue(pcm, sampleRate);
+					const value = await toValue(pcm, sampleRate);
+					// A backend reset meanwhile (GPU fault → CPU) cleared the cache,
+					// so `key` won't be stored and may name the old precision: file
+					// the audio under the key lookups use now. A no-op otherwise
+					// (it joins this very in-flight entry).
+					if (this.deps.engine() === engine) {
+						void this.cache.getOrCreate(
+							this.key(chunkText, voice, speed),
+							async () => value,
+						);
+					}
+					return value;
 				}
 			} finally {
 				this.wantedAtEpoch.delete(key);

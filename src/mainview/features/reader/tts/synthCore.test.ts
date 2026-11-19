@@ -119,6 +119,21 @@ describe("SynthCore with a fake engine", () => {
 		expect(core.has("x", "v1", 1)).toBe(true);
 	});
 
+	test("audio retried after a fallback is cached under the new backend's tag", async () => {
+		const f = fakeEngine("k");
+		f.engine.cacheTag = () => (f.engine.activeBackend() === "gpu" ? "fp32" : "q8");
+		const core = coreFor(() => f.engine);
+		core.clearOnReset([f.engine]);
+		f.faultGpu();
+		const gpuKey = core.key("x", "v1", 1);
+		const out = core.get("x", "v1", 1, (p) => p);
+		await tick();
+		f.settle[0]!(pcm(2));
+		expect((await out)?.length).toBe(2);
+		expect(core.key("x", "v1", 1)).not.toBe(gpuKey);
+		expect(core.has("x", "v1", 1)).toBe(true);
+	});
+
 	test("errors the engine can't recover from are thrown and not cached", async () => {
 		const f = fakeEngine("k");
 		const core = coreFor(() => f.engine);

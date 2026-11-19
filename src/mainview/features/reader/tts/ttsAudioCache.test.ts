@@ -111,4 +111,17 @@ describe("AudioCache", () => {
 		expect(cache.has("k")).toBe(false);
 		expect(cache.size).toBe(0);
 	});
+
+	test("does not store work that was in flight across a clear()", async () => {
+		const cache = new AudioCache<string>(4);
+		let finish!: (v: string) => void;
+		const old = cache.getOrCreate("k", () => new Promise((r) => (finish = r)));
+		cache.clear();
+		const fresh = cache.getOrCreate("k", async () => "new");
+		finish("old");
+		expect(await old).toBe("old");
+		expect(await fresh).toBe("new");
+		expect(await cache.getOrCreate("k", async () => "x")).toBe("new");
+		expect(cache.size).toBe(1);
+	});
 });
