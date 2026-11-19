@@ -9,7 +9,7 @@ import {
 	PHONON_WEIGHTS,
 	phononVoicePath,
 } from "@shared/phononAssets";
-import { getKokoroHubBaseUrl } from "@/lib/desktopBridge";
+import { getKokoroHubBaseUrl, isDesktopApp } from "@/lib/desktopBridge";
 import { logError, logInfo, logWarn } from "../logging";
 import { isPlausibleAudio } from "./audioPlausibility";
 import {
@@ -70,10 +70,17 @@ let lastPrefs: TtsBackendPrefs | null = null;
 let hubBase: Promise<string> | null = null;
 
 function hubBaseUrl(): Promise<string> {
-	// Outside the desktop app (no hub) fall back to the Hub itself, unverified.
-	hubBase ??= getKokoroHubBaseUrl().then(
-		(b) => (b ? (b.endsWith("/") ? b : `${b}/`) : "https://huggingface.co/"),
-	);
+	hubBase ??= getKokoroHubBaseUrl().then((b) => {
+		if (b) return b.endsWith("/") ? b : `${b}/`;
+		// The desktop app never goes online behind the hub's back.
+		if (isDesktopApp()) throw new Error("The local model server isn't running.");
+		// Outside it (no hub) use the Hub itself, unverified.
+		return "https://huggingface.co/";
+	});
+	// A failed lookup is retried on the next load.
+	hubBase.catch(() => {
+		hubBase = null;
+	});
 	return hubBase;
 }
 
