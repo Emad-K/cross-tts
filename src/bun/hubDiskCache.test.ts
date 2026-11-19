@@ -22,3 +22,16 @@ describe("hubDiskCache", () => {
 		expect(await cache.match(`${HUB}a/../../etc/x.onnx`)).toBeUndefined();
 	});
 });
+
+test("default predicate rejects an LFS pointer in place of model.onnx", async () => {
+	const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+	const { tmpdir } = await import("node:os");
+	const dir = mkdtempSync(join(tmpdir(), "hubcache-"));
+	const rel = ["onnx-community", "Kokoro-82M-v1.0-ONNX", "resolve", "main", "onnx"];
+	mkdirSync(join(dir, ...rel), { recursive: true });
+	const file = join(dir, ...rel, "model.onnx");
+	writeFileSync(file, "version https://git-lfs.github.com/spec/v1\noid sha256:x\n");
+	expect(await hubDiskCache(HUB, dir).match(ONNX)).toBeUndefined();
+	writeFileSync(file, Buffer.alloc(60_000, 1));
+	expect(await hubDiskCache(HUB, dir).match(ONNX)).toBe(file);
+});

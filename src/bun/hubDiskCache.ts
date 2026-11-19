@@ -1,5 +1,27 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+function looksLikeGitLfsPointer(filePath: string): boolean {
+	try {
+		const st = statSync(filePath);
+		if (st.size > 512) return false;
+		const head = readFileSync(filePath, "utf8").slice(0, 80);
+		return head.includes("git-lfs.github.com/spec");
+	} catch {
+		return false;
+	}
+}
+
+/** A cached hub file that is complete enough to serve (not empty / an LFS pointer). */
+export function isUsableCachedFile(filePath: string): boolean {
+	if (!existsSync(filePath)) return false;
+	const st = statSync(filePath);
+	if (st.size === 0) return false;
+	if (looksLikeGitLfsPointer(filePath)) return false;
+	if (filePath.endsWith(".onnx") && st.size < 50_000) return false;
+	if (filePath.endsWith(".bin") && st.size < 1_000) return false;
+	return true;
+}
 
 /**
  * transformers.js 4 hands onnxruntime-node each `.onnx` as a file *path* in
@@ -16,7 +38,7 @@ import { join } from "node:path";
 export function hubDiskCache(
 	hubBaseUrl: string,
 	cacheDir: string,
-	exists: (path: string) => boolean = existsSync,
+	exists: (path: string) => boolean = isUsableCachedFile,
 ) {
 	const pathFor = (key: string): string | undefined => {
 		if (!key.startsWith(hubBaseUrl) || !key.endsWith(".onnx")) return undefined;
@@ -30,9 +52,9 @@ export function hubDiskCache(
 	return {
 		match: async (key: string) => pathFor(key),
 		// Nothing to store: the hub wrote the file before answering. Drain the
-		// body so the local connection is released. (A first-time .onnx
-		// download isn't put at all — match() already finds the file — so
-		// that one response body is left to GC.)
+		// body so the local connection is released. (A
+		// first-time .onnx download isn't put at all — match() already finds
+		// the file — so that one response body is left to GC.)
 		put: async (_key: string, response: Response) => {
 			await response.arrayBuffer().catch(() => {});
 		},

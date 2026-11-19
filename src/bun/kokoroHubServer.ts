@@ -3,7 +3,6 @@ import {
 	createWriteStream,
 	existsSync,
 	mkdirSync,
-	readFileSync,
 	renameSync,
 	statSync,
 } from "node:fs";
@@ -13,6 +12,7 @@ import { join, normalize, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { modelCacheDir } from "./appConfigStore";
+import { isUsableCachedFile } from "./hubDiskCache";
 import { mainLog } from "./logBridge";
 import { hubRequestPath } from "./securityGuards";
 
@@ -31,27 +31,6 @@ function safeHubFile(urlPathname: string): string | null {
 	const rel = relative(root, abs);
 	if (rel.startsWith("..") || rel === "..") return null;
 	return abs;
-}
-
-function looksLikeGitLfsPointer(filePath: string): boolean {
-	try {
-		const st = statSync(filePath);
-		if (st.size > 512) return false;
-		const head = readFileSync(filePath, "utf8").slice(0, 80);
-		return head.includes("git-lfs.github.com/spec");
-	} catch {
-		return false;
-	}
-}
-
-function isUsableCachedFile(filePath: string): boolean {
-	if (!existsSync(filePath)) return false;
-	const st = statSync(filePath);
-	if (st.size === 0) return false;
-	if (looksLikeGitLfsPointer(filePath)) return false;
-	if (filePath.endsWith(".onnx") && st.size < 50_000) return false;
-	if (filePath.endsWith(".bin") && st.size < 1_000) return false;
-	return true;
 }
 
 async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
