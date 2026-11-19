@@ -33,6 +33,31 @@ export const MODEL_SHA256: Readonly<Record<string, string>> = {
 		"8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb",
 };
 
+/**
+ * A HuggingFace repo an engine may download from through the local hub. Only
+ * files at `revision` with one of `extensions` are served; ONNX files must
+ * also have a sha256 in `sha256` (keyed by repo-relative path) so their
+ * download can be verified.
+ */
+export type HubRepo = {
+	repo: string;
+	revision: string;
+	extensions: readonly string[];
+	sha256: Readonly<Record<string, string>>;
+};
+
+/** Hub allowlist per TTS engine id. Add a pinned entry for every new model repo. */
+export const HUB_REPOS: Readonly<Record<string, readonly HubRepo[]>> = {
+	kokoro: [
+		{
+			repo: MODEL_REPO,
+			revision: MODEL_REVISION,
+			extensions: ["json", "onnx", "bin"],
+			sha256: MODEL_SHA256,
+		},
+	],
+};
+
 export const MODEL_LABEL: Record<ModelKind, string> = {
 	cpu: "Fallback model (compatibility)",
 	gpu: "Voice model (GPU & CPU)",

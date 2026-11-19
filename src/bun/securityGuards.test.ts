@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import {
 	audioExportPath,
+	hubFileSha256,
 	hubRequestPath,
 	isAllowedOrigin,
 	isInsideRoot,
@@ -37,6 +38,19 @@ describe("hubRequestPath", () => {
 		expect(hubRequestPath(`/${t}/${repo}/resolve/main/config.json`, t)).toBeNull();
 		expect(hubRequestPath(`/${t}/${repo}/resolve/main/onnx/model.onnx`, t)).toBeNull();
 		expect(hubRequestPath(`/${t}/${repo}/resolve/${rev}/onnx/model_q4.onnx`, t)).toBeNull();
+	});
+	test("serves each engine's own repos, revisions and extensions", () => {
+		const repos = [
+			{ repo: "org/a", revision: "r1", extensions: ["json"], sha256: {} },
+			{ repo: "org/b", revision: "r2", extensions: ["onnx"], sha256: { "m.onnx": "h" } },
+		];
+		expect(hubRequestPath(`/${t}/org/a/resolve/r1/x.json`, t, repos)).toBe("/org/a/resolve/r1/x.json");
+		expect(hubRequestPath(`/${t}/org/a/resolve/r2/x.json`, t, repos)).toBeNull();
+		expect(hubRequestPath(`/${t}/org/a/resolve/r1/m.onnx`, t, repos)).toBeNull();
+		expect(hubRequestPath(`/${t}/org/b/resolve/r2/m.onnx`, t, repos)).toBe("/org/b/resolve/r2/m.onnx");
+		expect(hubFileSha256("/org/b/resolve/r2/m.onnx", repos)).toBe("h");
+		expect(hubFileSha256(`/${repo}/resolve/${rev}/onnx/model.onnx`)).toMatch(/^[0-9a-f]{64}$/);
+		expect(hubFileSha256(`/${repo}/resolve/${rev}/config.json`)).toBeUndefined();
 	});
 });
 
