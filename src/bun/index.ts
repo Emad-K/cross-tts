@@ -80,6 +80,7 @@ import {
 	readDocumentAtPath,
 } from "./documentIo";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
+import { registerBackupHandlers } from "./backup";
 import {
 	hideInsteadOfClose,
 	registerTrayHandlers,
@@ -673,6 +674,7 @@ function registerRpcHandlers(): void {
 		app.exit(0);
 	});
 	registerTrayHandlers(() => mainWindow);
+	registerBackupHandlers(() => mainWindow);
 	ipcMain.handle("addWatchedFolder", async () => {
 		if (!mainWindow) return null;
 		const result = await dialog.showOpenDialog(mainWindow, {

@@ -62,6 +62,11 @@ const api: AppApi = {
 		setKeepPlayingInBackground: (params) =>
 			ipcRenderer.invoke("setKeepPlayingInBackground", params),
 		setNowPlaying: (params) => ipcRenderer.invoke("setNowPlaying", params),
+		backupExport: (params) => ipcRenderer.invoke("backupExport", params),
+		backupPick: () => ipcRenderer.invoke("backupPick"),
+		backupApplySettings: (params) =>
+			ipcRenderer.invoke("backupApplySettings", params),
+		missingPaths: (params) => ipcRenderer.invoke("missingPaths", params),
 		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
 		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
 		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),

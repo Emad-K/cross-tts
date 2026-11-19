@@ -4,6 +4,12 @@ import type {
 	TtsBackend,
 } from "./appConfig";
 import type { Appearance } from "./appearance";
+import type {
+	BackupExportResult,
+	BackupLibrary,
+	BackupPickResult,
+	RestoreMode,
+} from "./backup";
 import type { ForwardedLogEntry } from "./logEntry";
 import type {
 	ModelKind,
@@ -221,6 +227,26 @@ export type AppRpcSchema = {
 		setNowPlaying: {
 			params: { title: string; sentence: string; playing: boolean };
 			response: void;
+		};
+		/** Ask where to save, then write a backup file. Null if cancelled. */
+		backupExport: {
+			params: { library: BackupLibrary };
+			response: BackupExportResult | null;
+		};
+		/** Ask for a backup file and validate it. Null if cancelled. */
+		backupPick: {
+			params: void;
+			response: BackupPickResult | null;
+		};
+		/** Restore the settings of the backup picked by backupPick. */
+		backupApplySettings: {
+			params: { mode: RestoreMode };
+			response: AppConfigInfo;
+		};
+		/** Which of these book paths aren't files on this computer. */
+		missingPaths: {
+			params: { paths: string[] };
+			response: string[];
 		};
 		/** Manually check for updates (downloads if one is found). */
 		checkForUpdates: {
