@@ -1,10 +1,11 @@
 import { phonemize } from "phonemizer";
 import type { PronunciationRule } from "@shared/ttsTextRules";
 import { escapeRegexLiteral } from "@shared/ttsTextRules";
-import type { KokoroVoiceId } from "./kokoroVoices";
-
-/** Kokoro voice prefix: `a` = US English, `b` = British English. */
-export type KokoroLangCode = "a" | "b";
+import {
+	KOKORO_ESPEAK_LANGS,
+	kokoroLangFromVoice,
+	type KokoroLangCode,
+} from "./kokoroVoices";
 
 const PUNCTUATION_CHARS = ';:,.!?¡¿—…"«»“”(){}[]';
 const PUNCTUATION_SPLIT = new RegExp(
@@ -12,9 +13,14 @@ const PUNCTUATION_SPLIT = new RegExp(
 	"g",
 );
 
-/** Mirrors kokoro-js text normalization before phonemization. */
-export function kokoroNormalizeText(text: string): string {
-	return text
+/**
+ * Mirrors kokoro-js text normalization before phonemization. The quote,
+ * CJK-punctuation and whitespace steps apply to every language; titles,
+ * numbers, years, currency and "yeah" are spelled out in English, so they
+ * only run for English voices.
+ */
+export function kokoroNormalizeText(text: string, english = true): string {
+	const neutral = text
 		.replace(/[‘’]/g, "'")
 		.replace(/«/g, "“")
 		.replace(/»/g, "”")
@@ -30,7 +36,9 @@ export function kokoroNormalizeText(text: string): string {
 		.replace(/？/g, "? ")
 		.replace(/[^\S \n]/g, " ")
 		.replace(/  +/g, " ")
-		.replace(/(?<=\n) +(?=\n)/g, "")
+		.replace(/(?<=\n) +(?=\n)/g, "");
+	if (!english) return neutral.trim();
+	return neutral
 		.replace(/\bD[Rr]\.(?= [A-Z])/g, "Doctor")
 		.replace(/\b(?:Mr\.|MR\.(?= [A-Z]))/g, "Mister")
 		.replace(/\b(?:Ms\.|MS\.(?= [A-Z]))/g, "Miss")
@@ -122,13 +130,8 @@ function splitPunctuationSegments(text: string): TextSegment[] {
 	return segments;
 }
 
-function kokoroLangFromVoice(voice: KokoroVoiceId): KokoroLangCode {
-	const code = voice.at(0);
-	return code === "b" ? "b" : "a";
-}
-
 function espeakLang(code: KokoroLangCode): string {
-	return code === "a" ? "en-us" : "en";
+	return KOKORO_ESPEAK_LANGS[code];
 }
 
 /** Post-processing applied by kokoro-js after eSpeak phonemization. */
@@ -245,11 +248,11 @@ async function phonemizeSegment(
  */
 export async function phonemizeForKokoro(
 	text: string,
-	voice: KokoroVoiceId,
+	voice: string,
 	pronunciationRules: PronunciationRule[],
 ): Promise<string> {
 	const lang = kokoroLangFromVoice(voice);
-	const normalized = kokoroNormalizeText(text);
+	const normalized = kokoroNormalizeText(text, lang === "a" || lang === "b");
 	const segments = splitPunctuationSegments(normalized);
 	const parts = await Promise.all(
 		segments.map(async ({ literal, text: seg }) => {

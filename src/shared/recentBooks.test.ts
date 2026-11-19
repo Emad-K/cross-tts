@@ -114,6 +114,16 @@ describe("coerceRecentBooks", () => {
 		expect(coerceRecentBooks("x")).toEqual({});
 	});
 
+	test("keeps a saved engine; old entries have none (read as Kokoro)", () => {
+		const out = coerceRecentBooks({
+			"/new": { path: "/new", updatedAt: 1, engine: "kokoro", voice: "bf_emma" },
+			"/old": { path: "/old", updatedAt: 1, voice: "af_heart" },
+		});
+		expect(out["/new"]!.engine).toBe("kokoro");
+		expect(out["/old"]!.engine).toBeUndefined();
+		expect(out["/old"]!.voice).toBe("af_heart");
+	});
+
 	test("round-trips tags and series", () => {
 		const raw = {
 			"/a": {

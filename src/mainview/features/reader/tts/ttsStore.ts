@@ -6,7 +6,6 @@ import {
 	normalizedReaderText,
 } from "./chunkText";
 import type { TtsChunk } from "./chunkText";
-import type { KokoroVoiceId } from "./kokoroVoices";
 
 export type ModelPhase = "idle" | "loading" | "ready" | "error";
 export type VoiceDownloadPhase = "idle" | "running" | "done" | "error";
@@ -17,13 +16,13 @@ export type PlaybackPhase =
 	| "playing"
 	| "paused";
 
-export type VoiceOption = { id: KokoroVoiceId; label: string };
-
 type TtsState = {
 	sourceText: string;
 	chunks: TtsChunk[];
-	voiceOptions: VoiceOption[];
-	voice: KokoroVoiceId;
+	/** Selected TTS engine (ttsEngines.ts). */
+	engineId: string;
+	/** Voice id of the selected engine. */
+	voice: string;
 	volumePct: number;
 	speed: number;
 	/** Extra silence inserted between sentences during playback, in ms. */
@@ -48,8 +47,9 @@ type TtsState = {
 	setSourceText: (raw: string, opts?: { chunkIndex?: number }) => void;
 	/** Rebuild chunks from the current text (e.g. after max-chunk-size changed). */
 	rechunk: () => void;
-	setVoiceOptions: (opts: VoiceOption[]) => void;
-	setVoice: (id: KokoroVoiceId) => void;
+	/** Switch engine together with a voice it has (see coerceEngineVoice). */
+	setEngine: (engineId: string, voice: string) => void;
+	setVoice: (id: string) => void;
 	setVolumePct: (v: number) => void;
 	setSpeed: (s: number) => void;
 	setSentencePauseMs: (ms: number) => void;
@@ -78,7 +78,7 @@ type TtsState = {
 	seekToChunk: (index: number) => void;
 };
 
-const initialVoice: KokoroVoiceId = "af_heart";
+const initialVoice = "af_heart";
 
 export const MAX_SENTENCE_PAUSE_MS = 2000;
 
@@ -91,7 +91,7 @@ export function clampSentencePauseMs(ms: number): number {
 export const useTtsStore = create<TtsState>((set, get) => ({
 	sourceText: "",
 	chunks: [],
-	voiceOptions: [],
+	engineId: "kokoro",
 	voice: initialVoice,
 	volumePct: 80,
 	speed: 1,
@@ -156,7 +156,7 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 		});
 	},
 
-	setVoiceOptions: (voiceOptions) => set({ voiceOptions }),
+	setEngine: (engineId, voice) => set({ engineId, voice }),
 
 	setVoice: (id) => {
 		set({ voice: id });

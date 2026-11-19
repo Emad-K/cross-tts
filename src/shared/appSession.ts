@@ -14,6 +14,9 @@ export type StoredWindowFrame = {
 };
 
 export type WebPersistedSlice = {
+	/** TTS engine id; sessions saved before engines existed are "kokoro". */
+	engine: string;
+	/** Voice id of `engine`. */
 	voice: string;
 	volumePct: number;
 	speed: number;
@@ -44,6 +47,7 @@ export type AppSessionFileV1 = {
 };
 
 export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
+	engine: "kokoro",
 	voice: "af_heart",
 	volumePct: 80,
 	speed: 1,

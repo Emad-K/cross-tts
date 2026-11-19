@@ -55,7 +55,7 @@ import {
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
 import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
-import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { getTtsEngine } from "./tts/ttsEngines";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
@@ -69,7 +69,7 @@ import {
 	buildTtsChunks,
 	prefetchTexts,
 	seekToChunkAndMaybePlay,
-	ensureKokoroLoaded,
+	ensureTtsLoaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
 	startOrResumePlayback,
@@ -81,14 +81,16 @@ import {
 } from "./tts";
 
 /**
- * Apply a book's saved voice / speed, if it has any, before it opens. Every
+ * Apply a book's saved engine / voice / speed, if it has any, before it opens. Every
  * way of opening a book goes through this (library, drag-drop, file picker,
  * session restore), so a book always plays with its own voice.
  */
 function restoreBookVoice(path: string): void {
 	const resume = getBookResume(path);
-	if (resume?.voice && KOKORO_VOICE_IDS.includes(resume.voice as KokoroVoiceId)) {
-		useTtsStore.getState().setVoice(resume.voice as KokoroVoiceId);
+	// Books saved before engines existed have Kokoro voices.
+	const engine = getTtsEngine(resume?.engine ?? "kokoro");
+	if (resume?.voice && engine.listVoices().some((v) => v.id === resume.voice)) {
+		useTtsStore.getState().setEngine(engine.id, resume.voice);
 	}
 	if (resume?.speed != null) useTtsStore.getState().setSpeed(resume.speed);
 }
@@ -303,7 +305,7 @@ export function ReaderApp() {
 		void (async () => {
 			await useAppSettingsStore.getState().hydrate();
 			if (cancelled) return;
-			await ensureKokoroLoaded().catch(() => {});
+			await ensureTtsLoaded().catch(() => {});
 		})();
 		return () => {
 			cancelled = true;

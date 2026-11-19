@@ -8,7 +8,7 @@ import {
 } from "@/lib/desktopBridge";
 import { useBookmarksStore } from "./bookmarks/bookmarksStore";
 import { useLibraryStore } from "./library/libraryStore";
-import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { coerceEngineVoice, getTtsEngine } from "./tts/ttsEngines";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";
 import type { LoadedDocument } from "./types";
@@ -48,12 +48,6 @@ export function touchSessionSave(): void {
 	scheduleSave?.();
 }
 
-function coerceVoice(id: string): KokoroVoiceId {
-	return KOKORO_VOICE_IDS.includes(id as KokoroVoiceId)
-		? (id as KokoroVoiceId)
-		: "af_heart";
-}
-
 export function buildWebSlice(
 	doc: LoadedDocument | null,
 	activeChapterId: string | null,
@@ -73,6 +67,7 @@ export function buildWebSlice(
 			chapterId,
 			chunkIndex: t.currentChunkIndex,
 			progress: readProgress(doc, chapterId, t.currentChunkIndex, t.chunks.length),
+			engine: t.engineId,
 			voice: t.voice,
 			speed: t.speed,
 			updatedAt: Date.now(),
@@ -86,6 +81,7 @@ export function buildWebSlice(
 	}
 
 	return {
+		engine: t.engineId,
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
@@ -169,8 +165,9 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 		};
 	}
 	const { web } = file;
-	const voice = coerceVoice(web.voice);
-	useTtsStore.getState().setVoice(voice);
+	// Unknown or missing engine ids (sessions from before engines) → default.
+	const engine = getTtsEngine(web.engine ?? "kokoro");
+	useTtsStore.getState().setEngine(engine.id, coerceEngineVoice(engine, web.voice));
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
 	if (typeof web.sentencePauseMs === "number") {

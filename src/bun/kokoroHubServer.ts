@@ -2,12 +2,11 @@ import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
-import { MODEL_SHA256 } from "../shared/modelAssets";
 import { modelCacheDir } from "./appConfigStore";
 import { isUsableCachedFile } from "./hubDiskCache";
 import { mainLog } from "./logBridge";
 import { adoptLegacyModelCache, downloadToFile } from "./modelCache";
-import { hubRequestPath } from "./securityGuards";
+import { hubFileSha256, hubRequestPath } from "./securityGuards";
 
 const HF_ORIGIN = "https://huggingface.co";
 
@@ -44,9 +43,7 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 			source: "models",
 			message: `Downloading ${name} from HuggingFace (not cached yet)…`,
 		});
-		// hfPath is /<repo>/resolve/<rev>/<file>; the hash table is keyed by <file>.
-		const repoRelative = hfPath.split("/").slice(5).join("/");
-		await downloadToFile(url, dest, MODEL_SHA256[repoRelative]);
+		await downloadToFile(url, dest, hubFileSha256(hfPath));
 		const bytes = existsSync(dest) ? statSync(dest).size : 0;
 		mainLog({
 			level: "info",
@@ -64,8 +61,9 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 }
 
 /**
- * Start the local Kokoro model cache server. Only requests under a random
- * per-launch path token, for files of the Kokoro repo, are served, so other
+ * Start the local model cache server. Only requests under a random
+ * per-launch path token, for allowlisted files of the engines' pinned model
+ * repos (HUB_REPOS), are served, so other
  * local software and web pages can't use it as an open HuggingFace proxy.
  * `allowedOrigins` get a CORS grant (the renderer fetches from app://).
  */

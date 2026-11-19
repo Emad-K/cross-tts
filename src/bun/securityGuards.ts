@@ -1,5 +1,5 @@
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { MODEL_REVISION, MODEL_SHA256 } from "../shared/modelAssets";
+import { HUB_REPOS, type HubRepo } from "../shared/modelAssets";
 
 /**
  * Pure guards used by the main process to validate renderer-supplied URLs and
@@ -20,16 +20,50 @@ export function isInsideRoot(path: string, roots: Iterable<string>): boolean {
 
 // One path segment: no leading dot (so no "..", no dotfiles), no separators.
 const SEG = "[A-Za-z0-9_-][A-Za-z0-9._-]*";
-const KOKORO_REPO = "onnx-community/Kokoro-82M-v1\\.0-ONNX";
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const ALL_HUB_REPOS: readonly HubRepo[] = Object.values(HUB_REPOS).flat();
 
 /**
- * Map a local Kokoro hub request path (`/<token>/<repo>/resolve/<rev>/<file>`)
- * to the HuggingFace path it proxies (`/<repo>/resolve/<rev>/<file>`), or null
- * if the token is wrong or the path is anything but a model/config/voice file
- * of the Kokoro repo at the pinned MODEL_REVISION. ONNX files must also have a
- * known sha256 (MODEL_SHA256) so their download can be verified.
+ * Check `hfPath` (`/<repo>/resolve/<rev>/<file>`) against every allowlisted
+ * entry it matches (engines may share a repo), so entry order never matters.
+ * Null if none matches, or if a match needs a hash and no match provides one.
  */
-export function hubRequestPath(pathname: string, token: string): string | null {
+function matchHubFile(
+	hfPath: string,
+	repos: readonly HubRepo[],
+): { sha256: string | undefined } | null {
+	let matched = false;
+	let needsHash = false;
+	let sha256: string | undefined;
+	for (const repo of repos) {
+		const re = new RegExp(
+			`^/${escapeRe(repo.repo)}/resolve/${escapeRe(repo.revision)}/((?:${SEG}/)*${SEG}\\.(${repo.extensions.map(escapeRe).join("|")}))$`,
+		);
+		const m = re.exec(hfPath);
+		if (!m) continue;
+		matched = true;
+		needsHash ||= !repo.unhashedExtensions.includes(m[2]!);
+		sha256 ??= repo.sha256[m[1]!];
+	}
+	if (!matched || (needsHash && !sha256)) return null;
+	return { sha256 };
+}
+
+/**
+ * Map a local hub request path (`/<token>/<repo>/resolve/<rev>/<file>`) to the
+ * HuggingFace path it proxies (`/<repo>/resolve/<rev>/<file>`), or null if the
+ * token is wrong or the path isn't an allowed file of an allowlisted repo at
+ * its pinned revision (HUB_REPOS). Files outside the repo's
+ * `unhashedExtensions` must also have a known sha256 so their download can be
+ * verified.
+ */
+export function hubRequestPath(
+	pathname: string,
+	token: string,
+	repos: readonly HubRepo[] = ALL_HUB_REPOS,
+): string | null {
 	let p: string;
 	try {
 		p = decodeURIComponent(pathname);
@@ -38,14 +72,16 @@ export function hubRequestPath(pathname: string, token: string): string | null {
 	}
 	const prefix = `/${token}/`;
 	if (!token || !p.startsWith(prefix)) return null;
-	const rest = p.slice(prefix.length);
-	const re = new RegExp(
-		`^${KOKORO_REPO}/resolve/${MODEL_REVISION}/((?:${SEG}/)*${SEG}\\.(json|onnx|bin))$`,
-	);
-	const m = re.exec(rest);
-	if (!m) return null;
-	if (m[2] === "onnx" && !MODEL_SHA256[m[1]!]) return null;
-	return `/${rest}`;
+	const hfPath = `/${p.slice(prefix.length)}`;
+	return matchHubFile(hfPath, repos) ? hfPath : null;
+}
+
+/** Expected sha256 of an allowlisted hub file (from hubRequestPath), if known. */
+export function hubFileSha256(
+	hfPath: string,
+	repos: readonly HubRepo[] = ALL_HUB_REPOS,
+): string | undefined {
+	return matchHubFile(hfPath, repos)?.sha256;
 }
 
 // An audio file, or its in-progress `<name>.part` (renamed once complete).

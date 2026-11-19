@@ -9,6 +9,7 @@ import {
 	generatePhonemes,
 	KOKORO_SAMPLE_RATE,
 	loadKokoro,
+	MAX_PHONEME_TOKENS,
 	voiceLoader,
 	type Kokoro,
 } from "./kokoroModel";
@@ -18,15 +19,7 @@ import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
 import {
 	KOKORO_REMOTE_PATH_TEMPLATE,
 	kokoroVoiceOptions,
-	type KokoroVoiceId,
 } from "./kokoroVoices";
-
-/**
- * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
- * end of the sentence AND the EOS token (garbled tail). One phoneme char is at
- * most one token, so pieces this long always fit, with room for BOS/EOS.
- */
-const MAX_PHONEME_TOKENS = 500;
 
 /**
  * TTS runs entirely in this worker so the synchronous ONNX Runtime inference
@@ -53,7 +46,7 @@ type GenerateMessage = {
 	type: "generate";
 	id: number;
 	text: string;
-	voice: KokoroVoiceId;
+	voice: string;
 	speed: number;
 	pronunciationRules: PronunciationRule[];
 	/** Playback epoch; older-epoch jobs are cancelled (see SynthJobQueue). */

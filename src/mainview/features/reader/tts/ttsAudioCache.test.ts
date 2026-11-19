@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { AudioCache, audioCacheKey } from "./ttsAudioCache";
 
 describe("audioCacheKey", () => {
-	test("differs by voice, speed, rules, and text", () => {
-		const base = audioCacheKey("hello", "af_heart", 1, "sig");
-		expect(audioCacheKey("hello", "am_other", 1, "sig")).not.toBe(base);
-		expect(audioCacheKey("hello", "af_heart", 1.5, "sig")).not.toBe(base);
-		expect(audioCacheKey("hello", "af_heart", 1, "sig2")).not.toBe(base);
-		expect(audioCacheKey("world", "af_heart", 1, "sig")).not.toBe(base);
+	test("differs by engine, voice, speed, rules, and text", () => {
+		const base = audioCacheKey("kokoro", "hello", "af_heart", 1, "sig");
+		expect(audioCacheKey("kokoro", "hello", "am_other", 1, "sig")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1.5, "sig")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1, "sig2")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "world", "af_heart", 1, "sig")).not.toBe(base);
+		expect(audioCacheKey("other", "hello", "af_heart", 1, "sig")).not.toBe(base);
 	});
 
 	test("is stable for identical inputs", () => {
-		expect(audioCacheKey("hello", "af_heart", 1, "sig")).toBe(
-			audioCacheKey("hello", "af_heart", 1, "sig"),
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1, "sig")).toBe(
+			audioCacheKey("kokoro", "hello", "af_heart", 1, "sig"),
 		);
 	});
 });

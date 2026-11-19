@@ -36,6 +36,7 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	const d = defaultWebPersistedSlice();
 	if (!raw || typeof raw !== "object") return d;
 	const o = raw as Record<string, unknown>;
+	if (typeof o.engine === "string" && o.engine.length > 0) d.engine = o.engine;
 	if (typeof o.voice === "string") d.voice = o.voice;
 	if (typeof o.volumePct === "number" && o.volumePct >= 0 && o.volumePct <= 100) {
 		d.volumePct = Math.round(o.volumePct);
@@ -74,6 +75,7 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 /** Session file stores paths and prefs only — never document body text. */
 function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 	return {
+		engine: web.engine,
 		voice: web.voice,
 		volumePct: web.volumePct,
 		speed: web.speed,
