@@ -40,6 +40,9 @@ function readProgress(
 const DEBOUNCE_MS = 2000;
 
 let scheduleSave: (() => void) | null = null;
+/** Set while buildWebSlice writes the library itself, so the save it is part of
+ * doesn't schedule another save (which would loop forever). */
+let writingLibraryFromSlice = false;
 
 export function touchSessionSave(): void {
 	scheduleSave?.();
@@ -74,7 +77,12 @@ export function buildWebSlice(
 			speed: t.speed,
 			updatedAt: Date.now(),
 		});
-		useLibraryStore.getState().setBooks(books);
+		writingLibraryFromSlice = true;
+		try {
+			useLibraryStore.getState().setBooks(books);
+		} finally {
+			writingLibraryFromSlice = false;
+		}
 	}
 
 	return {
@@ -263,6 +271,9 @@ export function subscribeDebouncedSessionSave(
 	const unsubStore = useTtsStore.subscribe(schedule);
 	const unsubRules = useTtsRulesStore.subscribe(schedule);
 	const unsubBookmarks = useBookmarksStore.subscribe(schedule);
+	const unsubLibrary = useLibraryStore.subscribe(() => {
+		if (!writingLibraryFromSlice) schedule();
+	});
 	document.addEventListener("visibilitychange", onVisibility);
 	scheduleSave = schedule;
 	schedule();
@@ -272,6 +283,7 @@ export function subscribeDebouncedSessionSave(
 		unsubStore();
 		unsubRules();
 		unsubBookmarks();
+		unsubLibrary();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
 		void saveAppSessionRpc(
