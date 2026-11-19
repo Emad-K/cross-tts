@@ -1,5 +1,6 @@
 import licenceText from "../../../../../third_party/supertonic-3/LICENSE?raw";
 import type { GpuPowerPreference } from "@shared/appConfig";
+import { SUPERTONIC_REPO, SUPERTONIC_REVISION } from "@shared/modelAssets";
 import {
 	getKokoroHubBaseUrl,
 	onTtsNodeProgress,
@@ -321,7 +322,8 @@ export const supertonicEngine: TtsEngine = {
 	displayName: "Supertonic 3",
 	licence: {
 		name: "OpenRAIL-M",
-		url: "https://huggingface.co/supertone-oss-archive/supertonic-3/blob/main/LICENSE",
+		// The pinned revision: the text accepted in-app is that revision's LICENSE.
+		url: `https://huggingface.co/${SUPERTONIC_REPO}/blob/${SUPERTONIC_REVISION}/LICENSE`,
 		acknowledge: { summary: USE_RESTRICTIONS, text: licenceText },
 	},
 	languages: SUPERTONIC_LANGS,
