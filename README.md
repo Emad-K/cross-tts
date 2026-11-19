@@ -115,8 +115,10 @@ engine try ONNX Runtime's CUDA execution provider. It needs CUDA 12 and cuDNN 9
 on the machine *and* ONNX Runtime's CUDA provider libraries next to the
 binding, which installers don't ship (hundreds of MB; npm only offers them for
 Linux x64 via `ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js`
-in a dev checkout). When anything is missing, or a CUDA run fails, the engine
-logs why and continues on the CPU.
+in a dev checkout). The setting only appears when that provider library is
+found (in a packaged app: under `resources/app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6/<os>/x64/`),
+so stock installers don't show it. When anything else is missing, or a CUDA
+run fails, the engine logs why and continues on the CPU.
 
 ```bash
 pnpm install

@@ -30,6 +30,15 @@ export function cudaUnavailableReason(
 }
 
 /**
+ * In a packaged app, module paths resolve inside app.asar, but the binding
+ * (and any provider library the user adds next to it) lives in
+ * app.asar.unpacked — asar fs only knows files in its header.
+ */
+export function unpackedPath(path: string): string {
+	return path.replace(/app\.asar(?=[\\/])/, "app.asar.unpacked");
+}
+
+/**
  * Directory holding onnxruntime-node's native binding for this platform.
  * Resolved through transformers.js, whose dependency it is (it isn't ours).
  */
@@ -37,12 +46,24 @@ export function ortBindingDir(): string {
 	const fromTransformers = createRequire(
 		require.resolve("@huggingface/transformers"),
 	);
-	return join(
-		dirname(fromTransformers.resolve("onnxruntime-node")),
-		"..",
-		"bin",
-		"napi-v6",
-		process.platform,
-		process.arch,
+	return unpackedPath(
+		join(
+			dirname(fromTransformers.resolve("onnxruntime-node")),
+			"..",
+			"bin",
+			"napi-v6",
+			process.platform,
+			process.arch,
+		),
 	);
+}
+
+/** Whether the CUDA toggle can do anything in this build. */
+export function cudaSupported(): boolean {
+	try {
+		const dir = ortBindingDir();
+		return cudaUnavailableReason(process.platform, process.arch, dir) === null;
+	} catch {
+		return false;
+	}
 }

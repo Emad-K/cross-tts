@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { cudaUnavailableReason } from "./cudaSupport";
+import { cudaUnavailableReason, unpackedPath } from "./cudaSupport";
 
 describe("cudaUnavailableReason", () => {
 	test("rejects unsupported platforms without touching the disk", () => {
@@ -26,5 +26,18 @@ describe("cudaUnavailableReason", () => {
 		const has = (p: string) => (seen.push(p), true);
 		expect(cudaUnavailableReason("linux", "x64", "/b", has)).toBeNull();
 		expect(seen).toEqual([join("/b", "libonnxruntime_providers_cuda.so")]);
+	});
+});
+
+describe("unpackedPath", () => {
+	test("maps app.asar paths to app.asar.unpacked", () => {
+		expect(unpackedPath("/opt/X/resources/app.asar/node_modules/a")).toBe(
+			"/opt/X/resources/app.asar.unpacked/node_modules/a",
+		);
+		expect(unpackedPath("C:\\X\\app.asar\\node_modules")).toBe(
+			"C:\\X\\app.asar.unpacked\\node_modules",
+		);
+		expect(unpackedPath("/dev/node_modules/a")).toBe("/dev/node_modules/a");
+		expect(unpackedPath("/x/app.asar.unpacked/a")).toBe("/x/app.asar.unpacked/a");
 	});
 });

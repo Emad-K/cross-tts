@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { app } from "electron";
+import { cudaSupported } from "./cudaSupport";
 import {
 	APP_CONFIG_VERSION,
 	type AppConfigFileV1,
@@ -258,9 +259,7 @@ export function appConfigInfo(): AppConfigInfo {
 		gpuPower: config.gpuPower,
 		cpuThreads: config.cpuThreads,
 		cudaEnabled: config.cudaEnabled,
-		cudaSupported:
-			process.arch === "x64" &&
-			(process.platform === "linux" || process.platform === "win32"),
+		cudaSupported: cudaSupported(),
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
 		autoUpdate: config.autoUpdate,
