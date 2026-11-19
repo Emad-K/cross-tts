@@ -7,6 +7,7 @@ import {
 import type {
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
+	TtsNodeEngine,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
 import { hubCacheDirectory } from "./kokoroHubServer";
@@ -21,6 +22,8 @@ import { mainLog } from "./logBridge";
  */
 
 let child: UtilityProcess | null = null;
+/** Engine the running process serves (one native engine at a time). */
+let childEngine: TtsNodeEngine | null = null;
 let initPromise: Promise<TtsNodeInitResult> | null = null;
 let seq = 0;
 const pending = new Map<number, (result: TtsNodeGenerateResult) => void>();
@@ -37,19 +40,30 @@ function failAllPending(message: string): void {
 	pending.clear();
 }
 
-export function stopTtsNode(): void {
+/** Stop the native process; with `engine`, only if it serves that engine. */
+export function stopTtsNode(engine?: TtsNodeEngine): void {
+	if (engine && childEngine && engine !== childEngine) return;
 	failAllPending("TTS engine stopped");
 	child?.kill();
 	child = null;
+	childEngine = null;
 	initPromise = null;
 }
+
+/** Utility-process entry per engine (electron.vite.config.ts inputs). */
+const WORKER_ENTRY: Record<TtsNodeEngine, string> = {
+	kokoro: "ttsNodeWorker.js",
+	supertonic: "supertonicNodeWorker.js",
+};
 
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
 	numThreads: number,
 	cuda: boolean,
+	engine: TtsNodeEngine = "kokoro",
 ): Promise<TtsNodeInitResult> {
-	if (initPromise) return initPromise;
+	if (initPromise && childEngine === engine) return initPromise;
+	if (childEngine !== engine) stopTtsNode();
 	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
 	// WASM engine. Say so instead of spawning a process that can't load it.
 	if (process.platform === "darwin" && process.arch === "x64") {
@@ -67,10 +81,11 @@ export function ttsNodeInit(
 		});
 	}
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
-		const proc = utilityProcess.fork(join(__dirname, "ttsNodeWorker.js"), [], {
+		const proc = utilityProcess.fork(join(__dirname, WORKER_ENTRY[engine]), [], {
 			serviceName: "cross-tts-native-tts",
 		});
 		child = proc;
+		childEngine = engine;
 		proc.on("message", (msg) => {
 			switch (msg?.type) {
 				case "progress": {
@@ -110,6 +125,7 @@ export function ttsNodeInit(
 		proc.on("exit", (code) => {
 			if (child === proc) {
 				child = null;
+				childEngine = null;
 				initPromise = null;
 			}
 			failAllPending(`Native TTS process exited (code ${code})`);

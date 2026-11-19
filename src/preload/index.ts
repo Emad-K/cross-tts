@@ -67,9 +67,9 @@ const api: AppApi = {
 			ipcRenderer.invoke("getPendingCrashReports"),
 		resolveCrashReports: (params) =>
 			ipcRenderer.invoke("resolveCrashReports", params),
-		ttsNodeInit: () => ipcRenderer.invoke("ttsNodeInit"),
+		ttsNodeInit: (engine) => ipcRenderer.invoke("ttsNodeInit", engine),
 		ttsNodeGenerate: (params) => ipcRenderer.invoke("ttsNodeGenerate", params),
-		ttsNodeStop: () => ipcRenderer.invoke("ttsNodeStop"),
+		ttsNodeStop: (engine) => ipcRenderer.invoke("ttsNodeStop", engine),
 	},
 	getPathForFile: (file: File) => {
 		try {

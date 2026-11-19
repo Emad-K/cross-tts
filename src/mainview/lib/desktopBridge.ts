@@ -1,5 +1,6 @@
 import type { AppApi, FoundInPageResult } from "@shared/appRpc";
 import type {
+	TtsNodeEngine,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -435,10 +436,12 @@ export function subscribeToCrashReports(
 }
 
 /** Start the native (onnxruntime-node) CPU TTS backend. Null on web (no bridge). */
-export async function ttsNodeInit(): Promise<TtsNodeInitResult | null> {
+export async function ttsNodeInit(
+	engine: TtsNodeEngine = "kokoro",
+): Promise<TtsNodeInitResult | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.ttsNodeInit();
+	return b.request.ttsNodeInit(engine);
 }
 
 /** Synthesize one chunk on the native CPU backend. Null on web (no bridge). */
@@ -450,11 +453,11 @@ export async function ttsNodeGenerate(
 	return b.request.ttsNodeGenerate(params);
 }
 
-/** Stop the native CPU TTS backend. No-op on web. */
-export async function ttsNodeStop(): Promise<void> {
+/** Stop the native CPU TTS backend if it serves `engine`. No-op on web. */
+export async function ttsNodeStop(engine: TtsNodeEngine = "kokoro"): Promise<void> {
 	const b = bridge();
 	if (!b) return;
-	await b.request.ttsNodeStop();
+	await b.request.ttsNodeStop(engine);
 }
 
 /** Subscribe to native-TTS model-load progress (0..1). No-op on web. */

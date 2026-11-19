@@ -12,6 +12,7 @@ import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type { CrashRecord } from "./crashReport";
 import type {
+	TtsNodeEngine,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -229,7 +230,7 @@ export type AppRpcSchema = {
 		};
 		/** Start the native (onnxruntime-node) CPU TTS backend; loads the model. */
 		ttsNodeInit: {
-			params: void;
+			params: TtsNodeEngine;
 			response: TtsNodeInitResult;
 		};
 		/** Synthesize one chunk on the native CPU backend. */
@@ -239,7 +240,7 @@ export type AppRpcSchema = {
 		};
 		/** Stop the native CPU TTS backend and free its model. */
 		ttsNodeStop: {
-			params: void;
+			params: TtsNodeEngine;
 			response: void;
 		};
 	};
