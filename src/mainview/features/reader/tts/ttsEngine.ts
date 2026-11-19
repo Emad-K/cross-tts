@@ -26,8 +26,14 @@ import { CANCELLED } from "./synthJobQueue";
 import { useSweepStore } from "./sweepStore";
 import { useTtsStore } from "./ttsStore";
 
-/** How many upcoming chunks to synthesize ahead so playback never waits. */
-const PREFETCH_AHEAD = 2;
+/**
+ * Read-ahead, by text rather than chunk count: chunks range from ~48 to 600
+ * chars, so a fixed count was seconds of buffer with short chunks and a lot
+ * with long ones. Stale read-ahead is cancelled on seek (synthEpoch), so a
+ * deeper queue doesn't delay the chunk the listener jumps to.
+ */
+const PREFETCH_CHARS = 700;
+const PREFETCH_MAX_CHUNKS = 6;
 
 /** Synthesized chunk audio, keyed by voice/speed/rules/text (see audioCacheKey). */
 const audioBufferCache = new AudioCache<AudioBuffer>(64);
@@ -540,20 +546,45 @@ function hasCachedChunkAudio(
 	);
 }
 
-/** Fire-and-forget synthesis of the next `count` chunks into the cache. */
+/**
+ * Fire-and-forget synthesis of upcoming chunks into the cache, up to
+ * {@link PREFETCH_CHARS} of text (at least one chunk, at most
+ * {@link PREFETCH_MAX_CHUNKS}).
+ */
 function prefetchChunks(
 	ctx: AudioContext,
 	chunks: { text: string }[],
 	from: number,
-	count: number,
 	voice: KokoroVoiceId,
 	speed: number,
 	signal: AbortSignal,
 ): void {
-	for (let j = from; j < from + count && j < chunks.length; j++) {
+	let chars = 0;
+	for (
+		let j = from;
+		j < chunks.length && j < from + PREFETCH_MAX_CHUNKS && chars < PREFETCH_CHARS;
+		j++
+	) {
 		if (signal.aborted) return;
 		const text = chunks[j]?.text;
 		if (!text || !isSpeakableChunkText(text)) continue;
+		chars += text.length;
+		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
+	}
+}
+
+/**
+ * Warm the cache for text that will play soon but isn't loaded yet (the next
+ * EPUB chapter's opening chunks), so rolling into it doesn't stall on a cold
+ * first chunk. Uses the current voice/speed so the cache keys match
+ * playback. Does nothing until a model is loaded.
+ */
+export function prefetchTexts(texts: string[]): void {
+	if (!activeDevice) return;
+	const { voice, speed } = useTtsStore.getState();
+	const { ctx } = getAudioGraph();
+	for (const text of texts) {
+		if (!isSpeakableChunkText(text)) continue;
 		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
 	}
 }
@@ -1058,7 +1089,6 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 			ctx,
 			chunks,
 			idx + 1,
-			PREFETCH_AHEAD,
 			snap.voice,
 			snap.speed,
 			signal,

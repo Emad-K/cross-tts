@@ -62,8 +62,11 @@ import {
 import { useSleepTimerStore } from "./sleepTimer/sleepTimerStore";
 import { shouldSleepAtChapterEnd } from "./sleepTimer/sleepTimerUtils";
 import type { LoadedDocument } from "./types";
+import { getMaxChunkChars } from "./settings/appSettingsStore";
 import {
 	adjustVolume,
+	buildTtsChunks,
+	prefetchTexts,
 	seekToChunkAndMaybePlay,
 	ensureKokoroLoaded,
 	setChapterPlaybackFinishedHandler,
@@ -334,6 +337,30 @@ export function ReaderApp() {
 		});
 		return () => setChapterPlaybackFinishedHandler(null);
 	}, []);
+
+	// Near the end of an EPUB chapter, synthesize the next chapter's opening
+	// chunks so rolling into it doesn't pause on a cold first chunk. Chunked
+	// exactly as setSourceText will, so the audio cache keys match.
+	useEffect(() => {
+		if (!document || document.format !== "epub") return;
+		let warmedChapterId: string | null = null;
+		return useTtsStore.subscribe((s) => {
+			if (s.playback !== "playing") return;
+			if (s.chunks.length - s.currentChunkIndex > 3) return;
+			const chapters = document.chapters;
+			const i = chapters.findIndex((c) => c.id === activeChapterIdRef.current);
+			const next = i >= 0 ? chapters[i + 1] : undefined;
+			if (!next || warmedChapterId === next.id) return;
+			warmedChapterId = next.id;
+			void getEpubChapterContent(document.filePath, next.id)
+				.then((content) => {
+					if (!content) return;
+					const chunks = buildTtsChunks(content.text, getMaxChunkChars());
+					prefetchTexts(chunks.slice(0, 2).map((c) => c.text));
+				})
+				.catch(() => {});
+		});
+	}, [document]);
 
 	useEffect(() => {
 		if (!sessionReady) return;
