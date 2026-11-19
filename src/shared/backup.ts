@@ -89,18 +89,19 @@ function sanitizeRules(raw: unknown): TtsTextRulesState {
 }
 
 /**
- * A Windows network path (`\\host\share` or `//host/share`). Looking at one
- * connects to that host, so a backup file must not be able to name any.
+ * True unless `path` is a plain local absolute path: a drive path (`C:\…`,
+ * `C:/…`) or a POSIX path (`/home/…`). Everything else — `\\host\share`,
+ * `//host`, mixed slashes, `\\?\UNC\`, `\??\`, `\\.\` devices, drive-relative
+ * `C:foo` — can make Windows contact a network host or open a device, so a
+ * backup file must not be able to name one. Allowlist, not blocklist.
  */
-export function isNetworkPath(path: string): boolean {
-	// Any two leading separators, in any mix (\\host, //host, \/host, /\host,
-	// \\?\UNC\, \\.\): Windows resolves all of them as UNC or device paths.
-	return /^[\\/]{2}/.test(path);
+export function isUnsafePath(path: string): boolean {
+	return !/^(?:[A-Za-z]:[\\/]|\/(?![\\/?]))/.test(path);
 }
 
 function withoutNetworkPaths<T>(byPath: Record<string, T>): Record<string, T> {
 	return Object.fromEntries(
-		Object.entries(byPath).filter(([path]) => !isNetworkPath(path)),
+		Object.entries(byPath).filter(([path]) => !isUnsafePath(path)),
 	);
 }
 
@@ -176,7 +177,7 @@ export function parseBackup(json: string): ParseBackupResult {
 						shortcuts: coerceShortcutBindings(s.shortcuts),
 						shortcutsEnabled: s.shortcutsEnabled === true,
 						watchedFolders: coerceWatchedFolders(s.watchedFolders).filter(
-							(dir) => !isNetworkPath(dir),
+							(dir) => !isUnsafePath(dir),
 						),
 						keepPlayingInBackground: s.keepPlayingInBackground === true,
 					}

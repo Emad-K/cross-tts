@@ -10,7 +10,7 @@ import {
 	backupFileName,
 	backupSummary,
 	buildBackup,
-	isNetworkPath,
+	isUnsafePath,
 	parseBackup,
 } from "../shared/backup";
 import { coerceNotesFile, mergeNotesFiles } from "../shared/notes";
@@ -95,7 +95,7 @@ async function missingPaths(paths: unknown): Promise<string[]> {
 		.slice(0, MAX_RECENT_BOOKS);
 	const gone = await Promise.all(
 		list.map((p) =>
-			isAbsolute(p) && !isNetworkPath(p)
+			isAbsolute(p) && !isUnsafePath(p)
 				? access(p).then(
 						() => false,
 						() => true,
