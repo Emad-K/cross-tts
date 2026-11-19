@@ -64,11 +64,6 @@ export interface TtsEngine {
 	/** Backend running requests now (e.g. "webgpu", "node"); null when not loaded. */
 	activeBackend(): string | null;
 	/**
-	 * Anything else about the loaded model that changes its audio (e.g. the
-	 * weights' precision); part of the audio cache key.
-	 */
-	audioVariant?(): string;
-	/**
 	 * Mono PCM at `sampleRate` for already rule-processed text; null when there
 	 * is nothing to speak. Throws Error(message) on failure, Error(CANCELLED)
 	 * when the request went stale.
@@ -92,7 +87,10 @@ export interface TtsEngine {
 		speed: number,
 		opts: TtsSynthOptions,
 	): AsyncIterable<Float32Array>;
-	/** Engine settings that change the audio; part of the audio cache key. */
+	/**
+	 * Engine settings or model state that change the audio (e.g. quality
+	 * steps, the weights' precision); part of the audio cache key.
+	 */
 	cacheTag?(): string;
 	/** Unload the model and forget backend failures (settings changed). */
 	dispose(): void;

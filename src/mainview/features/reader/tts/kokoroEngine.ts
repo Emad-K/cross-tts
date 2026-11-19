@@ -586,7 +586,7 @@ export const kokoroEngine: TtsEngine = {
 	listVoices: kokoroVoiceOptions,
 	ensureLoaded: ensureKokoroLoaded,
 	activeBackend: () => activeDevice,
-	audioVariant: () => activeDtype,
+	cacheTag: () => activeDtype,
 	synthesize: synthesizeKokoro,
 	recover: recoverKokoro,
 	dispose() {

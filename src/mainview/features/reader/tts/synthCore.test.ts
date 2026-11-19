@@ -97,16 +97,6 @@ describe("SynthCore with a fake engine", () => {
 		expect(core.key("hi", "v1", 1)).not.toBe(before);
 	});
 
-	test("keys audio by the engine's audio variant (e.g. fp16 vs fp32)", () => {
-		const a = fakeEngine("a");
-		let variant = "fp32";
-		a.engine.audioVariant = () => variant;
-		const core = coreFor(() => a.engine);
-		const fp32 = core.key("hi", "v1", 1);
-		variant = "fp16";
-		expect(core.key("hi", "v1", 1)).not.toBe(fp32);
-	});
-
 	test("recovers from a backend fault, retries once, and drops cached audio", async () => {
 		const f = fakeEngine("k");
 		const core = coreFor(() => f.engine);
