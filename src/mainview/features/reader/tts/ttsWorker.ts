@@ -5,6 +5,7 @@ import type { PronunciationRule } from "@shared/ttsTextRules";
 import { isPlausibleAudio } from "./audioPlausibility";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
+import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
 
 /**
@@ -44,6 +45,8 @@ type GenerateMessage = {
 	voice: KokoroVoiceId;
 	speed: number;
 	pronunciationRules: PronunciationRule[];
+	/** Playback epoch; older-epoch jobs are cancelled (see SynthJobQueue). */
+	epoch?: number;
 };
 
 type InMessage = InitMessage | GenerateMessage;
@@ -206,19 +209,22 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 	}
 
 	if (msg.type === "generate") {
-		jobChain = jobChain.then(() => runGenerate(msg));
+		jobs.push(msg);
 	}
 };
 
 /**
  * Generate jobs run one at a time, in arrival order: GPU error scopes must
- * wrap exactly one run, and a queue is what lets stale jobs be dropped.
+ * wrap exactly one run, and the queue drops jobs a seek made stale.
  */
-let jobChain: Promise<void> = Promise.resolve();
+const jobs = new SynthJobQueue<GenerateMessage>((msg) => runGenerate(msg));
 
 async function runGenerate(msg: GenerateMessage): Promise<void> {
 	const startedAt = performance.now();
+	const cancel = () =>
+		ctx.postMessage({ type: "result", id: msg.id, error: CANCELLED });
 	try {
+		if (jobs.isStale(msg)) return cancel();
 		if (!tts) {
 			ctx.postMessage({
 				type: "result",
@@ -244,6 +250,7 @@ async function runGenerate(msg: GenerateMessage): Promise<void> {
 		let samplingRate = 24000;
 		for (const piece of pieces) {
 			if (piece.trim() === "") continue;
+			if (await jobs.yieldAndCheckStale(msg)) return cancel();
 			const { input_ids } = tts.tokenizer(piece, { truncation: true });
 			const raw = await generatePiece(tts, input_ids, msg.voice, msg.speed);
 			samplingRate = raw.sampling_rate;

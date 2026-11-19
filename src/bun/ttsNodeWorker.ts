@@ -7,6 +7,10 @@ import { KokoroTTS } from "kokoro-js";
 import { isPlausibleAudio } from "../mainview/features/reader/tts/audioPlausibility";
 import { phonemizeForKokoro } from "../mainview/features/reader/tts/kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "../mainview/features/reader/tts/phonemeTokenSplit";
+import {
+	CANCELLED,
+	SynthJobQueue,
+} from "../mainview/features/reader/tts/synthJobQueue";
 import { KOKORO_MODEL_ID } from "../mainview/features/reader/tts/kokoroVoices";
 import type { KokoroVoiceId } from "../mainview/features/reader/tts/kokoroVoices";
 import type {
@@ -31,9 +35,11 @@ const DTYPE = "fp32";
  */
 const MAX_PHONEME_TOKENS = 500;
 
+type GenerateJob = { type: "generate"; id: number } & TtsNodeGenerateParams;
+
 type InMessage =
 	| { type: "init"; hubBaseUrl: string | null; numThreads: number }
-	| ({ type: "generate"; id: number } & TtsNodeGenerateParams);
+	| GenerateJob;
 
 const parentPort = process.parentPort;
 
@@ -121,71 +127,94 @@ parentPort.on("message", (event) => {
 	}
 
 	if (msg.type === "generate") {
-		void (async () => {
-			const startedAt = performance.now();
-			try {
-				if (!tts) {
-					parentPort.postMessage({
-						type: "result",
-						id: msg.id,
-						error: "Model not loaded",
-					});
-					return;
-				}
-				const phonemes = await phonemizeForKokoro(
-					msg.text,
-					msg.voice as KokoroVoiceId,
-					msg.pronunciationRules,
-				);
-				if (phonemes.trim() === "") {
-					parentPort.postMessage({ type: "result", id: msg.id, empty: true });
-					return;
-				}
-				// Chunks whose phonemes exceed the tokenizer limit are synthesized in
-				// punctuation-aligned pieces and the audio concatenated — otherwise the
-				// tokenizer would silently truncate and the tail would go unspoken.
-				const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
-				const audios: Float32Array[] = [];
-				let samplingRate = 24000;
-				for (const piece of pieces) {
-					if (piece.trim() === "") continue;
-					const { input_ids } = tts.tokenizer(piece, { truncation: true });
-					const raw = await tts.generate_from_ids(input_ids, {
-						voice: msg.voice as KokoroVoiceId,
-						speed: msg.speed,
-					});
-					samplingRate = raw.sampling_rate;
-					audios.push(raw.audio as Float32Array);
-				}
-				if (audios.length === 0) {
-					parentPort.postMessage({ type: "result", id: msg.id, empty: true });
-					return;
-				}
-				const totalLength = audios.reduce((n, a) => n + a.length, 0);
-				const joined = new Float32Array(totalLength);
-				let offset = 0;
-				for (const a of audios) {
-					joined.set(a, offset);
-					offset += a.length;
-				}
-				if (!isPlausibleAudio(joined)) {
-					parentPort.postMessage({ type: "result", id: msg.id, error: "bad-output" });
-					return;
-				}
-				parentPort.postMessage({
-					type: "result",
-					id: msg.id,
-					audio: joined,
-					samplingRate,
-					synthMs: Math.round(performance.now() - startedAt),
-				});
-			} catch (e) {
-				parentPort.postMessage({
-					type: "result",
-					id: msg.id,
-					error: e instanceof Error ? e.message : String(e),
-				});
-			}
-		})();
+		jobs.push(msg);
 	}
 });
+
+/**
+ * onnxruntime-node runs each inference synchronously, blocking this process's
+ * event loop, so messages that arrive meanwhile (a newer playback epoch) are
+ * read only when we yield. A timer and then an immediate make sure a full
+ * loop turn, including I/O polling, happens before the next run.
+ */
+const yieldToMessages = () =>
+	new Promise<void>((r) => setTimeout(r, 0)).then(
+		() => new Promise<void>((r) => setImmediate(r)),
+	);
+
+/** Generate jobs run one at a time; stale playback jobs are dropped. */
+const jobs = new SynthJobQueue<GenerateJob>(
+	(msg) => runGenerate(msg),
+	yieldToMessages,
+);
+
+async function runGenerate(msg: GenerateJob): Promise<void> {
+	const startedAt = performance.now();
+	const cancel = () =>
+		parentPort.postMessage({ type: "result", id: msg.id, error: CANCELLED });
+	try {
+		if (jobs.isStale(msg)) return cancel();
+		if (!tts) {
+			parentPort.postMessage({
+				type: "result",
+				id: msg.id,
+				error: "Model not loaded",
+			});
+			return;
+		}
+		const phonemes = await phonemizeForKokoro(
+			msg.text,
+			msg.voice as KokoroVoiceId,
+			msg.pronunciationRules,
+		);
+		if (phonemes.trim() === "") {
+			parentPort.postMessage({ type: "result", id: msg.id, empty: true });
+			return;
+		}
+		// Chunks whose phonemes exceed the tokenizer limit are synthesized in
+		// punctuation-aligned pieces and the audio concatenated — otherwise the
+		// tokenizer would silently truncate and the tail would go unspoken.
+		const pieces = splitPhonemesForTokenLimit(phonemes, MAX_PHONEME_TOKENS);
+		const audios: Float32Array[] = [];
+		let samplingRate = 24000;
+		for (const piece of pieces) {
+			if (piece.trim() === "") continue;
+			if (await jobs.yieldAndCheckStale(msg)) return cancel();
+			const { input_ids } = tts.tokenizer(piece, { truncation: true });
+			const raw = await tts.generate_from_ids(input_ids, {
+				voice: msg.voice as KokoroVoiceId,
+				speed: msg.speed,
+			});
+			samplingRate = raw.sampling_rate;
+			audios.push(raw.audio as Float32Array);
+		}
+		if (audios.length === 0) {
+			parentPort.postMessage({ type: "result", id: msg.id, empty: true });
+			return;
+		}
+		const totalLength = audios.reduce((n, a) => n + a.length, 0);
+		const joined = new Float32Array(totalLength);
+		let offset = 0;
+		for (const a of audios) {
+			joined.set(a, offset);
+			offset += a.length;
+		}
+		if (!isPlausibleAudio(joined)) {
+			parentPort.postMessage({ type: "result", id: msg.id, error: "bad-output" });
+			return;
+		}
+		parentPort.postMessage({
+			type: "result",
+			id: msg.id,
+			audio: joined,
+			samplingRate,
+			synthMs: Math.round(performance.now() - startedAt),
+		});
+	} catch (e) {
+		parentPort.postMessage({
+			type: "result",
+			id: msg.id,
+			error: e instanceof Error ? e.message : String(e),
+		});
+	}
+}

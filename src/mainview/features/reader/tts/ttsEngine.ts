@@ -22,6 +22,7 @@ import {
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import { AudioCache, audioCacheKey } from "./ttsAudioCache";
+import { CANCELLED } from "./synthJobQueue";
 import { useSweepStore } from "./sweepStore";
 import { useTtsStore } from "./ttsStore";
 
@@ -126,6 +127,16 @@ let queuedChars = 0;
  * without free VRAM degrades to CPU audio instead of odd-sounding audio.
  */
 let gpuFailed = false;
+/**
+ * Playback epoch, bumped whenever the loop is interrupted (seek, voice/speed
+ * change, stop). Playback requests carry it; workers drop queued jobs from
+ * older epochs so the wanted chunk doesn't wait behind stale prefetches.
+ * Starts at the clock so a reloaded renderer never sends epochs lower than
+ * ones a still-running native process already saw.
+ */
+let synthEpoch = Date.now();
+/** Latest epoch in which playback asked for each not-yet-cached chunk. */
+const wantedAtEpoch = new Map<string, number>();
 
 /** Backend of the loaded model (null if not loaded). Lets the UI avoid an
  * unnecessary GPU reload when only a CPU-only setting changed. */
@@ -340,6 +351,7 @@ async function requestGenerateNode(
 	chunkText: string,
 	voice: KokoroVoiceId,
 	speed: number,
+	epoch: number | undefined,
 ): Promise<GenerateResult> {
 	const text = textForTtsSynthesis(chunkText);
 	const { pronunciationRules } = getTtsRulesForEngine();
@@ -348,6 +360,7 @@ async function requestGenerateNode(
 		voice,
 		speed,
 		pronunciationRules,
+		epoch,
 	});
 	if (!result) {
 		return { kind: "error", message: "Native TTS bridge unavailable" };
@@ -370,14 +383,18 @@ async function requestGenerateNode(
 	return result;
 }
 
-/** Ask the active backend to synthesize one chunk's audio. */
+/**
+ * Ask the active backend to synthesize one chunk's audio. `epoch` marks a
+ * playback request the worker may cancel once a newer epoch arrives.
+ */
 function requestGenerate(
 	chunkText: string,
 	voice: KokoroVoiceId,
 	speed: number,
+	epoch?: number,
 ): Promise<GenerateResult> {
 	if (activeDevice === "node") {
-		return requestGenerateNode(chunkText, voice, speed);
+		return requestGenerateNode(chunkText, voice, speed, epoch);
 	}
 	const w = worker;
 	if (!w) return Promise.resolve({ kind: "error", message: "Engine not ready" });
@@ -411,6 +428,7 @@ function requestGenerate(
 			voice,
 			speed,
 			pronunciationRules,
+			epoch,
 		});
 	});
 }
@@ -428,10 +446,11 @@ async function generateWithRecovery(
 	chunkText: string,
 	voice: KokoroVoiceId,
 	speed: number,
+	epoch?: number,
 ): Promise<GenerateResult> {
 	const device = activeDevice;
-	const result = await requestGenerate(chunkText, voice, speed);
-	if (result.kind !== "error") return result;
+	const result = await requestGenerate(chunkText, voice, speed, epoch);
+	if (result.kind !== "error" || result.message === CANCELLED) return result;
 	const gpuFault = device === "webgpu" && result.message !== ENGINE_RESET;
 	const nodeDied = device === "node" && NODE_DEAD_RE.test(result.message);
 	if (!gpuFault && !nodeDied) return result;
@@ -457,7 +476,7 @@ async function generateWithRecovery(
 		teardownWorker(result.message);
 	}
 	await ensureKokoroLoaded();
-	return requestGenerate(chunkText, voice, speed);
+	return requestGenerate(chunkText, voice, speed, epoch);
 }
 
 /**
@@ -473,14 +492,39 @@ async function synthesizeChunkBuffer(
 ): Promise<AudioBuffer | null> {
 	if (!isSpeakableChunkText(chunkText)) return null;
 	const key = audioCacheKey(chunkText, voice, speed, rulesSignature());
+	if (!audioBufferCache.has(key)) wantedAtEpoch.set(key, synthEpoch);
 	return audioBufferCache.getOrCreate(key, async () => {
-		const result = await generateWithRecovery(chunkText, voice, speed);
-		if (result.kind === "error") throw new Error(result.message);
-		if (result.kind === "empty") return null;
-		return rawToBuffer(ctx, {
-			audio: result.audio,
-			sampling_rate: result.samplingRate,
-		});
+		try {
+			for (;;) {
+				const epoch = synthEpoch;
+				const result = await generateWithRecovery(
+					chunkText,
+					voice,
+					speed,
+					epoch,
+				);
+				// The worker dropped this as stale, but playback asked for the same
+				// chunk again after the epoch moved on (e.g. "next" joined a pending
+				// prefetch): ask again under the current epoch.
+				if (
+					result.kind === "error" &&
+					result.message === CANCELLED &&
+					epoch !== synthEpoch &&
+					wantedAtEpoch.get(key) === synthEpoch
+				) {
+					continue;
+				}
+				// Errors (including "cancelled") throw, so they are never cached.
+				if (result.kind === "error") throw new Error(result.message);
+				if (result.kind === "empty") return null;
+				return rawToBuffer(ctx, {
+					audio: result.audio,
+					sampling_rate: result.samplingRate,
+				});
+			}
+		} finally {
+			wantedAtEpoch.delete(key);
+		}
 	});
 }
 
@@ -839,6 +883,7 @@ export async function downloadVoicesAndModel(): Promise<void> {
 }
 
 function interruptPlaybackForReschedule(): void {
+	synthEpoch++;
 	playbackAbort?.abort();
 	stopActiveSource();
 	playbackLoopPromise = null;
