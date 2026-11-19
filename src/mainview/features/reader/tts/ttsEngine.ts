@@ -120,6 +120,12 @@ const WATCHDOG_BASE_MS = 60_000;
 const WATCHDOG_MS_PER_CHAR = 500;
 /** Characters of worker requests still awaiting a reply (watchdog budget). */
 let queuedChars = 0;
+/**
+ * Set when a WebGPU run failed (GPU fault, implausible audio, crash, hang).
+ * Loads then skip the GPU until the engine is reset from Settings, so a GPU
+ * without free VRAM degrades to CPU audio instead of odd-sounding audio.
+ */
+let gpuFailed = false;
 
 /** Backend of the loaded model (null if not loaded). Lets the UI avoid an
  * unnecessary GPU reload when only a CPU-only setting changed. */
@@ -180,7 +186,6 @@ function spawnWorker(): Worker {
 		// Crashed after load: fail what's pending instead of buffering forever;
 		// the next request reloads.
 		teardownWorker(`TTS worker crashed: ${message}`);
-		useTtsStore.getState().setModelPhase("idle");
 	};
 	return w;
 }
@@ -199,6 +204,7 @@ function teardownWorker(reason = ENGINE_RESET): void {
 	activeDevice = null;
 	onWorkerReady = null;
 	onWorkerInitError = null;
+	useTtsStore.getState().setModelPhase("idle");
 	const toFail = [...pending.values()];
 	pending.clear();
 	for (const resolve of toFail) {
@@ -280,7 +286,7 @@ async function resolveKokoroLoadOptions(): Promise<{
 	device: KokoroDevice;
 	dtype: KokoroDtype;
 }> {
-	const wantGpu = isGpuPreferenceEnabled();
+	const wantGpu = isGpuPreferenceEnabled() && !gpuFailed;
 	const hasGpu = wantGpu ? await detectWebgpu() : false;
 	const device: KokoroDevice = wantGpu && hasGpu ? "webgpu" : "wasm";
 	const dtype: KokoroDtype = device === "webgpu" ? "fp32" : "q8";
@@ -410,9 +416,13 @@ function requestGenerate(
 }
 
 /**
- * {@link requestGenerate}, recovering from a dead backend: when the native
- * CPU process has exited, reload (a fresh process) and retry the chunk once.
- * Used by both playback and export.
+ * {@link requestGenerate}, recovering from a failed backend and retrying the
+ * chunk once. Used by both playback and export.
+ * - WebGPU error: switch to CPU. A fresh worker is required, not just a new
+ *   device: transformers.js 3.8.1 chains every web inference on one promise
+ *   with no rejection handler, so after one failed run every later run in
+ *   that module scope rejects too.
+ * - Native CPU process exited: reload, which starts a fresh process.
  */
 async function generateWithRecovery(
 	chunkText: string,
@@ -422,17 +432,29 @@ async function generateWithRecovery(
 	const device = activeDevice;
 	const result = await requestGenerate(chunkText, voice, speed);
 	if (result.kind !== "error") return result;
+	const gpuFault = device === "webgpu" && result.message !== ENGINE_RESET;
 	const nodeDied = device === "node" && NODE_DEAD_RE.test(result.message);
-	if (!nodeDied) return result;
-	logWarn("Native CPU synthesis stopped; restarting it.", {
-		source: "tts",
-		detail: result.message,
-	});
-	// Several in-flight requests fail together; only the first tears down,
-	// the rest wait on the same reload.
+	if (!gpuFault && !nodeDied) return result;
+	if (gpuFault) {
+		if (!gpuFailed) {
+			logWarn("GPU synthesis failed; switching to CPU until settings change.", {
+				source: "tts",
+				detail: result.message,
+			});
+		}
+		gpuFailed = true;
+	} else {
+		logWarn("Native CPU synthesis stopped; restarting it.", {
+			source: "tts",
+			detail: result.message,
+		});
+	}
+	// Several in-flight requests fail together; only the first tears down
+	// (failing the rest with this same message, so they retry too), the rest
+	// wait on the same reload. Teardown also drops cached audio, so nothing
+	// made on the failed backend is replayed.
 	if (activeDevice === device) {
 		teardownWorker(result.message);
-		useTtsStore.getState().setModelPhase("idle");
 	}
 	await ensureKokoroLoaded();
 	return requestGenerate(chunkText, voice, speed);
@@ -777,6 +799,8 @@ export async function ensureKokoroLoaded(): Promise<void> {
 export function resetKokoroEngine(): void {
 	stopPlaybackUi();
 	teardownWorker();
+	// Settings changed: give the GPU another chance on the next load.
+	gpuFailed = false;
 	const { setModelPhase, setModelProgress } = useTtsStore.getState();
 	setModelPhase("idle");
 	setModelProgress(null);
