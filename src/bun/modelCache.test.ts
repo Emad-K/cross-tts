@@ -35,14 +35,17 @@ describe("downloadToFile", () => {
 });
 
 describe("adoptLegacyModelCache", () => {
-	test("moves resolve/main to the pinned revision once", () => {
+	test("moves resolve/main to the pinned revision once, minus unverified weights", () => {
 		const cache = mkdtempSync(join(tmpdir(), "mc-"));
 		const base = join(cache, ...MODEL_REPO.split("/"), "resolve");
 		mkdirSync(join(base, "main", "onnx"), { recursive: true });
 		writeFileSync(join(base, "main", "onnx", "model.onnx"), "x");
+		writeFileSync(join(base, "main", "config.json"), "{}");
 		adoptLegacyModelCache(cache);
 		expect(existsSync(join(base, "main"))).toBe(false);
-		expect(readFileSync(join(base, MODEL_REVISION, "onnx", "model.onnx"), "utf8")).toBe("x");
+		// Hash mismatch: dropped, re-downloaded (verified) on demand.
+		expect(existsSync(join(base, MODEL_REVISION, "onnx", "model.onnx"))).toBe(false);
+		expect(readFileSync(join(base, MODEL_REVISION, "config.json"), "utf8")).toBe("{}");
 		// A later legacy folder never overwrites the pinned one.
 		mkdirSync(join(base, "main"));
 		adoptLegacyModelCache(cache);

@@ -1,9 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import {
+	closeSync,
+	createWriteStream,
+	existsSync,
+	mkdirSync,
+	openSync,
+	readSync,
+	renameSync,
+	rmSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { MODEL_REPO, MODEL_REVISION } from "../shared/modelAssets";
+import { MODEL_REPO, MODEL_REVISION, MODEL_SHA256 } from "../shared/modelAssets";
 
 /**
  * Model cache helpers shared by the hub server and the Settings downloader.
@@ -60,8 +69,10 @@ export async function downloadToFile(
  * Builds before the revision pin cached files under `<repo>/resolve/main/`.
  * The model files there are byte-identical to MODEL_REVISION (upstream hasn't
  * touched them since), so move that folder to the pinned path once instead
- * of re-downloading ~400 MB. No-op when there is nothing to move or the
- * pinned folder already exists.
+ * of re-downloading ~400 MB. They were downloaded unverified, so any ONNX
+ * file whose sha256 doesn't match MODEL_SHA256 is deleted first (fetched
+ * again on demand). No-op when there is nothing to move or the pinned folder
+ * already exists.
  */
 export function adoptLegacyModelCache(cacheDir: string): void {
 	const base = join(cacheDir, ...MODEL_REPO.split("/"), "resolve");
@@ -69,8 +80,27 @@ export function adoptLegacyModelCache(cacheDir: string): void {
 	const pinned = join(base, MODEL_REVISION);
 	if (!existsSync(legacy) || existsSync(pinned)) return;
 	try {
+		// ponytail: synchronous one-off hash (~1 s for ~400 MB at first launch).
+		for (const [file, sha256] of Object.entries(MODEL_SHA256)) {
+			const path = join(legacy, ...file.split("/"));
+			if (existsSync(path) && sha256File(path) !== sha256) rmSync(path);
+		}
 		renameSync(legacy, pinned);
 	} catch {
 		// Leave it; files are fetched again at the pinned path.
 	}
+}
+
+function sha256File(path: string): string {
+	const hash = createHash("sha256");
+	const buf = Buffer.allocUnsafe(1 << 20);
+	const fd = openSync(path, "r");
+	try {
+		for (let n; (n = readSync(fd, buf, 0, buf.length, null)) > 0; ) {
+			hash.update(buf.subarray(0, n));
+		}
+	} finally {
+		closeSync(fd);
+	}
+	return hash.digest("hex");
 }
