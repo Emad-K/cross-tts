@@ -22,6 +22,10 @@ const api: AppApi = {
 			ipcRenderer.invoke("readDocumentAtPath", params),
 		getEpubChapterContent: (params) =>
 			ipcRenderer.invoke("getEpubChapterContent", params),
+		readDocumentBytes: (params) =>
+			ipcRenderer.invoke("readDocumentBytes", params),
+		readClipboardText: () => ipcRenderer.invoke("readClipboardText"),
+		savePastedText: (params) => ipcRenderer.invoke("savePastedText", params),
 		exportTtsRulesToFile: (params) =>
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),

@@ -133,7 +133,8 @@ export async function addBookToLibrary(path: string): Promise<string | null> {
 		useLibraryStore.getState().setBooks(books);
 		return existing.title;
 	}
-	const result = await readDocumentAtPath(path);
+	// Title only: don't parse a PDF just to list it.
+	const result = await readDocumentAtPath(path, { peek: true });
 	if (!result) return null;
 	const doc = toLoadedDocument(result);
 	const title = documentTitle(doc);

@@ -85,6 +85,7 @@ import {
 	pickDocument,
 	readDocumentAtPath,
 } from "./documentIo";
+import { registerDocumentInputHandlers } from "./documentInputIpc";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
 import {
 	pushWatchedFiles,
@@ -354,6 +355,9 @@ function registerRpcHandlers(): void {
 			_event,
 			{ filePath, chapterId }: { filePath: string; chapterId: string },
 		) => getEpubChapterContent(filePath, chapterId),
+	);
+	registerDocumentInputHandlers(
+		(url) => url !== undefined && isAllowedOrigin(url, TRUSTED_ORIGINS),
 	);
 	ipcMain.handle(
 		"exportTtsRulesToFile",

@@ -38,7 +38,7 @@ describe("selectNewWatchedPaths", () => {
 
 	test("drops unsupported extensions and empty paths", () => {
 		const candidates = [
-			{ path: "/w/a.pdf" },
+			{ path: "/w/a.azw3" },
 			{ path: "/w/b.mobi" },
 			{ path: "" },
 			{ path: "/w/c.EPUB" },
