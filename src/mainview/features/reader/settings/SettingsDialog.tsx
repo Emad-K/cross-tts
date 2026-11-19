@@ -49,6 +49,7 @@ import {
 	getGpuInfo,
 	getModelStatus,
 	isDesktopApp,
+	openExternal,
 	quitAndInstallUpdate,
 	relaunchApp,
 	removeWatchedFolder,
@@ -882,9 +883,20 @@ function EngineControl() {
 			</Select>
 			<p className="mt-3 text-xs text-muted-foreground">
 				{engine.listVoices().length} voices · {engine.languages.join(", ")} ·{" "}
-				{engine.licence.name} licence. Each book remembers its engine and
-				voice.
+				<button
+					type="button"
+					className="underline underline-offset-2 hover:text-foreground"
+					onClick={() => void openExternal(engine.licence.url)}
+				>
+					{engine.licence.name} licence
+				</button>
+				. Each book remembers its engine and voice.
 			</p>
+			{engine.licence.notice ? (
+				<p className="mt-1.5 text-xs text-muted-foreground">
+					{engine.licence.notice}
+				</p>
+			) : null}
 		</div>
 	);
 }

@@ -34,6 +34,9 @@ export default defineConfig({
 		root: "src/mainview",
 		plugins: [react()],
 		worker: { format: "es" },
+		// phonon-tts finds its worker and wasm through `new URL(..., import.meta.url)`,
+		// which dependency pre-bundling breaks in dev.
+		optimizeDeps: { exclude: ["phonon-tts"] },
 		resolve: {
 			alias: {
 				"@": resolve(__dirname, "src/mainview"),

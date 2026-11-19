@@ -99,6 +99,9 @@ importers:
       phonemizer:
         specifier: ^1.2.1
         version: 1.2.1
+      phonon-tts:
+        specifier: 0.7.1
+        version: 0.7.1
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -2585,6 +2588,9 @@ packages:
 
   phonemizer@1.2.1:
     resolution: {integrity: sha512-v0KJ4mi2T4Q7eJQ0W15Xd4G9k4kICSXE8bpDeJ8jisL4RyJhNWsweKTOi88QXFc4r4LZlz5jVL5lCHhkpdT71A==}
+
+  phonon-tts@0.7.1:
+    resolution: {integrity: sha512-GcZocsKijvnw/imx2gzbay6yRcLhZG/sbVRw1OWRdwfXbPB1W7csWSgfWl4rO5GWWTZnSSjVhkPklsk9iH9/vg==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -5628,6 +5634,8 @@ snapshots:
   pe-library@0.4.1: {}
 
   phonemizer@1.2.1: {}
+
+  phonon-tts@0.7.1: {}
 
   picocolors@1.1.1: {}
 

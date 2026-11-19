@@ -1,8 +1,9 @@
 import { kokoroEngine } from "./kokoroEngine";
+import { phononEngine } from "./phononEngine";
 import type { TtsEngine } from "./ttsEngineTypes";
 
 /** Registered engines; the first is the default (and the fallback for unknown ids). */
-export const TTS_ENGINES: readonly TtsEngine[] = [kokoroEngine];
+export const TTS_ENGINES: readonly TtsEngine[] = [kokoroEngine, phononEngine];
 
 export function getTtsEngine(id: string): TtsEngine {
 	return TTS_ENGINES.find((e) => e.id === id) ?? TTS_ENGINES[0]!;
