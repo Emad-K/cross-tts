@@ -41,6 +41,10 @@ afterPack: scripts/after-pack-fuses.cjs
 # onnxruntime-node's native libraries can't be loaded from inside the asar.
 asarUnpack:
   - "**/node_modules/onnxruntime-node/**"
+  # sharp (imported at top level by transformers in the TTS worker): its .node
+  # is auto-unpacked but finds libvips via a relative RUNPATH into
+  # @img/sharp-libvips-*, which must sit next to it outside the asar.
+  - "**/node_modules/@img/**"
 # Tells electron-updater where to look for new versions (embedded as
 # app-update.yml). CI still uploads assets manually (--publish never); this only
 # configures the update feed, it does not publish.
