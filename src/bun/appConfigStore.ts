@@ -97,6 +97,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 		if (typeof o.keepPlayingInBackground === "boolean") {
 			next.keepPlayingInBackground = o.keepPlayingInBackground;
 		}
+		if (typeof o.welcomeSeen === "boolean") next.welcomeSeen = o.welcomeSeen;
 		cached = next;
 		return cached;
 	} catch (err) {
@@ -309,11 +310,16 @@ export function appConfigInfo(): AppConfigInfo {
 		modelBytes,
 		keepPlayingInBackground: config.keepPlayingInBackground,
 		trayAvailable: trayAvailable(),
+		welcomeSeen: config.welcomeSeen,
 	};
 }
 
 export function setKeepPlayingInBackground(value: boolean): void {
 	persist({ ...loadAppConfig(), keepPlayingInBackground: value });
+}
+
+export function setWelcomeSeen(value: boolean): void {
+	persist({ ...loadAppConfig(), welcomeSeen: value });
 }
 
 /** The settings a backup file carries (see shared/backup.ts). */

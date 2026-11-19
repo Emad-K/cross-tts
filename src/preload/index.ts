@@ -44,6 +44,7 @@ const api: AppApi = {
 		removeModel: (params) => ipcRenderer.invoke("removeModel", params),
 		setCrashPromptDisabled: (params) =>
 			ipcRenderer.invoke("setCrashPromptDisabled", params),
+		setWelcomeSeen: (params) => ipcRenderer.invoke("setWelcomeSeen", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setGpuFp16: (params) => ipcRenderer.invoke("setGpuFp16", params),
 		setShortcutsEnabled: (params) =>

@@ -44,6 +44,7 @@ import {
 	setDataDir,
 	setTtsBackend,
 	setCrashPromptDisabled,
+	setWelcomeSeen,
 	setGpuFp16,
 	setGpuPower,
 	setShortcutBinding,
@@ -632,6 +633,10 @@ function registerRpcHandlers(): void {
 			return appConfigInfo();
 		},
 	);
+	ipcMain.handle("setWelcomeSeen", (_event, params: { seen?: unknown } | undefined) => {
+		setWelcomeSeen(params?.seen === true);
+		return appConfigInfo();
+	});
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
 		return appConfigInfo();

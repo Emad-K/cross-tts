@@ -153,6 +153,11 @@ export type AppRpcSchema = {
 			params: { disabled: boolean };
 			response: AppConfigInfo;
 		};
+		/** Record that the first-run welcome was shown. */
+		setWelcomeSeen: {
+			params: { seen: boolean };
+			response: AppConfigInfo;
+		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {
 			params: { threads: number };

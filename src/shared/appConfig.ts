@@ -118,6 +118,8 @@ export type AppConfigFileV1 = {
 	crashPromptDisabled: boolean;
 	/** Closing the window hides it to the tray, so playback carries on. */
 	keepPlayingInBackground: boolean;
+	/** The first-run welcome was shown (or wasn't needed: see shouldShowWelcome). */
+	welcomeSeen: boolean;
 };
 
 /**
@@ -159,6 +161,8 @@ export type AppConfigInfo = {
 	keepPlayingInBackground: boolean;
 	/** This desktop can show a tray icon (false on Linux without StatusNotifier). */
 	trayAvailable: boolean;
+	/** The first-run welcome was shown (or wasn't needed: see shouldShowWelcome). */
+	welcomeSeen: boolean;
 };
 
 export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
@@ -176,4 +180,5 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	watchedFolders: [],
 	crashPromptDisabled: false,
 	keepPlayingInBackground: false,
+	welcomeSeen: false,
 });

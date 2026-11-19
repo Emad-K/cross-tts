@@ -307,6 +307,12 @@ export async function setCrashPromptDisabled(
 	return b.request.setCrashPromptDisabled({ disabled });
 }
 
+export async function setWelcomeSeen(seen: boolean): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setWelcomeSeen({ seen });
+}
+
 /** Subscribe to model-download progress. No-op (noop unsubscribe) on web. */
 export function subscribeToModelProgress(
 	listener: (progress: ModelProgress) => void,
