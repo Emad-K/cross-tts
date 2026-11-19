@@ -87,6 +87,16 @@ describe("SynthCore with a fake engine", () => {
 		expect(core.key("hi", "v1", 1)).not.toBe(coreFor(() => a.engine).key("hi", "v1", 1));
 	});
 
+	test("an engine's cache tag (e.g. quality steps) is part of the key", () => {
+		const a = fakeEngine("a");
+		let tag = "8";
+		a.engine.cacheTag = () => tag;
+		const core = coreFor(() => a.engine);
+		const before = core.key("hi", "v1", 1);
+		tag = "4";
+		expect(core.key("hi", "v1", 1)).not.toBe(before);
+	});
+
 	test("recovers from a backend fault, retries once, and drops cached audio", async () => {
 		const f = fakeEngine("k");
 		const core = coreFor(() => f.engine);
