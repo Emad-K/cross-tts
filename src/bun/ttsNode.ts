@@ -7,8 +7,10 @@ import {
 import type {
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
+	TtsNodeEngine,
 	TtsNodeInitResult,
 } from "../shared/ttsNodeRpc";
+import { hubCacheDirectory } from "./kokoroHubServer";
 import { mainLog } from "./logBridge";
 
 /**
@@ -20,6 +22,8 @@ import { mainLog } from "./logBridge";
  */
 
 let child: UtilityProcess | null = null;
+/** Engine the running process serves (one native engine at a time). */
+let childEngine: TtsNodeEngine | null = null;
 let initPromise: Promise<TtsNodeInitResult> | null = null;
 let seq = 0;
 const pending = new Map<number, (result: TtsNodeGenerateResult) => void>();
@@ -36,23 +40,52 @@ function failAllPending(message: string): void {
 	pending.clear();
 }
 
-export function stopTtsNode(): void {
+/** Stop the native process; with `engine`, only if it serves that engine. */
+export function stopTtsNode(engine?: TtsNodeEngine): void {
+	if (engine && childEngine && engine !== childEngine) return;
 	failAllPending("TTS engine stopped");
 	child?.kill();
 	child = null;
+	childEngine = null;
 	initPromise = null;
 }
+
+/** Utility-process entry per engine (electron.vite.config.ts inputs). */
+const WORKER_ENTRY: Record<TtsNodeEngine, string> = {
+	kokoro: "ttsNodeWorker.js",
+	supertonic: "supertonicNodeWorker.js",
+};
 
 export function ttsNodeInit(
 	hubBaseUrl: string | null,
 	numThreads: number,
+	cuda: boolean,
+	engine: TtsNodeEngine = "kokoro",
 ): Promise<TtsNodeInitResult> {
-	if (initPromise) return initPromise;
+	if (initPromise && childEngine === engine) return initPromise;
+	if (childEngine !== engine) stopTtsNode();
+	// onnxruntime-node >= 1.2x ships no darwin/x64 binding: Intel Macs use the
+	// WASM engine. Say so instead of spawning a process that can't load it.
+	if (process.platform === "darwin" && process.arch === "x64") {
+		return Promise.resolve({
+			ok: false,
+			error: "Native engine isn't available on Intel Macs",
+		});
+	}
+	// transformers.js 4 needs the hub's on-disk cache to hand ORT a model path,
+	// and voices come from the hub; without it, native init can't work offline.
+	if (!hubBaseUrl) {
+		return Promise.resolve({
+			ok: false,
+			error: "Local model hub isn't running",
+		});
+	}
 	initPromise = new Promise<TtsNodeInitResult>((resolve) => {
-		const proc = utilityProcess.fork(join(__dirname, "ttsNodeWorker.js"), [], {
+		const proc = utilityProcess.fork(join(__dirname, WORKER_ENTRY[engine]), [], {
 			serviceName: "cross-tts-native-tts",
 		});
 		child = proc;
+		childEngine = engine;
 		proc.on("message", (msg) => {
 			switch (msg?.type) {
 				case "progress": {
@@ -62,6 +95,9 @@ export function ttsNodeInit(
 					}
 					break;
 				}
+				case "log":
+					mainLog({ level: msg.level, source: "models", message: msg.message });
+					break;
 				case "ready":
 					resolve({ ok: true, voices: msg.voices, loadMs: msg.loadMs });
 					break;
@@ -87,11 +123,14 @@ export function ttsNodeInit(
 			}
 		});
 		proc.on("exit", (code) => {
+			// A process swapped out for another engine was already cleaned up by
+			// stopTtsNode; its late exit mustn't fail the new process's requests.
 			if (child === proc) {
 				child = null;
+				childEngine = null;
 				initPromise = null;
+				failAllPending(`Native TTS process exited (code ${code})`);
 			}
-			failAllPending(`Native TTS process exited (code ${code})`);
 			if (code !== 0) {
 				mainLog({
 					level: "warn",
@@ -101,7 +140,13 @@ export function ttsNodeInit(
 			}
 			resolve({ ok: false, error: `Native TTS process exited (code ${code})` });
 		});
-		proc.postMessage({ type: "init", hubBaseUrl, numThreads });
+		proc.postMessage({
+			type: "init",
+			hubBaseUrl,
+			hubCacheDir: hubCacheDirectory(),
+			numThreads,
+			cuda,
+		});
 	});
 	return initPromise;
 }
@@ -119,6 +164,17 @@ export function ttsNodeGenerate(
 	const id = ++seq;
 	return new Promise<TtsNodeGenerateResult>((resolve) => {
 		pending.set(id, resolve);
-		proc.postMessage({ type: "generate", id, ...params });
+		// `params` comes from the renderer: copy only the job fields, so it
+		// can't turn this into an init (hub URL/cache dir) or reuse an id.
+		proc.postMessage({
+			text: params.text,
+			voice: params.voice,
+			speed: params.speed,
+			pronunciationRules: params.pronunciationRules,
+			steps: params.steps,
+			epoch: params.epoch,
+			type: "generate",
+			id,
+		});
 	});
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resampleSinc } from "./resampleSinc";
+import { resampleSinc, SincStreamResampler } from "./resampleSinc";
 
 describe("resampleSinc", () => {
 	test("equal rates pass through unchanged", () => {
@@ -51,4 +51,33 @@ describe("resampleSinc", () => {
 		const out = resampleSinc(noisy, 24000, 44100);
 		expect(out.every((v) => Number.isFinite(v))).toBe(true);
 	});
+});
+
+describe("SincStreamResampler", () => {
+	for (const outRate of [48000, 44100]) {
+		test(`chunked output equals one-shot resampleSinc (24k → ${outRate})`, () => {
+			const input = new Float32Array(9000);
+			for (let i = 0; i < input.length; i++) {
+				input[i] = Math.sin(i * 0.37) * 0.5 + Math.sin(i * 0.011) * 0.3;
+			}
+			const oneShot = resampleSinc(input, 24000, outRate);
+			const r = new SincStreamResampler(24000, outRate);
+			const parts: Float32Array[] = [];
+			// Uneven chunk sizes, including tiny and empty ones.
+			let off = 0;
+			for (const n of [0, 5, 1, 700, 3, 2000, 17, 4000]) {
+				parts.push(r.process(input.subarray(off, off + n)));
+				off += n;
+			}
+			parts.push(r.process(input.subarray(off)));
+			parts.push(r.flush());
+			const streamed = Float32Array.from(parts.flatMap((p) => Array.from(p)));
+			expect(streamed.length).toBe(oneShot.length);
+			let maxErr = 0;
+			for (let i = 0; i < oneShot.length; i++) {
+				maxErr = Math.max(maxErr, Math.abs(streamed[i]! - oneShot[i]!));
+			}
+			expect(maxErr).toBeLessThan(1e-6);
+		});
+	}
 });

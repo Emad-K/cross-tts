@@ -69,6 +69,14 @@ Grab the file for your system from the [latest release](https://github.com/Emad-
 
 Updates arrive automatically inside the app.
 
+<a id="troubleshooting-linux"></a>
+> **Linux: the AppImage won't start on Ubuntu 24.04+.** These releases block the
+> user namespaces Chromium's sandbox needs unless an AppArmor profile allows the
+> app. The `.deb` and `.rpm` install that profile for you (on AppArmor systems;
+> Fedora uses SELinux and needs nothing), but an AppImage can't. Install the
+> `.deb` instead, or start the AppImage with `--no-sandbox` (this turns off
+> Chromium's sandbox for the app).
+
 > **macOS / Windows note:** the app isn't code-signed yet, so the first launch may show a "unidentified developer" or SmartScreen warning. On macOS: right-click the app → **Open**. On Windows: **More info → Run anyway**.
 
 ## System requirements
@@ -81,7 +89,7 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 - **No supported GPU? The CPU keeps up:** the app falls back to a native CPU engine that generates speech faster than you listen on a modern multi-core processor (measured 3–4× realtime on a recent desktop CPU). Expect a few seconds of model loading per session and a brief pause before the first sentence; very old or busy machines may occasionally pause between sentences.
 - **Memory:** 4 GB RAM minimum, 8 GB comfortable.
 - **Disk:** roughly a few hundred MB — the app plus the voice files, downloaded once and cached.
-- **OS:** Windows 10/11, macOS 11+, or a current 64-bit Linux desktop.
+- **OS:** Windows 10/11, macOS 12 (Monterey)+, or a current 64-bit Linux desktop.
 - **Internet:** only for the one-time voice download and app updates. Reading and listening are **100% offline** after that.
 
 Synthesis settings (use GPU, CPU thread count) live in **Settings → Performance** if you want to tune them.
@@ -92,12 +100,61 @@ Synthesis settings (use GPU, CPU thread count) live in **Settings → Performanc
 
 MIT © Emad Kazemi — see [LICENSE](LICENSE).
 
+### Third-party components
+
+Installers bundle third-party packages under their own licences. One worth
+calling out: [phonemizer](https://www.npmjs.com/package/phonemizer) (used for
+text-to-phoneme conversion) is published as Apache-2.0 but is
+built on and ships a compiled copy of [eSpeak NG](https://github.com/espeak-ng/espeak-ng),
+which is licensed **GPL-3.0-or-later**. Distributions of Cross TTS therefore
+include GPL-3.0+ code, and the eSpeak NG source is available from its
+repository linked above.
+
+The optional **Supertonic 3** voice engine (by Supertone Inc.) is not
+bundled. When you choose it, its weights are downloaded from
+[supertone-oss-archive/supertonic-3](https://huggingface.co/supertone-oss-archive/supertonic-3)
+(pinned revision, sha256-verified). The weights are licensed under
+**BigScience OpenRAIL-M**. The app shows the licence's use restrictions and
+asks you to accept them once before the first download. Those restrictions
+include no unlawful use, no impersonation without consent, and disclosing
+machine-generated content. A copy of the licence is saved next to the
+downloaded model and kept in [third_party/supertonic-3/LICENSE](third_party/supertonic-3/LICENSE).
+The inference code in `src/mainview/features/reader/tts/supertonicModel.ts`
+is adapted from Supertone's MIT-licensed
+[reference implementation](https://github.com/supertone-inc/supertonic).
+
+The optional **Phonon 31M** voice engine (by Gradium, built on Kyutai's
+Pocket TTS and Mimi) runs on the bundled
+[phonon-tts](https://www.npmjs.com/package/phonon-tts) runtime (MIT or
+Apache-2.0; its licence files ship with the app). Its weights and voices,
+[gradium/phonon-31m-en](https://huggingface.co/gradium/phonon-31m-en) and
+[gradium/phonon-voices](https://huggingface.co/gradium/phonon-voices), are
+Apache-2.0 and downloaded on first use (pinned revision, sha256-verified).
+
+Installers also bundle the [ONNX Runtime](https://github.com/microsoft/onnxruntime)
+WebAssembly build (MIT, © Microsoft). The notices for it and the Supertone
+helper are kept in [third_party/](third_party/) and shipped under the app's
+`resources/licenses` folder.
+
 ---
 
 <details>
 <summary><strong>For developers</strong></summary>
 
-Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [kokoro-js](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) on ONNX Runtime — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback.
+Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback. onnxruntime-node 1.31 has no Intel-Mac (darwin/x64) binary, so on Intel Macs the native engine is skipped and the CPU path is the WASM worker (about 2.5× slower than native).
+
+**Supertonic 3** (Settings → Playback → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
+
+**Optional CUDA (Linux/Windows x64, experimental):** Settings → Performance →
+"Use NVIDIA GPU (CUDA) for native engine" (off by default) makes the native
+engine try ONNX Runtime's CUDA execution provider. It needs CUDA 12 and cuDNN 9
+on the machine *and* ONNX Runtime's CUDA provider libraries next to the
+binding, which installers don't ship (hundreds of MB; npm only offers them for
+Linux x64 via `ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js`
+in a dev checkout). The setting only appears when that provider library is
+found (in a packaged app: under `resources/app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6/<os>/x64/`),
+so stock installers don't show it. When anything else is missing, or a CUDA
+run fails, the engine logs why and continues on the CPU.
 
 ```bash
 pnpm install
@@ -110,16 +167,15 @@ pnpm run dist       # package installers (or dist:win / dist:mac / dist:linux)
 ```
 
 > **Linux / Node version notes** (handled automatically, but FYI):
-> - **Node 22 is the supported version** (CI uses it). On Node 23+, Electron's
->   bundled zip extractor silently fails to unpack its binary; a `postinstall`
->   step (`scripts/ensure-electron.mjs`) re-extracts it with the system `unzip`,
->   so installs still work — but install `unzip` if you don't have it.
+> - **Node 22.12+ is required** (Electron's installer needs it; CI uses 22).
+>   The `postinstall` step runs Electron's `install-electron` to fetch its binary.
 > - On **Ubuntu 24.04+/26.04**, AppArmor restricts unprivileged user namespaces,
 >   which breaks Chromium's sandbox for source/dev runs. `pnpm dev` / `pnpm start`
 >   go through `scripts/run-electron-vite.mjs`, which detects this and launches
 >   with `--no-sandbox` *only when the sandbox can't otherwise work*. Installed
->   `.deb`/`.rpm` packages keep the sandbox on (their post-install sets the
->   `chrome-sandbox` setuid bit); the AppImage and source runs use the fallback.
+>   `.deb`/`.rpm` packages keep the sandbox on (their post-install adds an
+>   AppArmor profile granting user namespaces). The AppImage can't install one;
+>   see [Troubleshooting](#troubleshooting-linux).
 
 ### Project layout
 

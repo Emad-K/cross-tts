@@ -1,39 +1,115 @@
-/** Voice ids shipped with Kokoro-82M v1.0 (matches `kokoro-js` runtime). */
-export const KOKORO_VOICE_IDS = [
-	"af_heart",
-	"af_alloy",
-	"af_aoede",
-	"af_bella",
-	"af_jessica",
-	"af_kore",
-	"af_nicole",
-	"af_nova",
-	"af_river",
-	"af_sarah",
-	"af_sky",
-	"am_adam",
-	"am_echo",
-	"am_eric",
-	"am_fenrir",
-	"am_liam",
-	"am_michael",
-	"am_onyx",
-	"am_puck",
-	"am_santa",
-	"bf_emma",
-	"bf_isabella",
-	"bm_george",
-	"bm_lewis",
-	"bf_alice",
-	"bf_lily",
-	"bm_daniel",
-	"bm_fable",
-] as const;
+import { MODEL_REPO, MODEL_REVISION } from "@shared/modelAssets";
+import type { TtsVoice } from "./ttsEngineTypes";
 
-export type KokoroVoiceId = (typeof KOKORO_VOICE_IDS)[number];
+/** Voices shipped with Kokoro-82M v1.0 (display names as in upstream kokoro-js). */
+const KOKORO_VOICES = {
+	af_heart: { name: "Heart", language: "en-us" },
+	af_alloy: { name: "Alloy", language: "en-us" },
+	af_aoede: { name: "Aoede", language: "en-us" },
+	af_bella: { name: "Bella", language: "en-us" },
+	af_jessica: { name: "Jessica", language: "en-us" },
+	af_kore: { name: "Kore", language: "en-us" },
+	af_nicole: { name: "Nicole", language: "en-us" },
+	af_nova: { name: "Nova", language: "en-us" },
+	af_river: { name: "River", language: "en-us" },
+	af_sarah: { name: "Sarah", language: "en-us" },
+	af_sky: { name: "Sky", language: "en-us" },
+	am_adam: { name: "Adam", language: "en-us" },
+	am_echo: { name: "Echo", language: "en-us" },
+	am_eric: { name: "Eric", language: "en-us" },
+	am_fenrir: { name: "Fenrir", language: "en-us" },
+	am_liam: { name: "Liam", language: "en-us" },
+	am_michael: { name: "Michael", language: "en-us" },
+	am_onyx: { name: "Onyx", language: "en-us" },
+	am_puck: { name: "Puck", language: "en-us" },
+	am_santa: { name: "Santa", language: "en-us" },
+	bf_emma: { name: "Emma", language: "en-gb" },
+	bf_isabella: { name: "Isabella", language: "en-gb" },
+	bm_george: { name: "George", language: "en-gb" },
+	bm_lewis: { name: "Lewis", language: "en-gb" },
+	bf_alice: { name: "Alice", language: "en-gb" },
+	bf_lily: { name: "Lily", language: "en-gb" },
+	bm_daniel: { name: "Daniel", language: "en-gb" },
+	bm_fable: { name: "Fable", language: "en-gb" },
+	ef_dora: { name: "Dora", language: "es" },
+	em_alex: { name: "Alex", language: "es" },
+	em_santa: { name: "Santa", language: "es" },
+	ff_siwis: { name: "Siwis", language: "fr-fr" },
+	hf_alpha: { name: "Alpha", language: "hi" },
+	hf_beta: { name: "Beta", language: "hi" },
+	hm_omega: { name: "Omega", language: "hi" },
+	hm_psi: { name: "Psi", language: "hi" },
+	if_sara: { name: "Sara", language: "it" },
+	im_nicola: { name: "Nicola", language: "it" },
+	pf_dora: { name: "Dora", language: "pt-br" },
+	pm_alex: { name: "Alex", language: "pt-br" },
+	pm_santa: { name: "Santa", language: "pt-br" },
+	// ja (jf_*, jm_*) and zh (zf_*, zm_*) voices exist too, but Kokoro needs
+	// misaki's Japanese/Chinese G2P for them, which has no JavaScript port.
+} as const;
 
-export const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+export type KokoroVoiceId = keyof typeof KOKORO_VOICES;
 
+/**
+ * Kokoro language code (first letter of a voice id) → eSpeak NG language the
+ * phonemizer is called with, as in kokoro-js / misaki's espeak fallback.
+ */
+export const KOKORO_ESPEAK_LANGS = {
+	a: "en-us",
+	b: "en",
+	e: "es",
+	f: "fr-fr",
+	h: "hi",
+	i: "it",
+	p: "pt-br",
+} as const;
+
+export type KokoroLangCode = keyof typeof KOKORO_ESPEAK_LANGS;
+
+/** Language of a voice id; unknown prefixes read as US English. */
+export function kokoroLangFromVoice(voice: string): KokoroLangCode {
+	const code = voice.at(0) ?? "a";
+	return code in KOKORO_ESPEAK_LANGS ? (code as KokoroLangCode) : "a";
+}
+
+/**
+ * eSpeak languages the bundled `phonemizer` package can phonemize. Its
+ * espeak-ng build ships English data only, so the es/fr/it/pt-br/hi voices
+ * above stay hidden until it is swapped for a build with those languages.
+ */
+const BUNDLED_ESPEAK_LANGS: ReadonlySet<string> = new Set(["en-us", "en"]);
+
+/** Voices whose language the bundled phonemizer supports (the usable ones). */
+export const KOKORO_VOICE_IDS = (
+	Object.keys(KOKORO_VOICES) as KokoroVoiceId[]
+).filter((id) =>
+	BUNDLED_ESPEAK_LANGS.has(KOKORO_ESPEAK_LANGS[kokoroLangFromVoice(id)]),
+);
+
+/** Voice picker entries, e.g. "Heart (af_heart) · en-us". */
+export function kokoroVoiceOptions(): TtsVoice[] {
+	return KOKORO_VOICE_IDS.map((id) => {
+		const { name, language } = KOKORO_VOICES[id];
+		return { id, label: `${name} (${id}) · ${language}`, language };
+	});
+}
+
+export const KOKORO_MODEL_ID = MODEL_REPO;
+
+/**
+ * transformers.js remote path with the pinned revision. Set as
+ * `env.remotePathTemplate` in every worker rather than passing `revision` to
+ * from_pretrained: transformers 4.3's tokenizer loader probes
+ * tokenizer_config.json without forwarding `revision`, so it would ask for
+ * `resolve/main/`, which the hub refuses, and the tokenizer would load empty.
+ */
+export const KOKORO_REMOTE_PATH_TEMPLATE = `{model}/resolve/${MODEL_REVISION}/`;
+
+/**
+ * Cache API key voices are stored under. Kept on `main` so voices cached by
+ * earlier builds still hit; the bytes stored under it come from the pinned
+ * URL (voiceBinUrlFromHub).
+ */
 export function voiceBinUrl(voiceId: string): string {
 	return `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
 }
@@ -44,5 +120,5 @@ export function voiceBinUrlFromHub(
 	voiceId: string,
 ): string {
 	const base = hubBaseUrl.endsWith("/") ? hubBaseUrl : `${hubBaseUrl}/`;
-	return `${base}${KOKORO_MODEL_ID}/resolve/main/voices/${voiceId}.bin`;
+	return `${base}${KOKORO_MODEL_ID}/resolve/${MODEL_REVISION}/voices/${voiceId}.bin`;
 }

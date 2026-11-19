@@ -4,7 +4,9 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
 export default defineConfig({
 	main: {
-		plugins: [externalizeDepsPlugin()],
+		// sanitize-html >=2.18 depends on ESM-only htmlparser2, which Electron
+		// 33's Node can't require(); bundle it so Rollup converts it to CJS.
+		plugins: [externalizeDepsPlugin({ exclude: ["sanitize-html"] })],
 		resolve: {
 			alias: {
 				"@shared": resolve(__dirname, "src/shared"),
@@ -16,6 +18,10 @@ export default defineConfig({
 					index: resolve(__dirname, "src/bun/index.ts"),
 					// Utility-process entry: native CPU synthesis on onnxruntime-node.
 					ttsNodeWorker: resolve(__dirname, "src/bun/ttsNodeWorker.ts"),
+					supertonicNodeWorker: resolve(
+						__dirname,
+						"src/bun/supertonicNodeWorker.ts",
+					),
 				},
 			},
 		},
@@ -32,6 +38,9 @@ export default defineConfig({
 		root: "src/mainview",
 		plugins: [react()],
 		worker: { format: "es" },
+		// phonon-tts finds its worker and wasm through `new URL(..., import.meta.url)`,
+		// which dependency pre-bundling breaks in dev.
+		optimizeDeps: { exclude: ["phonon-tts"] },
 		resolve: {
 			alias: {
 				"@": resolve(__dirname, "src/mainview"),

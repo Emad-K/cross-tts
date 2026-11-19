@@ -18,6 +18,9 @@ import {
 	DropdownMenuItem,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,7 +38,8 @@ import {
 	togglePlayPause,
 	useTtsStore,
 } from "./tts";
-import { KOKORO_VOICE_IDS } from "./tts/kokoroVoices";
+import { getTtsEngine } from "./tts/ttsEngines";
+import { supertonicLanguageName } from "./tts/supertonicVoices";
 import { ChapterTime } from "./listenEstimate/ChapterTime";
 import { SleepTimerControl } from "./sleepTimer/SleepTimerControl";
 
@@ -62,7 +66,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const currentChunkIndex = useTtsStore((s) => s.currentChunkIndex);
 	const volumePct = useTtsStore((s) => s.volumePct);
 	const voice = useTtsStore((s) => s.voice);
-	const voiceOptions = useTtsStore((s) => s.voiceOptions);
+	const engineId = useTtsStore((s) => s.engineId);
 	const speedNum = useTtsStore((s) => s.speed);
 	const chunks = useTtsStore((s) => s.chunks);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
@@ -89,10 +93,22 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const setSpeed = useTtsStore((s) => s.setSpeed);
 	const setVoice = useTtsStore((s) => s.setVoice);
 
-	const menuVoices = useMemo(() => {
-		if (voiceOptions.length > 0) return voiceOptions;
-		return KOKORO_VOICE_IDS.map((id) => ({ id, label: id }));
-	}, [voiceOptions]);
+	const menuVoices = useMemo(
+		() => getTtsEngine(engineId).listVoices(),
+		[engineId],
+	);
+	/**
+	 * Supertonic's 310 voices get one submenu per language; Kokoro's 40 stay a
+	 * flat list (its default voices must not sit a level down).
+	 */
+	const voicesByLanguage = useMemo(() => {
+		if (engineId !== "supertonic") return null;
+		const groups = new Map<string, typeof menuVoices>();
+		for (const v of menuVoices) {
+			groups.set(v.language, [...(groups.get(v.language) ?? []), v]);
+		}
+		return [...groups];
+	}, [engineId, menuVoices]);
 
 	useEffect(() => {
 		if (!isDraggingProgress) {
@@ -356,14 +372,32 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							>
 								<ScrollArea className="h-72">
 									<div className="p-1">
-										{menuVoices.map((o) => (
-											<DropdownMenuItem
-												key={o.id}
-												onClick={() => setVoice(o.id)}
-											>
-												{o.label}
-											</DropdownMenuItem>
-										))}
+										{voicesByLanguage
+											? voicesByLanguage.map(([lang, voices]) => (
+													<DropdownMenuSub key={lang}>
+														<DropdownMenuSubTrigger>
+															{supertonicLanguageName(lang)}
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent>
+															{voices.map((o) => (
+																<DropdownMenuItem
+																	key={o.id}
+																	onClick={() => setVoice(o.id)}
+																>
+																	{o.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+												))
+											: menuVoices.map((o) => (
+													<DropdownMenuItem
+														key={o.id}
+														onClick={() => setVoice(o.id)}
+													>
+														{o.label}
+													</DropdownMenuItem>
+												))}
 									</div>
 								</ScrollArea>
 							</DropdownMenuContent>

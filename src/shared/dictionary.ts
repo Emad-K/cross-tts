@@ -103,12 +103,23 @@ function nonEmptyString(value: unknown): string | null {
 		: null;
 }
 
-/** Normalize an audio URL from the API; protocol-relative → https, http/"" → null. */
+/** Hosts the dictionary API serves pronunciation audio from. */
+const AUDIO_HOSTS = new Set(["api.dictionaryapi.dev", "ssl.gstatic.com"]);
+
+/**
+ * Normalize an audio URL from the API; protocol-relative → https. Anything not
+ * https on a known audio host (http, "", other hosts) → null.
+ */
 function normalizeAudioUrl(value: unknown): string | null {
 	const raw = nonEmptyString(value);
 	if (!raw) return null;
-	const url = raw.startsWith("//") ? `https:${raw}` : raw;
-	return url.startsWith("https://") ? url : null;
+	try {
+		const url = new URL(raw.startsWith("//") ? `https:${raw}` : raw);
+		if (url.protocol !== "https:" || !AUDIO_HOSTS.has(url.hostname)) return null;
+		return url.href;
+	} catch {
+		return null;
+	}
 }
 
 function parsePhonetics(value: unknown): DictionaryPhonetic[] {

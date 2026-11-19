@@ -12,6 +12,7 @@ import type { WatchedFileCandidate } from "./watchedFolders";
 import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type { CrashRecord } from "./crashReport";
 import type {
+	TtsNodeEngine,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -87,6 +88,16 @@ export type AppRpcSchema = {
 			params: { threads: number };
 			response: AppConfigInfo;
 		};
+		/** Opt in to the CUDA execution provider for the native engine. */
+		setCudaEnabled: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** Opt in to Kokoro's fp16 weights on WebGPU. */
+		setGpuFp16: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
 		/** Enable/disable OS-global media shortcuts. */
 		setShortcutsEnabled: {
 			params: { enabled: boolean };
@@ -120,6 +131,11 @@ export type AppRpcSchema = {
 		/** Append bytes to an audiobook file (chunked writes for large files). */
 		appendAudioFile: {
 			params: { dir: string; fileName: string; data: Uint8Array };
+			response: { ok: boolean; path: string | null; error?: string };
+		};
+		/** Rename a fully written `<fileName>.part` to `<fileName>`. */
+		finishAudioFile: {
+			params: { dir: string; fileName: string };
 			response: { ok: boolean; path: string | null; error?: string };
 		};
 		/** Whether an audiobook track already exists (used to resume an export). */
@@ -219,7 +235,7 @@ export type AppRpcSchema = {
 		};
 		/** Start the native (onnxruntime-node) CPU TTS backend; loads the model. */
 		ttsNodeInit: {
-			params: void;
+			params: TtsNodeEngine;
 			response: TtsNodeInitResult;
 		};
 		/** Synthesize one chunk on the native CPU backend. */
@@ -229,7 +245,7 @@ export type AppRpcSchema = {
 		};
 		/** Stop the native CPU TTS backend and free its model. */
 		ttsNodeStop: {
-			params: void;
+			params: TtsNodeEngine;
 			response: void;
 		};
 	};

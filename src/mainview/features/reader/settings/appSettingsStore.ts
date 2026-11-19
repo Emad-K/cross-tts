@@ -10,6 +10,8 @@ import {
 	setAppearance as setAppearanceRpc,
 	setAutoUpdate as setAutoUpdateRpc,
 	setCpuThreads as setCpuThreadsRpc,
+	setCudaEnabled as setCudaEnabledRpc,
+	setGpuFp16 as setGpuFp16Rpc,
 	setGpuEnabled as setGpuEnabledRpc,
 	setGpuPower as setGpuPowerRpc,
 	setShortcutBinding as setShortcutBindingRpc,
@@ -28,6 +30,8 @@ type AppSettingsState = {
 	setGpuEnabled: (enabled: boolean) => Promise<void>;
 	setGpuPower: (power: GpuPowerPreference) => Promise<void>;
 	setCpuThreads: (threads: number) => Promise<void>;
+	setCudaEnabled: (enabled: boolean) => Promise<void>;
+	setGpuFp16: (enabled: boolean) => Promise<void>;
 	setShortcutsEnabled: (enabled: boolean) => Promise<void>;
 	setAutoUpdate: (enabled: boolean) => Promise<void>;
 	setShortcutBinding: (
@@ -80,6 +84,36 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 		} catch (e) {
 			if (prev) set({ config: prev });
 			logError("Couldn't change the GPU preference.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setCudaEnabled: async (enabled) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, cudaEnabled: enabled } });
+		try {
+			const config = await setCudaEnabledRpc(enabled);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the CUDA setting.", {
+				source: "settings",
+				detail: e instanceof Error ? e.message : String(e),
+			});
+		}
+	},
+
+	setGpuFp16: async (enabled) => {
+		const prev = get().config;
+		if (prev) set({ config: { ...prev, gpuFp16: enabled } });
+		try {
+			const config = await setGpuFp16Rpc(enabled);
+			if (config) set({ config });
+		} catch (e) {
+			if (prev) set({ config: prev });
+			logError("Couldn't change the half-precision setting.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});

@@ -49,6 +49,9 @@ export const useExportStore = create<ExportState>(() => ({
 
 /** True while an export is preparing, running, or paused (blocks other actions). */
 export function isExportActive(): boolean {
-	const p = useExportStore.getState().phase;
+	return isExportPhaseActive(useExportStore.getState().phase);
+}
+
+export function isExportPhaseActive(p: ExportPhase): boolean {
 	return p === "preparing" || p === "running" || p === "paused";
 }

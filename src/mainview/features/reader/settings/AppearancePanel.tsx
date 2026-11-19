@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { useTtsStore } from "../tts";
+import { seekToChunkAndMaybePlay, useTtsStore } from "../tts";
 import { useAppSettingsStore } from "./appSettingsStore";
 
 const MODES: { id: ColorMode; label: string; icon: typeof Sun }[] = [
@@ -201,6 +201,8 @@ export function AppearancePanel() {
 								void setAppearance({ maxChunkChars: next });
 								// Rebuild the open document's chunks with the new size.
 								useTtsStore.getState().rechunk();
+								// Restart (or drop, if paused) the loop at the mapped position.
+								seekToChunkAndMaybePlay(useTtsStore.getState().currentChunkIndex);
 							}}
 						/>
 						<p className="mt-2 text-xs text-muted-foreground">

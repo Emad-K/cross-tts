@@ -1,13 +1,44 @@
 # pnpm 10.26+ no longer reads `pnpm.onlyBuiltDependencies` from package.json;
 # its new home is here. Without this, the build/postinstall scripts for these
-# native packages are skipped on `pnpm install` — most visibly Electron, whose
-# postinstall downloads/extracts the platform binary (and the chrome-sandbox
-# helper). A missing binary means `pnpm dev`/`pnpm build` can't launch Electron
-# at all. (This list previously lived under the `pnpm` key in package.json,
-# which pnpm 10.26+ no longer reads.)
+# native packages are skipped on `pnpm install`. (Electron 42+ has no
+# postinstall any more; our own root `postinstall` runs its `install-electron`.)
 onlyBuiltDependencies:
-  - electron
   - esbuild
-  - onnxruntime-node
   - protobufjs
   - sharp
+
+# onnxruntime-node's npm tarball already contains the CPU binaries for every
+# platform; its postinstall only downloads the optional CUDA execution provider
+# (~hundreds of MB from NuGet) on Linux x64, which made `pnpm install` slow and
+# fail when that download 404'd. The app never bundles CUDA (see
+# electron-builder.yml), so the script is skipped for everyone. To try the CUDA
+# EP from a dev checkout run:
+#   ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js
+ignoredBuiltDependencies:
+  - onnxruntime-node
+  # Pulled in by electron-builder's Squirrel.Windows target; we build NSIS and
+  # portable, so its install script (fetching Squirrel tools) isn't needed.
+  - electron-winstaller
+
+# Patched transitive versions for audit advisories: protobufjs and tar come in
+# through @huggingface/transformers (onnxruntime-web / onnxruntime-node),
+# js-yaml through electron-updater (and electron-builder). Drop each once the
+# parent package ships with that version or newer.
+#
+# onnxruntime-node/web: transformers 4.3 pins node 1.30.0 and a web dev
+# snapshot; use the matching stable 1.31.1 release for both instead.
+overrides:
+  protobufjs@7: ^7.6.6
+  tar@7: ^7.5.23
+  js-yaml@4: ^4.3.2
+  onnxruntime-node: 1.31.1
+  onnxruntime-web: 1.31.1
+
+# Install sharp's prebuilt binaries for both CPU architectures we package, not
+# just the host's: CI builds Linux arm64 on an x64 runner, and transformers
+# requires sharp at load, so without the arm64 binary the native TTS process
+# dies there. electron-builder.yml keeps only the packaged arch's copy.
+supportedArchitectures:
+  os: [current]
+  cpu: [x64, arm64]
+  libc: [glibc]

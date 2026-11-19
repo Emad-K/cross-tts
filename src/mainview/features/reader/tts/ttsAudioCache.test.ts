@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { AudioCache, audioCacheKey } from "./ttsAudioCache";
 
 describe("audioCacheKey", () => {
-	test("differs by voice, speed, rules, and text", () => {
-		const base = audioCacheKey("hello", "af_heart", 1, "sig");
-		expect(audioCacheKey("hello", "am_other", 1, "sig")).not.toBe(base);
-		expect(audioCacheKey("hello", "af_heart", 1.5, "sig")).not.toBe(base);
-		expect(audioCacheKey("hello", "af_heart", 1, "sig2")).not.toBe(base);
-		expect(audioCacheKey("world", "af_heart", 1, "sig")).not.toBe(base);
+	test("differs by engine, voice, speed, rules, and text", () => {
+		const base = audioCacheKey("kokoro", "hello", "af_heart", 1, "sig");
+		expect(audioCacheKey("kokoro", "hello", "am_other", 1, "sig")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1.5, "sig")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1, "sig2")).not.toBe(base);
+		expect(audioCacheKey("kokoro", "world", "af_heart", 1, "sig")).not.toBe(base);
+		expect(audioCacheKey("other", "hello", "af_heart", 1, "sig")).not.toBe(base);
 	});
 
 	test("is stable for identical inputs", () => {
-		expect(audioCacheKey("hello", "af_heart", 1, "sig")).toBe(
-			audioCacheKey("hello", "af_heart", 1, "sig"),
+		expect(audioCacheKey("kokoro", "hello", "af_heart", 1, "sig")).toBe(
+			audioCacheKey("kokoro", "hello", "af_heart", 1, "sig"),
 		);
 	});
 });
@@ -63,6 +64,19 @@ describe("AudioCache", () => {
 		expect(cache.size).toBe(2);
 	});
 
+	test("bounds by total cost, evicting oldest first", async () => {
+		const cache = new AudioCache<string>(10, (v) => v.length);
+		await cache.getOrCreate("a", async () => "aaaa");
+		await cache.getOrCreate("b", async () => "bbbb");
+		await cache.getOrCreate("c", async () => "cccc");
+		expect(cache.has("a")).toBe(false);
+		expect(cache.size).toBe(2);
+		// An entry over the whole budget still stays (newest is always kept).
+		await cache.getOrCreate("d", async () => "d".repeat(20));
+		expect(cache.has("d")).toBe(true);
+		expect(cache.size).toBe(1);
+	});
+
 	test("does not cache a thrown factory; retries next call", async () => {
 		const cache = new AudioCache<string>(4);
 		let calls = 0;
@@ -96,5 +110,18 @@ describe("AudioCache", () => {
 		cache.clear();
 		expect(cache.has("k")).toBe(false);
 		expect(cache.size).toBe(0);
+	});
+
+	test("does not store work that was in flight across a clear()", async () => {
+		const cache = new AudioCache<string>(4);
+		let finish!: (v: string) => void;
+		const old = cache.getOrCreate("k", () => new Promise((r) => (finish = r)));
+		cache.clear();
+		const fresh = cache.getOrCreate("k", async () => "new");
+		finish("old");
+		expect(await old).toBe("old");
+		expect(await fresh).toBe("new");
+		expect(await cache.getOrCreate("k", async () => "x")).toBe("new");
+		expect(cache.size).toBe(1);
 	});
 });

@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
+	DialogFooter,
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
@@ -49,6 +51,7 @@ import {
 	getGpuInfo,
 	getModelStatus,
 	isDesktopApp,
+	openExternal,
 	quitAndInstallUpdate,
 	relaunchApp,
 	removeWatchedFolder,
@@ -59,16 +62,28 @@ import {
 import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
 import {
+	coerceEngineVoice,
+	ensureTtsLoaded,
 	getActiveDevice,
+	getTtsEngine,
 	MAX_SENTENCE_PAUSE_MS,
-	resetKokoroEngine,
+	resetTtsEngine,
+	TTS_ENGINES,
 	useTtsStore,
 } from "../tts";
+import {
+	SUPERTONIC_DEFAULT_STEPS,
+	SUPERTONIC_MAX_STEPS,
+	SUPERTONIC_MIN_STEPS,
+} from "../tts/supertonicModel";
+import type { TtsEngine } from "../tts/ttsEngineTypes";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
+import { isExportPhaseActive, useExportStore } from "../audiobook/exportStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
+import { softwareAdapterReason } from "../tts/gpuAdapter";
 
 type SectionId =
 	| "appearance"
@@ -140,13 +155,13 @@ function ModelRow({
 	bytes: number;
 	onDownload: () => void;
 }) {
-	const Icon = kind === "gpu" ? Zap : Cpu;
+	const Icon = kind === "cpu" ? Cpu : Zap;
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-3">
 			<Icon
 				className={cn(
 					"size-4 shrink-0",
-					kind === "gpu" ? "text-amber-400" : "text-muted-foreground",
+					kind === "cpu" ? "text-muted-foreground" : "text-amber-400",
 				)}
 				aria-hidden
 			/>
@@ -484,7 +499,7 @@ function CpuThreadsControl() {
 		// New thread count only applies on a fresh CPU load. If a CPU model is
 		// loaded, drop it so the next play picks up the change; leave a GPU model
 		// alone (the thread count doesn't affect it).
-		if (getActiveDevice() !== "webgpu") resetKokoroEngine();
+		if (getActiveDevice() !== "webgpu") resetTtsEngine();
 	};
 
 	return (
@@ -516,6 +531,77 @@ function CpuThreadsControl() {
 				Threads used for CPU synthesis; Auto picks a sensible count for the
 				active engine. Max is one less than your {max + 1} logical cores. Only
 				applies when running on the CPU.
+			</p>
+		</div>
+	);
+}
+
+function CudaControl() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setCudaEnabled = useAppSettingsStore((s) => s.setCudaEnabled);
+	if (!config?.cudaSupported) return null;
+	const onToggle = async (next: boolean) => {
+		await setCudaEnabled(next);
+		// The native engine picks its execution provider when it loads.
+		if (getActiveDevice() !== "webgpu") resetTtsEngine();
+	};
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<label
+				htmlFor={switchId}
+				className="flex cursor-pointer items-center justify-between gap-4"
+			>
+				<span className="text-sm font-medium">
+					Use NVIDIA GPU (CUDA) for native engine
+				</span>
+				<Switch
+					id={switchId}
+					checked={config.cudaEnabled}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</label>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Experimental. Needs an NVIDIA GPU with CUDA 12 and cuDNN 9 installed,
+				plus ONNX Runtime&apos;s CUDA provider libraries, which this app does
+				not ship. When any of that is missing the native engine logs why and
+				keeps using the CPU.
+			</p>
+		</div>
+	);
+}
+
+function GpuFp16Control() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setGpuFp16 = useAppSettingsStore((s) => s.setGpuFp16);
+	if (!config) return null;
+	const onToggle = async (next: boolean) => {
+		await setGpuFp16(next);
+		// The GPU model's precision is chosen when it loads (and a failed fp16
+		// load may have left the engine on the CPU).
+		resetTtsEngine();
+	};
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<label
+				htmlFor={switchId}
+				className="flex cursor-pointer items-center justify-between gap-4"
+			>
+				<span className="text-sm font-medium">
+					Half-precision GPU model (Kokoro)
+				</span>
+				<Switch
+					id={switchId}
+					checked={config.gpuFp16}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</label>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Experimental. Loads the smaller fp16 weights (about 160 MB instead of
+				325 MB) when your GPU supports 16-bit shaders and they are downloaded
+				(Storage → Voice models); otherwise the full model. It may sound
+				slightly different; switch off if it does.
 			</p>
 		</div>
 	);
@@ -586,7 +672,7 @@ function GpuPreferenceControl() {
 	const onChange = (next: GpuPowerPreference) => {
 		void setGpuPower(next);
 		// Reload only if a GPU model is live; the new adapter applies on reload.
-		if (getActiveDevice() === "webgpu") resetKokoroEngine();
+		if (getActiveDevice() === "webgpu") resetTtsEngine();
 	};
 
 	// Label the two WebGPU-addressable adapters with their real names.
@@ -644,7 +730,8 @@ function PerformancePanel() {
 		void (async () => {
 			try {
 				const adapter = await navigator.gpu?.requestAdapter();
-				setWebgpuAvailable(!!adapter);
+				// A software rasterizer is no GPU (same rule as the engine's probe).
+				setWebgpuAvailable(!!adapter && !softwareAdapterReason(adapter));
 			} catch {
 				setWebgpuAvailable(false);
 			}
@@ -655,7 +742,7 @@ function PerformancePanel() {
 		await setGpuEnabled(next);
 		// CPU and GPU use different model weights — drop the loaded model so the
 		// next play reloads the right one.
-		resetKokoroEngine();
+		resetTtsEngine();
 	};
 
 	return (
@@ -696,7 +783,9 @@ function PerformancePanel() {
 				</p>
 			</div>
 			{gpuEnabled && webgpuAvailable !== false ? <GpuPreferenceControl /> : null}
+			{gpuEnabled && webgpuAvailable !== false ? <GpuFp16Control /> : null}
 			<CpuThreadsControl />
+			<CudaControl />
 		</SectionPane>
 	);
 }
@@ -815,6 +904,219 @@ function formatPauseMs(ms: number): string {
 	return `${ms} ms`;
 }
 
+/** An engine's licence terms; with `onAccept`, the one-time acknowledgement. */
+function LicenceDialog({
+	engine,
+	open,
+	onOpenChange,
+	onAccept,
+}: {
+	engine: TtsEngine;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onAccept?: () => void;
+}) {
+	const terms = engine.licence.acknowledge;
+	if (!terms) return null;
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
+				<DialogTitle>
+					{engine.displayName} — {engine.licence.name} licence
+				</DialogTitle>
+				<DialogDescription>
+					The {engine.displayName} model is downloaded from HuggingFace and
+					licensed to you by its authors under {engine.licence.name}, not by
+					Cross TTS. Its terms forbid using the model or its output to:
+				</DialogDescription>
+				<ScrollArea className="min-h-0 flex-1 pr-3">
+					<ul className="list-disc space-y-1 pl-5 text-sm">
+						{terms.summary.map((r) => (
+							<li key={r}>{r}</li>
+						))}
+					</ul>
+					<details className="mt-4 text-xs">
+						<summary className="cursor-pointer font-medium">
+							Full licence text
+						</summary>
+						<pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+							{terms.text}
+						</pre>
+					</details>
+					<p className="mt-3 text-xs text-muted-foreground">
+						A copy of the licence is saved next to the downloaded model.
+					</p>
+				</ScrollArea>
+				<DialogFooter className="gap-2">
+					<Button variant="outline" onClick={() => onOpenChange(false)}>
+						{onAccept ? "Cancel" : "Close"}
+					</Button>
+					{onAccept ? (
+						<Button onClick={onAccept}>Accept and use {engine.displayName}</Button>
+					) : null}
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function EngineControl() {
+	const engineId = useTtsStore((s) => s.engineId);
+	const voice = useTtsStore((s) => s.voice);
+	const setEngine = useTtsStore((s) => s.setEngine);
+	const accepted = useTtsStore((s) => s.licencesAccepted);
+	const steps = useTtsStore((s) => s.supertonicSteps);
+	const modelPhase = useTtsStore((s) => s.modelPhase);
+	const modelProgress = useTtsStore((s) => s.modelProgress);
+	// An export is bound to the engine (and steps) it started with.
+	const exporting = useExportStore((s) => isExportPhaseActive(s.phase));
+	const engine = getTtsEngine(engineId);
+	/** Engine waiting for its licence to be accepted before it's selected. */
+	const [pending, setPending] = useState<TtsEngine | null>(null);
+	const [viewLicence, setViewLicence] = useState(false);
+	const [stepsDraft, setStepsDraft] = useState<number | null>(null);
+
+	/** Selected (e.g. restored with a book) but its licence not yet accepted. */
+	const needsAccept =
+		!!engine.licence.acknowledge && !accepted.includes(engine.id);
+	const select = (next: TtsEngine) =>
+		setEngine(next.id, coerceEngineVoice(next, voice));
+	const onPick = (id: string) => {
+		const next = getTtsEngine(id);
+		if (next.licence.acknowledge && !accepted.includes(next.id)) setPending(next);
+		else select(next);
+	};
+
+	return (
+		<div className="mb-3 rounded-lg border border-border bg-muted/20 p-4">
+			<div className="mb-3 text-sm font-medium">Voice engine</div>
+			<Select value={engine.id} onValueChange={onPick} disabled={exporting}>
+				<SelectTrigger className="w-full" aria-label="Voice engine">
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					{TTS_ENGINES.map((e) => (
+						<SelectItem key={e.id} value={e.id}>
+							{e.displayName}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+			<p className="mt-3 text-xs text-muted-foreground">
+				{engine.listVoices().length} voices · {engine.languages.join(", ")} ·{" "}
+				<button
+					type="button"
+					className="underline underline-offset-2 hover:text-foreground"
+					onClick={() => void openExternal(engine.licence.url)}
+				>
+					{engine.licence.name} licence
+				</button>
+				{engine.licence.acknowledge ? (
+					<>
+						{" "}
+						(
+						<button
+							type="button"
+							className="underline underline-offset-2 hover:text-foreground"
+							onClick={() =>
+								needsAccept ? setPending(engine) : setViewLicence(true)
+							}
+						>
+							{needsAccept ? "accept to use it" : "terms"}
+						</button>
+						)
+					</>
+				) : null}
+				. Each book remembers its engine and voice.
+			</p>
+			{engine.licence.notice ? (
+				<p className="mt-1.5 text-xs text-muted-foreground">
+					{engine.licence.notice}
+				</p>
+			) : null}
+			{engine.id === "supertonic" ? (
+				<div className="mt-4 space-y-4">
+					<div>
+						<div className="flex items-center justify-between gap-4 text-sm font-medium">
+							<span>Quality</span>
+							<span className="text-xs tabular-nums text-muted-foreground">
+								{stepsDraft ?? steps} steps
+							</span>
+						</div>
+						<Slider
+							className="mt-3"
+							aria-label="Supertonic quality (denoising steps)"
+							disabled={exporting}
+							min={SUPERTONIC_MIN_STEPS}
+							max={SUPERTONIC_MAX_STEPS}
+							step={1}
+							value={[stepsDraft ?? steps]}
+							onValueChange={(v) => setStepsDraft(v[0] ?? steps)}
+							onValueCommit={(v) => {
+								setStepsDraft(null);
+								useTtsStore.getState().setSupertonicSteps(v[0] ?? steps);
+							}}
+						/>
+						<p className="mt-2 text-xs text-muted-foreground">
+							Denoising steps per sentence. More sounds cleaner but takes
+							longer; {SUPERTONIC_DEFAULT_STEPS} is the model&apos;s
+							default.
+						</p>
+					</div>
+					<div className="flex items-center gap-3">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2"
+							disabled={modelPhase === "loading" || modelPhase === "ready"}
+							onClick={() => void ensureTtsLoaded().catch(() => {})}
+						>
+							{modelPhase === "loading" ? (
+								<Loader2 className="size-4 animate-spin" aria-hidden />
+							) : modelPhase === "ready" ? (
+								<CheckCircle2 className="size-4" aria-hidden />
+							) : (
+								<Download className="size-4" aria-hidden />
+							)}
+							{modelPhase === "ready" ? "Model ready" : "Download model (~400 MB)"}
+						</Button>
+						{modelPhase === "loading" && modelProgress !== null ? (
+							<Progress
+								className="h-1.5 flex-1"
+								value={Math.round(modelProgress * 100)}
+							/>
+						) : null}
+					</div>
+				</div>
+			) : null}
+			<LicenceDialog
+				engine={engine}
+				open={viewLicence}
+				onOpenChange={setViewLicence}
+			/>
+			{pending ? (
+				<LicenceDialog
+					engine={pending}
+					open
+					onOpenChange={(open) => {
+						if (!open) setPending(null);
+					}}
+					onAccept={() => {
+						const { licencesAccepted, setLicencesAccepted } =
+							useTtsStore.getState();
+						setLicencesAccepted([...licencesAccepted, pending.id]);
+						// Already selected: clear the refused load so Play works again.
+						if (pending.id === engine.id) resetTtsEngine();
+						else select(pending);
+						setPending(null);
+					}}
+				/>
+			) : null}
+		</div>
+	);
+}
+
 function PlaybackPanel() {
 	const stored = useTtsStore((s) => s.sentencePauseMs);
 	const setSentencePauseMs = useTtsStore((s) => s.setSentencePauseMs);
@@ -827,6 +1129,7 @@ function PlaybackPanel() {
 			title="Playback"
 			description="How reading flows from sentence to sentence."
 		>
+			<EngineControl />
 			<div className="rounded-lg border border-border bg-muted/20 p-4">
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-2 text-sm font-medium">

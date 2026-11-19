@@ -2,11 +2,15 @@ import { create } from "zustand";
 import {
 	type PronunciationRule,
 	type RegexReplaceRule,
+	SLOW_RULE_MS,
 	type TtsTextRulesState,
 	coerceTtsTextRulesState,
 	defaultTtsTextRulesState,
+	setSlowTtsRuleHandler,
 	ttsTextRulesSignature,
 } from "@shared/ttsTextRules";
+import { showToast } from "@/components/toast/toastStore";
+import { logWarn } from "../logging/logger";
 import {
 	type ImportUserRulesMode,
 	type TtsRulesExportFile,
@@ -164,6 +168,23 @@ export const useTtsRulesStore = create<TtsRulesStore>((set, get) => {
 				),
 			),
 	};
+});
+
+// A custom rule that took too long on its first run gets switched off (deferred
+// so the store doesn't change mid-chunking).
+setSlowTtsRuleHandler((rule, ms) => {
+	setTimeout(() => {
+		useTtsRulesStore.getState().setRegexEnabled(rule.id, false);
+		logWarn(`Disabled slow text rule "${rule.label}"`, {
+			source: "tts-rules",
+			detail: `took ${Math.round(ms)} ms on one chunk (limit ${SLOW_RULE_MS} ms): ${rule.pattern}`,
+		});
+		showToast({
+			title: `Text rule "${rule.label}" was disabled`,
+			description: `It took ${Math.round(ms)} ms on one chunk. Simplify the pattern before re-enabling it.`,
+			variant: "destructive",
+		});
+	}, 0);
 });
 
 export function getTtsRulesForEngine(): TtsTextRulesState {

@@ -14,11 +14,18 @@ export type StoredWindowFrame = {
 };
 
 export type WebPersistedSlice = {
+	/** TTS engine id; sessions saved before engines existed are "kokoro". */
+	engine: string;
+	/** Voice id of `engine`. */
 	voice: string;
 	volumePct: number;
 	speed: number;
 	/** Silence inserted between sentences during playback, in ms (0–2000). */
 	sentencePauseMs: number;
+	/** Supertonic denoising steps (quality/speed); 8 = upstream default. */
+	supertonicSteps: number;
+	/** Engine ids whose model licence the user acknowledged before download. */
+	licencesAccepted: string[];
 	/** Absolute path to the open document; content is read on demand, not stored in session. */
 	documentPath: string | null;
 	/** Active EPUB chapter manifest id; null for .txt or unknown. */
@@ -44,10 +51,13 @@ export type AppSessionFileV1 = {
 };
 
 export const defaultWebPersistedSlice = (): WebPersistedSlice => ({
+	engine: "kokoro",
 	voice: "af_heart",
 	volumePct: 80,
 	speed: 1,
 	sentencePauseMs: 0,
+	supertonicSteps: 8,
+	licencesAccepted: [],
 	documentPath: null,
 	activeChapterId: null,
 	currentChunkIndex: 0,

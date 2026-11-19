@@ -8,7 +8,7 @@ import {
 } from "@/lib/desktopBridge";
 import { useBookmarksStore } from "./bookmarks/bookmarksStore";
 import { useLibraryStore } from "./library/libraryStore";
-import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { coerceEngineVoice, getTtsEngine } from "./tts/ttsEngines";
 import { useTtsRulesStore } from "./ttsRules/ttsRulesStore";
 import { useTtsStore } from "./tts/ttsStore";
 import type { LoadedDocument } from "./types";
@@ -37,18 +37,15 @@ function readProgress(
 	return within;
 }
 
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 2000;
 
 let scheduleSave: (() => void) | null = null;
+/** Set while buildWebSlice writes the library itself, so the save it is part of
+ * doesn't schedule another save (which would loop forever). */
+let writingLibraryFromSlice = false;
 
 export function touchSessionSave(): void {
 	scheduleSave?.();
-}
-
-function coerceVoice(id: string): KokoroVoiceId {
-	return KOKORO_VOICE_IDS.includes(id as KokoroVoiceId)
-		? (id as KokoroVoiceId)
-		: "af_heart";
 }
 
 export function buildWebSlice(
@@ -70,18 +67,27 @@ export function buildWebSlice(
 			chapterId,
 			chunkIndex: t.currentChunkIndex,
 			progress: readProgress(doc, chapterId, t.currentChunkIndex, t.chunks.length),
+			engine: t.engineId,
 			voice: t.voice,
 			speed: t.speed,
 			updatedAt: Date.now(),
 		});
-		useLibraryStore.getState().setBooks(books);
+		writingLibraryFromSlice = true;
+		try {
+			useLibraryStore.getState().setBooks(books);
+		} finally {
+			writingLibraryFromSlice = false;
+		}
 	}
 
 	return {
+		engine: t.engineId,
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
 		sentencePauseMs: t.sentencePauseMs,
+		supertonicSteps: t.supertonicSteps,
+		licencesAccepted: t.licencesAccepted,
 		documentPath: doc?.filePath ?? null,
 		activeChapterId: chapterId,
 		currentChunkIndex: t.currentChunkIndex,
@@ -161,8 +167,16 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 		};
 	}
 	const { web } = file;
-	const voice = coerceVoice(web.voice);
-	useTtsStore.getState().setVoice(voice);
+	// Before the engine: a restored engine may need its licence acknowledged.
+	if (Array.isArray(web.licencesAccepted)) {
+		useTtsStore.getState().setLicencesAccepted(web.licencesAccepted);
+	}
+	if (typeof web.supertonicSteps === "number") {
+		useTtsStore.getState().setSupertonicSteps(web.supertonicSteps);
+	}
+	// Unknown or missing engine ids (sessions from before engines) → default.
+	const engine = getTtsEngine(web.engine ?? "kokoro");
+	useTtsStore.getState().setEngine(engine.id, coerceEngineVoice(engine, web.voice));
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
 	if (typeof web.sentencePauseMs === "number") {
@@ -260,18 +274,35 @@ export function subscribeDebouncedSessionSave(
 		}
 	};
 
+	// Window close / app quit may not fire visibilitychange, and the main process
+	// does no final save of its own. invoke() posts the IPC message right away,
+	// so a pending save still reaches main before the window is torn down.
+	const onUnload = () => {
+		if (timer === null) return;
+		clearTimeout(timer);
+		flush();
+	};
+
 	const unsubStore = useTtsStore.subscribe(schedule);
 	const unsubRules = useTtsRulesStore.subscribe(schedule);
 	const unsubBookmarks = useBookmarksStore.subscribe(schedule);
+	const unsubLibrary = useLibraryStore.subscribe(() => {
+		if (!writingLibraryFromSlice) schedule();
+	});
 	document.addEventListener("visibilitychange", onVisibility);
+	window.addEventListener("beforeunload", onUnload);
+	window.addEventListener("pagehide", onUnload);
 	scheduleSave = schedule;
 	schedule();
 
 	return () => {
 		document.removeEventListener("visibilitychange", onVisibility);
+		window.removeEventListener("beforeunload", onUnload);
+		window.removeEventListener("pagehide", onUnload);
 		unsubStore();
 		unsubRules();
 		unsubBookmarks();
+		unsubLibrary();
 		scheduleSave = null;
 		if (timer !== null) clearTimeout(timer);
 		void saveAppSessionRpc(

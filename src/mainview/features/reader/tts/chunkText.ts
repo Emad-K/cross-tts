@@ -58,7 +58,11 @@ function collectSentenceSpans(full: string): { start: number; end: number }[] {
 }
 
 /** Prefer commas / semicolons / colons, then spaces, inside a long clause. */
-function clauseBreakWithin(s: string, maxChars: number): number {
+function clauseBreakWithin(
+	s: string,
+	maxChars: number,
+	allowSpace = true,
+): number {
 	const hard = Math.min(s.length, maxChars);
 	const win = s.slice(0, hard);
 	const min = win.length * 0.22;
@@ -73,14 +77,36 @@ function clauseBreakWithin(s: string, maxChars: number): number {
 		win.lastIndexOf("–"),
 	);
 	if (punct > min) return punct + 1;
+	if (!allowSpace) return 0;
 	const space = win.lastIndexOf(" ");
 	return space > min ? space + 1 : 0;
+}
+
+/** Target length of the first piece spoken after play or a seek. */
+const FAST_START_CHARS = 120;
+
+/**
+ * Split a chunk at its first clause (~80-120 chars) so playback can start
+ * after a short synthesis while the rest is made. Returns [text] when the
+ * chunk is already short or has no usable break. Costs one prosody seam.
+ */
+export function splitForFastStart(text: string): string[] {
+	if (text.length <= FAST_START_CHARS + 40) return [text];
+	// Punctuation only: a head cut at a plain space ends mid-phrase, and
+	// Kokoro speaks it with sentence-final intonation.
+	const br = clauseBreakWithin(text, FAST_START_CHARS, false);
+	if (br === 0) return [text];
+	const head = text.slice(0, br).trim();
+	const tail = text.slice(br).trim();
+	return isSpeakableChunkText(head) && isSpeakableChunkText(tail)
+		? [head, tail]
+		: [text];
 }
 
 /**
  * Turn an absolute [absStart, absEnd) slice of `full` into one or more trimmed TTS chunks.
  */
-function splitLongSentence(
+export function splitLongSentence(
 	full: string,
 	absStart: number,
 	absEnd: number,
@@ -177,6 +203,19 @@ function mergeUndersizedChunks(
 	}
 	out.push(acc);
 	return out;
+}
+
+/**
+ * Index of the chunk containing character `offset` (the last chunk starting
+ * at or before it). Maps a reading position across a re-chunk of the same text.
+ */
+export function chunkIndexAtOffset(
+	chunks: readonly { start: number }[],
+	offset: number,
+): number {
+	let idx = 0;
+	while (idx + 1 < chunks.length && chunks[idx + 1]!.start <= offset) idx++;
+	return idx;
 }
 
 /**

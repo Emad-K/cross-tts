@@ -1,8 +1,15 @@
 import { create } from "zustand";
 import { getMaxChunkChars } from "../settings/appSettingsStore";
-import { buildTtsChunks, normalizedReaderText } from "./chunkText";
+import {
+	buildTtsChunks,
+	chunkIndexAtOffset,
+	normalizedReaderText,
+} from "./chunkText";
 import type { TtsChunk } from "./chunkText";
-import type { KokoroVoiceId } from "./kokoroVoices";
+import {
+	clampSupertonicSteps,
+	SUPERTONIC_DEFAULT_STEPS,
+} from "./supertonicModel";
 
 export type ModelPhase = "idle" | "loading" | "ready" | "error";
 export type VoiceDownloadPhase = "idle" | "running" | "done" | "error";
@@ -13,17 +20,21 @@ export type PlaybackPhase =
 	| "playing"
 	| "paused";
 
-export type VoiceOption = { id: KokoroVoiceId; label: string };
-
 type TtsState = {
 	sourceText: string;
 	chunks: TtsChunk[];
-	voiceOptions: VoiceOption[];
-	voice: KokoroVoiceId;
+	/** Selected TTS engine (ttsEngines.ts). */
+	engineId: string;
+	/** Voice id of the selected engine. */
+	voice: string;
 	volumePct: number;
 	speed: number;
 	/** Extra silence inserted between sentences during playback, in ms. */
 	sentencePauseMs: number;
+	/** Supertonic denoising steps: more = better quality, slower. */
+	supertonicSteps: number;
+	/** Engines whose model licence terms the user acknowledged (once). */
+	licencesAccepted: string[];
 	modelPhase: ModelPhase;
 	modelError: string | null;
 	modelProgress: number | null;
@@ -44,11 +55,14 @@ type TtsState = {
 	setSourceText: (raw: string, opts?: { chunkIndex?: number }) => void;
 	/** Rebuild chunks from the current text (e.g. after max-chunk-size changed). */
 	rechunk: () => void;
-	setVoiceOptions: (opts: VoiceOption[]) => void;
-	setVoice: (id: KokoroVoiceId) => void;
+	/** Switch engine together with a voice it has (see coerceEngineVoice). */
+	setEngine: (engineId: string, voice: string) => void;
+	setVoice: (id: string) => void;
 	setVolumePct: (v: number) => void;
 	setSpeed: (s: number) => void;
 	setSentencePauseMs: (ms: number) => void;
+	setSupertonicSteps: (steps: number) => void;
+	setLicencesAccepted: (engineIds: string[]) => void;
 	setModelPhase: (p: ModelPhase, err?: string | null) => void;
 	setModelProgress: (v: number | null) => void;
 	setVoiceDownload: (
@@ -74,7 +88,7 @@ type TtsState = {
 	seekToChunk: (index: number) => void;
 };
 
-const initialVoice: KokoroVoiceId = "af_heart";
+const initialVoice = "af_heart";
 
 export const MAX_SENTENCE_PAUSE_MS = 2000;
 
@@ -87,11 +101,13 @@ export function clampSentencePauseMs(ms: number): number {
 export const useTtsStore = create<TtsState>((set, get) => ({
 	sourceText: "",
 	chunks: [],
-	voiceOptions: [],
+	engineId: "kokoro",
 	voice: initialVoice,
 	volumePct: 80,
 	speed: 1,
 	sentencePauseMs: 0,
+	supertonicSteps: SUPERTONIC_DEFAULT_STEPS,
+	licencesAccepted: [],
 	modelPhase: "idle",
 	modelError: null,
 	modelProgress: null,
@@ -134,21 +150,25 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	},
 
 	rechunk: () => {
-		const { sourceText } = get();
+		const { sourceText, chunks: oldChunks, currentChunkIndex } = get();
 		const chunks = buildTtsChunks(sourceText, getMaxChunkChars());
-		const ch = chunks[0];
+		// Keep the reading position: same text, so map by character offset.
+		// Playback state is left alone; the caller re-seeks the loop
+		// (seekToChunkAndMaybePlay) so it stops indexing the old array.
+		const oldStart = oldChunks[currentChunkIndex]?.start ?? 0;
+		const idx = chunkIndexAtOffset(chunks, oldStart);
+		const ch = chunks[idx];
+		const n = chunks.length;
 		set({
 			chunks,
-			currentChunkIndex: 0,
+			currentChunkIndex: idx,
 			highlightRange: ch ? { start: ch.start, end: ch.end } : null,
 			chunkBaseSec: [],
-			progressPct: chunks.length <= 1 ? 100 : 0,
-			playback: "idle",
-			playbackError: null,
+			progressPct: n <= 1 ? 100 : (idx / (n - 1)) * 100,
 		});
 	},
 
-	setVoiceOptions: (voiceOptions) => set({ voiceOptions }),
+	setEngine: (engineId, voice) => set({ engineId, voice }),
 
 	setVoice: (id) => {
 		set({ voice: id });
@@ -159,6 +179,11 @@ export const useTtsStore = create<TtsState>((set, get) => ({
 	setSpeed: (s) => set({ speed: Math.min(2, Math.max(0.5, s)) }),
 
 	setSentencePauseMs: (ms) => set({ sentencePauseMs: clampSentencePauseMs(ms) }),
+
+	setSupertonicSteps: (steps) =>
+		set({ supertonicSteps: clampSupertonicSteps(steps) }),
+
+	setLicencesAccepted: (licencesAccepted) => set({ licencesAccepted }),
 
 	setModelPhase: (modelPhase, err = null) =>
 		set({

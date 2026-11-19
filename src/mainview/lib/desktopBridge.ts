@@ -1,5 +1,6 @@
 import type { AppApi, FoundInPageResult } from "@shared/appRpc";
 import type {
+	TtsNodeEngine,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -68,6 +69,12 @@ export function pathForFile(file: File): string | null {
 	if (!b) return null;
 	const path = b.getPathForFile(file);
 	return path.length > 0 ? path : null;
+}
+
+/** Message of an error thrown in a main-process IPC handler, minus Electron's prefix. */
+export function ipcErrorMessage(err: unknown): string {
+	const msg = err instanceof Error ? err.message : String(err);
+	return msg.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
 }
 
 export async function readDocumentAtPath(
@@ -152,6 +159,15 @@ export async function appendAudioFile(
 	return b.request.appendAudioFile({ dir, fileName, data });
 }
 
+export async function finishAudioFile(
+	dir: string,
+	fileName: string,
+): Promise<{ ok: boolean; path: string | null; error?: string }> {
+	const b = bridge();
+	if (!b) return { ok: false, path: null, error: "Not in desktop app" };
+	return b.request.finishAudioFile({ dir, fileName });
+}
+
 export async function audioFileExists(
 	dir: string,
 	fileName: string,
@@ -229,6 +245,22 @@ export async function setCpuThreads(
 	const b = bridge();
 	if (!b) return null;
 	return b.request.setCpuThreads({ threads });
+}
+
+export async function setCudaEnabled(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setCudaEnabled({ enabled });
+}
+
+export async function setGpuFp16(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setGpuFp16({ enabled });
 }
 
 export async function setShortcutsEnabled(
@@ -412,10 +444,12 @@ export function subscribeToCrashReports(
 }
 
 /** Start the native (onnxruntime-node) CPU TTS backend. Null on web (no bridge). */
-export async function ttsNodeInit(): Promise<TtsNodeInitResult | null> {
+export async function ttsNodeInit(
+	engine: TtsNodeEngine = "kokoro",
+): Promise<TtsNodeInitResult | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.ttsNodeInit();
+	return b.request.ttsNodeInit(engine);
 }
 
 /** Synthesize one chunk on the native CPU backend. Null on web (no bridge). */
@@ -427,11 +461,11 @@ export async function ttsNodeGenerate(
 	return b.request.ttsNodeGenerate(params);
 }
 
-/** Stop the native CPU TTS backend. No-op on web. */
-export async function ttsNodeStop(): Promise<void> {
+/** Stop the native CPU TTS backend if it serves `engine`. No-op on web. */
+export async function ttsNodeStop(engine: TtsNodeEngine = "kokoro"): Promise<void> {
 	const b = bridge();
 	if (!b) return;
-	await b.request.ttsNodeStop();
+	await b.request.ttsNodeStop(engine);
 }
 
 /** Subscribe to native-TTS model-load progress (0..1). No-op on web. */

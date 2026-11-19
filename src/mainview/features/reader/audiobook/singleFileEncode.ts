@@ -14,8 +14,8 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { buildId3v2Tag } from "@shared/id3Chapters";
 import { buildUdtaAtom, type CoverImage, injectUdtaIntoMoov } from "@shared/mp4Meta";
-import { LinearResampler } from "@shared/resample";
-import { createEncoder } from "./audioEncode";
+import { SincStreamResampler } from "@shared/resampleSinc";
+import { concat, createEncoder } from "./audioEncode";
 
 const AAC_CODEC = "mp4a.40.2"; // AAC-LC
 const AAC_BITRATE = 96_000; // mono speech
@@ -131,7 +131,7 @@ class AacM4bEncoder implements SingleFileEncoder {
 	private muxer: Muxer<ArrayBufferTarget>;
 	private encoder: AudioEncoder;
 	/** Upsamples when the platform AAC encoder rejects the synthesis rate. */
-	private resampler: LinearResampler | null;
+	private resampler: SincStreamResampler | null;
 	private encodedSamples = 0;
 	private encodeError: DOMException | null = null;
 
@@ -144,7 +144,7 @@ class AacM4bEncoder implements SingleFileEncoder {
 		this.resampler =
 			encodeRate === inputRate
 				? null
-				: new LinearResampler(inputRate, encodeRate);
+				: new SincStreamResampler(inputRate, encodeRate);
 		this.muxer = new Muxer({
 			target: new ArrayBufferTarget(),
 			audio: { codec: "aac", numberOfChannels: 1, sampleRate: encodeRate },
@@ -162,8 +162,11 @@ class AacM4bEncoder implements SingleFileEncoder {
 	}
 
 	append(pcm: Float32Array): void {
+		this.encode(this.resampler ? this.resampler.process(pcm) : pcm);
+	}
+
+	private encode(samples: Float32Array): void {
 		if (this.encodeError) return; // surfaced in finish()
-		const samples = this.resampler ? this.resampler.process(pcm) : pcm;
 		if (samples.length === 0) return;
 		const data = new AudioData({
 			format: "f32",
@@ -181,6 +184,7 @@ class AacM4bEncoder implements SingleFileEncoder {
 	}
 
 	async finish(meta: BookMeta): Promise<Uint8Array> {
+		if (this.resampler) this.encode(this.resampler.flush());
 		await this.encoder.flush();
 		if (this.encodeError) {
 			throw new Error(`AAC encoding failed: ${this.encodeError.message}`);
@@ -230,10 +234,7 @@ class Mp3ChapterEncoder implements SingleFileEncoder {
 						: totalMs,
 			})),
 		});
-		const out = new Uint8Array(tag.length + audio.length);
-		out.set(tag, 0);
-		out.set(audio, tag.length);
-		return out;
+		return concat([tag, ...audio]);
 	}
 }
 

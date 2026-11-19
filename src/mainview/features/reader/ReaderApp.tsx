@@ -10,6 +10,7 @@ import {
 import {
 	getEpubChapterContent,
 	getPendingCrashReports,
+	ipcErrorMessage,
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
@@ -54,7 +55,7 @@ import {
 } from "./sessionPersistence";
 import { getBookResume } from "./library/libraryStore";
 import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
-import { KOKORO_VOICE_IDS, type KokoroVoiceId } from "./tts/kokoroVoices";
+import { getTtsEngine } from "./tts/ttsEngines";
 import {
 	setBookmarkNavHandler,
 	useBookmarksStore,
@@ -62,10 +63,13 @@ import {
 import { useSleepTimerStore } from "./sleepTimer/sleepTimerStore";
 import { shouldSleepAtChapterEnd } from "./sleepTimer/sleepTimerUtils";
 import type { LoadedDocument } from "./types";
+import { getMaxChunkChars } from "./settings/appSettingsStore";
 import {
 	adjustVolume,
+	buildTtsChunks,
+	prefetchTexts,
 	seekToChunkAndMaybePlay,
-	ensureKokoroLoaded,
+	ensureTtsLoaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
 	startOrResumePlayback,
@@ -75,6 +79,26 @@ import {
 	useMediaSession,
 	useTtsStore,
 } from "./tts";
+
+/**
+ * Apply a book's saved engine / voice / speed, if it has any, before it opens. Every
+ * way of opening a book goes through this (library, drag-drop, file picker,
+ * session restore), so a book always plays with its own voice.
+ */
+function restoreBookVoice(path: string): void {
+	const resume = getBookResume(path);
+	// Books saved before engines existed have Kokoro voices.
+	const engine = getTtsEngine(resume?.engine ?? "kokoro");
+	// A running export is bound to the current engine; keep it.
+	if (
+		!isExportActive() &&
+		resume?.voice &&
+		engine.listVoices().some((v) => v.id === resume.voice)
+	) {
+		useTtsStore.getState().setEngine(engine.id, resume.voice);
+	}
+	if (resume?.speed != null) useTtsStore.getState().setSpeed(resume.speed);
+}
 
 function documentKey(doc: LoadedDocument): string {
 	return `${doc.format}:${doc.filePath ?? doc.fileName}`;
@@ -86,11 +110,9 @@ function readTxtFile(file: File): Promise<LoadedDocument> {
 		reader.onload = () => {
 			const text =
 				typeof reader.result === "string" ? reader.result : "";
-			const path =
-				"path" in file &&
-				typeof (file as File & { path?: string }).path === "string"
-					? (file as File & { path: string }).path
-					: undefined;
+			// File.path was removed in Electron 32; the preload's webUtils bridge
+			// replaces it (null on web).
+			const path = pathForFile(file);
 			resolve({
 				format: "txt",
 				fileName: file.name,
@@ -200,6 +222,7 @@ export function ReaderApp() {
 			try {
 				const doc = await loadDocumentFromPath(session.documentPath);
 				if (cancelled || !doc) return;
+				restoreBookVoice(session.documentPath);
 				setDocument(doc);
 			} finally {
 				if (!cancelled) {
@@ -287,7 +310,7 @@ export function ReaderApp() {
 		void (async () => {
 			await useAppSettingsStore.getState().hydrate();
 			if (cancelled) return;
-			await ensureKokoroLoaded().catch(() => {});
+			await ensureTtsLoaded().catch(() => {});
 		})();
 		return () => {
 			cancelled = true;
@@ -334,6 +357,30 @@ export function ReaderApp() {
 		});
 		return () => setChapterPlaybackFinishedHandler(null);
 	}, []);
+
+	// Near the end of an EPUB chapter, synthesize the next chapter's opening
+	// chunks so rolling into it doesn't pause on a cold first chunk. Chunked
+	// exactly as setSourceText will, so the audio cache keys match.
+	useEffect(() => {
+		if (!document || document.format !== "epub") return;
+		let warmedChapterId: string | null = null;
+		return useTtsStore.subscribe((s) => {
+			if (s.playback !== "playing") return;
+			if (s.chunks.length - s.currentChunkIndex > 3) return;
+			const chapters = document.chapters;
+			const i = chapters.findIndex((c) => c.id === activeChapterIdRef.current);
+			const next = i >= 0 ? chapters[i + 1] : undefined;
+			if (!next || warmedChapterId === next.id) return;
+			warmedChapterId = next.id;
+			void getEpubChapterContent(document.filePath, next.id)
+				.then((content) => {
+					if (!content) return;
+					const chunks = buildTtsChunks(content.text, getMaxChunkChars());
+					prefetchTexts(chunks.slice(0, 2).map((c) => c.text));
+				})
+				.catch(() => {});
+		});
+	}, [document]);
 
 	useEffect(() => {
 		if (!sessionReady) return;
@@ -500,6 +547,7 @@ export function ReaderApp() {
 			try {
 				const picked = await pickDocument();
 				if (picked) {
+					restoreBookVoice(picked.filePath);
 					pendingChunkIndexRef.current = null;
 					setInitialChapterId(null);
 					setActiveChapterId(
@@ -509,8 +557,12 @@ export function ReaderApp() {
 					);
 					setDocument(toLoadedDocument(picked));
 				}
-			} catch {
-				inputRef.current?.click();
+			} catch (err) {
+				showToast({
+					title: "Couldn't open document",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -526,16 +578,7 @@ export function ReaderApp() {
 			try {
 				const doc = await loadDocumentFromPath(path);
 				if (!doc) return;
-				// Restore this book's own voice / speed (falls back to current).
-				if (
-					resume?.voice &&
-					KOKORO_VOICE_IDS.includes(resume.voice as KokoroVoiceId)
-				) {
-					useTtsStore.getState().setVoice(resume.voice as KokoroVoiceId);
-				}
-				if (resume?.speed != null) {
-					useTtsStore.getState().setSpeed(resume.speed);
-				}
+				restoreBookVoice(path);
 				forceResumeRef.current = resume?.chunkIndex != null;
 				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
 				setInitialChapterId(resume?.chapterId ?? null);
@@ -545,6 +588,12 @@ export function ReaderApp() {
 						: null,
 				);
 				setDocument(doc);
+			} catch (err) {
+				showToast({
+					title: "Couldn't open book",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -556,15 +605,28 @@ export function ReaderApp() {
 		e.target.value = "";
 		if (!file) return;
 		const lower = file.name.toLowerCase();
-		if (!lower.endsWith(".txt") && !lower.endsWith(".epub")) return;
-		if (lower.endsWith(".epub")) return;
+		if (lower.endsWith(".epub")) {
+			showToast({ title: "EPUBs need the desktop app", variant: "destructive" });
+			return;
+		}
+		if (!lower.endsWith(".txt")) {
+			showToast({
+				title: `"${file.name}" isn't supported`,
+				description: "Only .txt and .epub files can be opened.",
+				variant: "destructive",
+			});
+			return;
+		}
 		try {
 			pendingChunkIndexRef.current = null;
 			setInitialChapterId(null);
 			setActiveChapterId(null);
 			setDocument(await readTxtFile(file));
 		} catch {
-			// Engine / toast layer can surface errors later.
+			showToast({
+				title: `Couldn't read "${file.name}"`,
+				variant: "destructive",
+			});
 		}
 	}, []);
 
@@ -621,9 +683,14 @@ export function ReaderApp() {
 			}
 
 			let added = 0;
+			let lastError: string | null = null;
 			for (const file of supported) {
 				const path = pathForFile(file);
-				if (path && (await addBookToLibrary(path)) !== null) added++;
+				try {
+					if (path && (await addBookToLibrary(path)) !== null) added++;
+				} catch (err) {
+					lastError = ipcErrorMessage(err);
+				}
 			}
 			touchSessionSave();
 			if (added > 0) {
@@ -635,7 +702,8 @@ export function ReaderApp() {
 				const failed = supported.length - added;
 				showToast({
 					title: `Couldn't add ${failed} file${failed === 1 ? "" : "s"}`,
-					description: "They may be unreadable or invalid documents.",
+					description:
+						lastError ?? "They may be unreadable or invalid documents.",
 					variant: "destructive",
 				});
 			}

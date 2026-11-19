@@ -1,18 +1,12 @@
-import {
-	createReadStream,
-	createWriteStream,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	renameSync,
-	statSync,
-} from "node:fs";
+import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { join, normalize, relative, resolve } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { modelCacheDir } from "./appConfigStore";
+import { isUsableCachedFile } from "./hubDiskCache";
 import { mainLog } from "./logBridge";
+import { adoptLegacyModelCache, downloadToFile } from "./modelCache";
+import { hubFileSha256, hubRequestPath } from "./securityGuards";
 
 const HF_ORIGIN = "https://huggingface.co";
 
@@ -31,27 +25,6 @@ function safeHubFile(urlPathname: string): string | null {
 	return abs;
 }
 
-function looksLikeGitLfsPointer(filePath: string): boolean {
-	try {
-		const st = statSync(filePath);
-		if (st.size > 512) return false;
-		const head = readFileSync(filePath, "utf8").slice(0, 80);
-		return head.includes("git-lfs.github.com/spec");
-	} catch {
-		return false;
-	}
-}
-
-function isUsableCachedFile(filePath: string): boolean {
-	if (!existsSync(filePath)) return false;
-	const st = statSync(filePath);
-	if (st.size === 0) return false;
-	if (looksLikeGitLfsPointer(filePath)) return false;
-	if (filePath.endsWith(".onnx") && st.size < 50_000) return false;
-	if (filePath.endsWith(".bin") && st.size < 1_000) return false;
-	return true;
-}
-
 async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	if (isUsableCachedFile(dest)) return;
 
@@ -62,7 +35,6 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	}
 
 	const task = (async () => {
-		mkdirSync(join(dest, ".."), { recursive: true });
 		const url = `${HF_ORIGIN}${hfPath}`;
 		// This branch only runs on a cache miss — a genuine download from HF.
 		const name = hfPath.split("/").pop() || hfPath;
@@ -71,16 +43,7 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 			source: "models",
 			message: `Downloading ${name} from HuggingFace (not cached yet)…`,
 		});
-		const res = await fetch(url, { redirect: "follow" });
-		if (!res.ok || !res.body) {
-			throw new Error(`Kokoro hub fetch failed ${res.status}: ${url}`);
-		}
-		const tmp = `${dest}.download`;
-		await pipeline(
-			Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]),
-			createWriteStream(tmp),
-		);
-		renameSync(tmp, dest);
+		await downloadToFile(url, dest, hubFileSha256(hfPath));
 		const bytes = existsSync(dest) ? statSync(dest).size : 0;
 		mainLog({
 			level: "info",
@@ -97,50 +60,58 @@ async function ensureOnDisk(hfPath: string, dest: string): Promise<void> {
 	}
 }
 
-export function startKokoroHubServer(): Promise<string> {
+/**
+ * Start the local model cache server. Only requests under a random
+ * per-launch path token, for allowlisted files of the engines' pinned model
+ * repos (HUB_REPOS), are served, so other
+ * local software and web pages can't use it as an open HuggingFace proxy.
+ * `allowedOrigins` get a CORS grant (the renderer fetches from app://).
+ */
+export function startKokoroHubServer(
+	allowedOrigins: readonly string[],
+): Promise<string> {
 	if (hub && hubBaseUrl) {
 		return Promise.resolve(hubBaseUrl);
 	}
 	mkdirSync(hubCacheDirectory(), { recursive: true });
+	adoptLegacyModelCache(hubCacheDirectory());
 	console.log(`Kokoro HF files on disk: ${hubCacheDirectory()}`);
+	const token = randomBytes(16).toString("hex");
 
 	const server = createServer((req, res) => {
 		void (async () => {
+			const fail = (status: number, body: string) => {
+				res.writeHead(status, { "Content-Type": "text/plain" });
+				res.end(body);
+			};
 			const u = new URL(req.url ?? "/", "http://127.0.0.1");
-			if (req.method !== "GET") {
-				res.writeHead(405);
-				res.end("Method Not Allowed");
-				return;
-			}
-			const dest = safeHubFile(u.pathname);
-			if (!dest) {
-				res.writeHead(400);
-				res.end("Bad path");
-				return;
-			}
+			if (req.method !== "GET") return fail(405, "Method Not Allowed");
+			const hfPath = hubRequestPath(u.pathname, token);
+			const dest = hfPath ? safeHubFile(hfPath) : null;
+			if (!hfPath || !dest) return fail(404, "Not found");
 			try {
-				await ensureOnDisk(u.pathname, dest);
+				await ensureOnDisk(hfPath, dest);
 			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				console.error("[kokoro-hub]", msg);
-				res.writeHead(502);
-				res.end(msg);
-				return;
+				console.error("[kokoro-hub]", e instanceof Error ? e.message : String(e));
+				return fail(502, "Download failed");
 			}
-			if (!existsSync(dest)) {
-				res.writeHead(404);
-				res.end("Not found");
-				return;
-			}
+			if (!existsSync(dest)) return fail(404, "Not found");
 			const headers: Record<string, string> = {
-				"Access-Control-Allow-Origin": "*",
 				// The renderer is cross-origin isolated (COEP), so this cross-origin
 				// model fetch needs an explicit resource policy to be allowed.
 				"Cross-Origin-Resource-Policy": "cross-origin",
 				"Cache-Control": "public, max-age=31536000, immutable",
+				"Content-Type": "application/octet-stream",
+				// transformers.js grows its buffer one chunk at a time (a full copy
+				// each) without this: minutes, not seconds, for the 325 MB fp32 model.
+				"Content-Length": String(statSync(dest).size),
+				"X-Content-Type-Options": "nosniff",
+				Vary: "Origin",
 			};
-			const ct = contentTypeFor(dest);
-			if (ct) headers["Content-Type"] = ct;
+			const origin = req.headers.origin;
+			if (origin && allowedOrigins.includes(origin)) {
+				headers["Access-Control-Allow-Origin"] = origin;
+			}
 			res.writeHead(200, headers);
 			createReadStream(dest)
 				.on("error", () => {
@@ -170,7 +141,7 @@ export function startKokoroHubServer(): Promise<string> {
 				rejectStart(new Error("Kokoro hub server failed to bind a port"));
 				return;
 			}
-			hubBaseUrl = `http://127.0.0.1:${address.port}/`;
+			hubBaseUrl = `http://127.0.0.1:${address.port}/${token}/`;
 			resolveStart(hubBaseUrl);
 		};
 		server.once("error", onError);
@@ -183,11 +154,4 @@ export function stopKokoroHubServer(): void {
 	hub?.close();
 	hub = null;
 	hubBaseUrl = null;
-}
-
-function contentTypeFor(filePath: string): string | null {
-	if (filePath.endsWith(".json")) return "application/json";
-	if (filePath.endsWith(".onnx")) return "application/octet-stream";
-	if (filePath.endsWith(".bin")) return "application/octet-stream";
-	return null;
 }

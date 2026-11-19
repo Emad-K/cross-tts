@@ -4,13 +4,15 @@ export { KOKORO_MODEL_ID, KOKORO_VOICE_IDS } from "./kokoroVoices";
 export type { KokoroVoiceId } from "./kokoroVoices";
 export { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
 export { TtsSettingSync } from "./TtsSettingSync";
+export { coerceEngineVoice, getTtsEngine, TTS_ENGINES } from "./ttsEngines";
 export {
 	adjustVolume,
 	downloadVoicesAndModel,
-	ensureKokoroLoaded,
+	ensureTtsLoaded,
 	getActiveDevice,
-	resetKokoroEngine,
+	resetTtsEngine,
 	pausePlayback,
+	prefetchTexts,
 	resumePlayback,
 	seekProgressPercent,
 	seekToChunkAndMaybePlay,

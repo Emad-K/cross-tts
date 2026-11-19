@@ -13,7 +13,8 @@ import { protocol } from "electron";
 export const APP_SCHEME = "app";
 const APP_HOST = "bundle";
 
-export const APP_INDEX_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
+export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
+export const APP_INDEX_URL = `${APP_ORIGIN}/index.html`;
 
 const MIME: Record<string, string> = {
 	".html": "text/html",
@@ -46,6 +47,40 @@ const COI_HEADERS: Record<string, string> = {
 	"Cross-Origin-Embedder-Policy": "credentialless",
 	"Cross-Origin-Resource-Policy": "same-origin",
 };
+
+/**
+ * CSP sent as a header on every app:// response. It stacks with the meta-tag
+ * CSP in index.html (both are enforced), and unlike the meta tag it also
+ * covers worker scripts (the TTS worker and the ORT threads it spawns).
+ * The dev server (http://localhost:5173) isn't served from here, so dev keeps
+ * only the permissive meta policy that Vite HMR needs.
+ *
+ * - wasm-unsafe-eval: ONNX Runtime wasm/JSEP backends.
+ * - No CDN and no blob: in script-src or worker-src: the TTS worker points
+ *   ORT's wasmPaths at the bundled .mjs/.wasm on app://, so ORT neither
+ *   reaches cdn.jsdelivr.net nor imports its glue from a blob URL, and its
+ *   pthread workers start from that app:// .mjs (verified: multi-threaded
+ *   wasm synthesis works with all three removed).
+ * - 127.0.0.1:* is the local model hub, the only source of model files (the
+ *   engines refuse to load without it rather than fetch huggingface.co
+ *   unverified); dictionaryapi.dev and gstatic serve dictionary lookups and
+ *   pronunciation audio.
+ */
+const CSP = [
+	"default-src 'self'",
+	"script-src 'self' 'wasm-unsafe-eval'",
+	"worker-src 'self'",
+	"style-src 'self' 'unsafe-inline'",
+	"img-src 'self' data: blob:",
+	"font-src 'self' data:",
+	"media-src 'self' blob: data:",
+	"connect-src 'self' blob: data: http://127.0.0.1:* https://api.dictionaryapi.dev https://ssl.gstatic.com",
+	"object-src 'none'",
+	"frame-src 'none'",
+	"frame-ancestors 'none'",
+	"base-uri 'self'",
+	"form-action 'none'",
+].join("; ");
 
 /** Must be called before the app `ready` event. */
 export function registerAppScheme(): void {
@@ -87,6 +122,7 @@ export function handleAppRequests(rendererRoot: string): void {
 		try {
 			const data = await readFile(filePath);
 			const headers = new Headers(COI_HEADERS);
+			headers.set("Content-Security-Policy", CSP);
 			headers.set(
 				"Content-Type",
 				MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream",

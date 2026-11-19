@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	APP_SESSION_VERSION,
@@ -11,6 +11,7 @@ import { coerceBookmarksByPath } from "../shared/bookmarks";
 import { coerceRecentBooks } from "../shared/recentBooks";
 import { coerceTtsTextRulesState } from "../shared/ttsTextRules";
 import { dataDir } from "./appConfigStore";
+import { backupUnreadableFile, writeFileAtomic } from "./atomicFile";
 
 const SESSION_NAME = "app-session.json";
 
@@ -35,6 +36,7 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 	const d = defaultWebPersistedSlice();
 	if (!raw || typeof raw !== "object") return d;
 	const o = raw as Record<string, unknown>;
+	if (typeof o.engine === "string" && o.engine.length > 0) d.engine = o.engine;
 	if (typeof o.voice === "string") d.voice = o.voice;
 	if (typeof o.volumePct === "number" && o.volumePct >= 0 && o.volumePct <= 100) {
 		d.volumePct = Math.round(o.volumePct);
@@ -48,6 +50,18 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 		o.sentencePauseMs <= 2000
 	) {
 		d.sentencePauseMs = Math.round(o.sentencePauseMs);
+	}
+	if (
+		typeof o.supertonicSteps === "number" &&
+		o.supertonicSteps >= 1 &&
+		o.supertonicSteps <= 64
+	) {
+		d.supertonicSteps = Math.round(o.supertonicSteps);
+	}
+	if (Array.isArray(o.licencesAccepted)) {
+		d.licencesAccepted = o.licencesAccepted.filter(
+			(id): id is string => typeof id === "string",
+		);
 	}
 	if (typeof o.documentPath === "string" && o.documentPath.length > 0) {
 		d.documentPath = o.documentPath;
@@ -73,10 +87,13 @@ function coerceWeb(raw: unknown): WebPersistedSlice {
 /** Session file stores paths and prefs only — never document body text. */
 function webForDisk(web: WebPersistedSlice): WebPersistedSlice {
 	return {
+		engine: web.engine,
 		voice: web.voice,
 		volumePct: web.volumePct,
 		speed: web.speed,
 		sentencePauseMs: web.sentencePauseMs,
+		supertonicSteps: web.supertonicSteps,
+		licencesAccepted: web.licencesAccepted ?? [],
 		documentPath:
 			typeof web.documentPath === "string" && web.documentPath.length > 0
 				? web.documentPath
@@ -98,9 +115,15 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 	try {
 		const raw = readFileSync(p, "utf8");
 		const parsed = JSON.parse(raw) as unknown;
-		if (!parsed || typeof parsed !== "object") return null;
+		if (!parsed || typeof parsed !== "object") {
+			backupUnreadableFile(p);
+			return null;
+		}
 		const root = parsed as Record<string, unknown>;
-		if (root.version !== APP_SESSION_VERSION) return null;
+		if (root.version !== APP_SESSION_VERSION) {
+			backupUnreadableFile(p);
+			return null;
+		}
 		let window: StoredWindowFrame | null = null;
 		if (root.window && typeof root.window === "object") {
 			const w = root.window as Record<string, unknown>;
@@ -120,7 +143,11 @@ export function loadAppSessionFile(): AppSessionFileV1 | null {
 			fullScreen: root.fullScreen === true,
 			web,
 		};
-	} catch {
+	} catch (err) {
+		// The renderer falls back to defaults and its next save replaces this file,
+		// so keep a copy of the library/bookmarks rather than losing them.
+		const bak = backupUnreadableFile(p);
+		console.error(`[session] unreadable ${p}, backed up to ${bak}:`, err);
 		return null;
 	}
 }
@@ -132,7 +159,7 @@ export function saveAppSessionFile(session: AppSessionFileV1): void {
 		...session,
 		web: webForDisk(session.web),
 	};
-	writeFileSync(p, JSON.stringify(safe, null, "\t"));
+	writeFileAtomic(p, JSON.stringify(safe, null, "\t"));
 }
 
 export function pickInitialWindowFrame(

@@ -31,6 +31,8 @@ const api: AppApi = {
 		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
 		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
+		setCudaEnabled: (params) => ipcRenderer.invoke("setCudaEnabled", params),
+		setGpuFp16: (params) => ipcRenderer.invoke("setGpuFp16", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
 		setAutoUpdate: (params) => ipcRenderer.invoke("setAutoUpdate", params),
@@ -40,6 +42,7 @@ const api: AppApi = {
 		chooseExportFolder: () => ipcRenderer.invoke("chooseExportFolder"),
 		writeAudioFile: (params) => ipcRenderer.invoke("writeAudioFile", params),
 		appendAudioFile: (params) => ipcRenderer.invoke("appendAudioFile", params),
+		finishAudioFile: (params) => ipcRenderer.invoke("finishAudioFile", params),
 		audioFileExists: (params) =>
 			ipcRenderer.invoke("audioFileExists", params),
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
@@ -65,9 +68,9 @@ const api: AppApi = {
 			ipcRenderer.invoke("getPendingCrashReports"),
 		resolveCrashReports: (params) =>
 			ipcRenderer.invoke("resolveCrashReports", params),
-		ttsNodeInit: () => ipcRenderer.invoke("ttsNodeInit"),
+		ttsNodeInit: (engine) => ipcRenderer.invoke("ttsNodeInit", engine),
 		ttsNodeGenerate: (params) => ipcRenderer.invoke("ttsNodeGenerate", params),
-		ttsNodeStop: () => ipcRenderer.invoke("ttsNodeStop"),
+		ttsNodeStop: (engine) => ipcRenderer.invoke("ttsNodeStop", engine),
 	},
 	getPathForFile: (file: File) => {
 		try {
