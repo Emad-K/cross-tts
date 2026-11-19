@@ -16,6 +16,7 @@ import { SynthCore } from "./synthCore";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
 import { getTtsEngine, TTS_ENGINES } from "./ttsEngines";
 import { useSweepStore } from "./sweepStore";
+import { listenRateKey } from "@shared/listenTimeEstimate";
 import { useTtsStore } from "./ttsStore";
 
 /**
@@ -778,7 +779,12 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				// and pin this chunk's exact length for the elapsed/total clock.
 				useListenEstimateStore
 					.getState()
-					.recordSample(text.length, buffer.duration, snap.speed);
+					.recordSample(
+						listenRateKey(snap.engineId, snap.voice),
+						text.length,
+						buffer.duration,
+						snap.speed,
+					);
 				chunkSec += buffer.duration;
 				if (k === parts.length - 1) {
 					useTtsStore.getState().recordChunkBaseSec(idx, chunkSec * snap.speed);

@@ -172,6 +172,11 @@ export type AppRpcSchema = {
 			params: { filePath: string };
 			response: { data: Uint8Array; mime: string } | null;
 		};
+		/** Text length of each chapter by id (EPUB), for the time-left estimate. */
+		getChapterTextLengths: {
+			params: { filePath: string };
+			response: Record<string, number> | null;
+		};
 		/** Find text in the current page; results arrive via onFoundInPage. */
 		findInPage: {
 			params: { text: string; forward?: boolean; findNext?: boolean };

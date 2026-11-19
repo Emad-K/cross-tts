@@ -51,6 +51,8 @@ const api: AppApi = {
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
 		getBookCoverBytes: (params) =>
 			ipcRenderer.invoke("getBookCoverBytes", params),
+		getChapterTextLengths: (params) =>
+			ipcRenderer.invoke("getChapterTextLengths", params),
 		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
 		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),

@@ -79,6 +79,7 @@ import {
 	pickDocument,
 	readDocumentAtPath,
 } from "./documentIo";
+import { registerChapterLengthHandlers } from "./chapterLengths";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
 import {
 	pushWatchedFiles,
@@ -512,6 +513,7 @@ function registerRpcHandlers(): void {
 		"getBookCoverBytes",
 		(_event, { filePath }: { filePath: string }) => getBookCoverBytes(filePath),
 	);
+	registerChapterLengthHandlers();
 	ipcMain.handle(
 		"findInPage",
 		(

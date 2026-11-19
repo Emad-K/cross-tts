@@ -7,8 +7,9 @@ import { useListenEstimateStore } from "./listenEstimateStore";
  * into the listen-estimate store, where the sleep timer's chapter targeting
  * reads it. Chapterless documents (TXT) sync an empty list.
  *
- * The measured synthesis rate that powers the chapter ETA is fed separately
- * by the TTS engine via recordSample.
+ * It also fetches the book's chapter text lengths for the "time left in book"
+ * estimate. The measured synthesis rate is fed separately by the TTS engine
+ * via recordSample.
  */
 export function ListenEstimateSync({
 	document,
@@ -23,6 +24,24 @@ export function ListenEstimateSync({
 	useEffect(() => {
 		setChapters(document?.format === "epub" ? document.chapters : []);
 	}, [document, setChapters]);
+
+	// Chapter text lengths for the "time left in book" estimate.
+	const filePath = document?.format === "epub" ? document.filePath : null;
+	useEffect(() => {
+		const { setChapterChars } = useListenEstimateStore.getState();
+		setChapterChars(null);
+		if (!filePath) return;
+		let cancelled = false;
+		void window.api?.request
+			.getChapterTextLengths({ filePath })
+			.then((lengths) => {
+				if (!cancelled) setChapterChars(lengths);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [filePath]);
 
 	useEffect(() => {
 		setActiveChapter(activeChapterId);

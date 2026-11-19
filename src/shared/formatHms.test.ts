@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatClock, formatHms } from "./formatHms";
+import { formatClock, formatDurationShort, formatHms } from "./formatHms";
 
 describe("formatHms", () => {
 	test("always shows zero-padded hours", () => {
@@ -50,5 +50,22 @@ describe("formatClock", () => {
 		expect(formatClock(59.6)).toBe("1:00");
 		expect(formatClock(-30)).toBe("0:00");
 		expect(formatClock(Number.NaN)).toBe("0:00");
+	});
+});
+
+describe("formatDurationShort", () => {
+	test("seconds, minutes (rounded up), hours", () => {
+		expect(formatDurationShort(0)).toBe("0 sec");
+		expect(formatDurationShort(45)).toBe("45 sec");
+		expect(formatDurationShort(61)).toBe("2 min");
+		expect(formatDurationShort(12 * 60)).toBe("12 min");
+		expect(formatDurationShort(3600)).toBe("1 h");
+		expect(formatDurationShort(6 * 3600 + 40 * 60)).toBe("6 h 40 m");
+		expect(formatDurationShort(59 * 60 + 30)).toBe("1 h");
+	});
+
+	test("clamps negatives and non-finite input", () => {
+		expect(formatDurationShort(-5)).toBe("0 sec");
+		expect(formatDurationShort(Number.NaN)).toBe("0 sec");
 	});
 });

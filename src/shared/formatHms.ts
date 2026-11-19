@@ -32,3 +32,17 @@ export function formatClock(seconds: number, forceHours = false): string {
 	const pad = (n: number) => String(n).padStart(2, "0");
 	return h > 0 || forceHours ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
+
+/**
+ * Rough spoken-style duration for "time left" labels: "45 sec", "12 min",
+ * "6 h 40 m". Minutes round up so the label never reads "0 min".
+ */
+export function formatDurationShort(seconds: number): string {
+	const sec = Number.isFinite(seconds) ? Math.max(0, Math.round(seconds)) : 0;
+	if (sec < 60) return `${sec} sec`;
+	const min = Math.ceil(sec / 60);
+	if (min < 60) return `${min} min`;
+	const h = Math.floor(min / 60);
+	const m = min % 60;
+	return m === 0 ? `${h} h` : `${h} h ${m} m`;
+}
