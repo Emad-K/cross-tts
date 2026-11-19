@@ -23,6 +23,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useAppSettingsStore } from "./appSettingsStore";
+import { HighlightModeControl } from "./HighlightModeControl";
 
 const MODES: { id: ColorMode; label: string; icon: typeof Sun }[] = [
 	{ id: "system", label: "System", icon: Monitor },
@@ -58,7 +59,7 @@ export function AppearancePanel() {
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12">
 				<h2 className="text-base font-semibold leading-none">Appearance</h2>
 				<p className="text-sm text-muted-foreground">
-					Theme, light/dark mode, and the reading font.
+					Theme, light/dark mode, the reading font and the read-along highlight.
 				</p>
 			</div>
 			<ScrollArea className="min-h-0 w-full flex-1">
@@ -181,6 +182,8 @@ export function AppearancePanel() {
 							Space around the document text. Tighter shows more per screen.
 						</p>
 					</Field>
+
+					<HighlightModeControl />
 				</div>
 			</ScrollArea>
 		</div>

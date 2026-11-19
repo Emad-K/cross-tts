@@ -1,5 +1,6 @@
 import { Download, FolderOpen, FolderPlus, Loader2, RotateCcw, X } from "lucide-react";
 import { useId, useState } from "react";
+import { SUPPORTED_DOCUMENT_LABEL } from "@shared/droppedFiles";
 import type { UpdateStatus } from "@shared/updateStatus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,8 @@ import {
 } from "@/lib/desktopBridge";
 import { cn } from "@/lib/utils";
 import { useAppSettingsStore } from "./appSettingsStore";
+import { BackupRestoreControl } from "./BackupRestoreControl";
+import { CloseToTrayControl } from "./CloseToTrayControl";
 import { SectionPane, SettingsGroup } from "./SectionPane";
 import { useUpdateStore } from "./updateStore";
 
@@ -93,7 +96,7 @@ function WatchedFolders() {
 				Add folder…
 			</Button>
 			<p className="text-[11px] text-muted-foreground">
-				New .epub and .txt files in these folders (and their direct
+				New {SUPPORTED_DOCUMENT_LABEL} in these folders (and their direct
 				subfolders) are added to your library automatically.
 			</p>
 		</div>
@@ -240,7 +243,8 @@ function DataFolder() {
 				</p>
 			</div>
 			<p className="text-[11px] text-muted-foreground">
-				Where voice models and your reading session are saved on this device.
+				Where voice models, your library, notes and listening time are saved
+				on this device.
 			</p>
 			<div className="flex flex-wrap items-center gap-2">
 				<Button
@@ -331,8 +335,11 @@ export function GeneralPanel() {
 	return (
 		<SectionPane
 			title="General"
-			description="Your library folders, updates, storage and crash reports."
+			description="Background playback, your library folders, updates, storage and crash reports."
 		>
+			<SettingsGroup title="Background playback">
+				<CloseToTrayControl />
+			</SettingsGroup>
 			<SettingsGroup title="Library">
 				<WatchedFolders />
 			</SettingsGroup>
@@ -341,6 +348,7 @@ export function GeneralPanel() {
 			</SettingsGroup>
 			<SettingsGroup title="Storage">
 				<DataFolder />
+				<BackupRestoreControl />
 			</SettingsGroup>
 			<SettingsGroup title="Crash reports">
 				<CrashReports />

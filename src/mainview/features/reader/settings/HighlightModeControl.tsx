@@ -23,7 +23,7 @@ export function HighlightModeControl() {
 	return (
 		<div className="rounded-lg border border-border bg-muted/20 p-4">
 			<div id={labelId} className="mb-3 text-sm font-medium">
-				Highlight
+				Reading highlight
 			</div>
 			<Select
 				value={mode}
