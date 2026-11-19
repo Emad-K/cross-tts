@@ -673,8 +673,13 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 					const i = idx;
 					void (prev?.ended ?? Promise.resolve()).then(() => {
 						if (ready || signal.aborted) return;
-						sweepSpan = null;
-						useSweepStore.getState().setProgress(0);
+						// Waiting on a fast-start tail: the sweep stays where the
+						// head left it (its span clamps at `to`) instead of
+						// jumping back to the sentence start.
+						if (k === 0) {
+							sweepSpan = null;
+							useSweepStore.getState().setProgress(0);
+						}
 						showChunk(i, "buffering");
 					});
 				}
