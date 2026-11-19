@@ -11,3 +11,12 @@ onlyBuiltDependencies:
   - onnxruntime-node
   - protobufjs
   - sharp
+
+# Patched transitive versions for audit advisories: protobufjs and tar come in
+# through @huggingface/transformers (onnxruntime-web / onnxruntime-node),
+# js-yaml through electron-updater (and electron-builder). Drop each once the
+# parent package ships with that version or newer.
+overrides:
+  protobufjs@7: ^7.6.6
+  tar@7: ^7.5.23
+  js-yaml@4: ^4.3.2
