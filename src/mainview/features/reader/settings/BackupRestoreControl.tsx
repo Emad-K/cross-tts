@@ -150,7 +150,7 @@ export function BackupRestoreControl() {
 									</dd>
 								</div>
 								<div>
-									<dt className="font-medium text-foreground">Replace</dt>
+									<dt className="font-medium text-foreground">Replace everything</dt>
 									<dd>
 										Your library, bookmarks, notes, listening time, text rules
 										and settings become what the backup has. What is here now
@@ -165,11 +165,11 @@ export function BackupRestoreControl() {
 							Cancel
 						</Button>
 						<Button
-							variant="outline"
+							variant="destructive"
 							disabled={busy}
 							onClick={() => void onRestore("replace")}
 						>
-							Replace
+							Replace everything
 						</Button>
 						<Button disabled={busy} onClick={() => void onRestore("merge")}>
 							Merge
