@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
@@ -57,6 +57,11 @@ test("renders a CRLF EPUB chapter with intact read-along offsets", async () => {
 				},
 			}),
 		);
+
+		// Settings written by 1.14 with the GPU switched off: 1.15 must show
+		// that as the "CPU (native)" backend choice (see coerceTtsBackend).
+		const configPath = join(userDataDir, "app-config.json");
+		writeFileSync(configPath, JSON.stringify({ version: 2, gpuEnabled: false }));
 
 		electronApp = await _electron.launch({
 			args: [
@@ -157,6 +162,26 @@ test("renders a CRLF EPUB chapter with intact read-along offsets", async () => {
 				(m) => m.includes("plain text mismatch") || m.includes("offset drift"),
 			);
 			expect(offsetWarnings).toEqual([]);
+		});
+
+		await test.step("Settings → Performance: backend picker, migrated from 1.14", async () => {
+			await page.getByRole("button", { name: "Settings" }).click();
+			await page.getByRole("button", { name: "Performance" }).click();
+			const picker = page.getByRole("combobox", { name: "Speech backend" });
+			await expect(picker).toContainText("CPU (native)");
+			// The benchmark is offered but never starts by itself.
+			await expect(page.getByRole("button", { name: "Run benchmark" })).toBeVisible();
+			await expect(page.getByText("measuring…")).toHaveCount(0);
+
+			await picker.click();
+			await expect(page.getByRole("option", { name: /CPU \(WASM/ })).toBeVisible();
+			await page.getByRole("option", { name: "Auto (recommended)" }).click();
+			await expect(picker).toContainText("Auto (recommended)");
+			await expect
+				.poll(() => JSON.parse(readFileSync(configPath, "utf8")).ttsBackend)
+				.toBe("auto");
+			// Kept in step for a downgrade to 1.14, which only reads this switch.
+			expect(JSON.parse(readFileSync(configPath, "utf8")).gpuEnabled).toBe(true);
 		});
 	} finally {
 		await electronApp?.close().catch(() => {});
