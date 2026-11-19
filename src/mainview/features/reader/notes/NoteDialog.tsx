@@ -24,7 +24,10 @@ export function NoteColorSwatches({
 	value,
 	onPick,
 	labelPrefix = "Highlight",
+	role,
 }: {
+	/** Set when the swatches are items of a menu. */
+	role?: "menuitem";
 	value?: NoteColor;
 	onPick: (color: NoteColor) => void;
 	labelPrefix?: string;
@@ -35,6 +38,7 @@ export function NoteColorSwatches({
 				<button
 					key={color}
 					type="button"
+					role={role}
 					aria-label={`${labelPrefix} ${color}`}
 					aria-pressed={value === undefined ? undefined : value === color}
 					title={`${labelPrefix} ${color}`}

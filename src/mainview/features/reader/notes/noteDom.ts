@@ -9,7 +9,7 @@ import { chapterLength, locateOffset, shownOffset } from "./noteOffsets";
  * an EPUB page can show more spaces than the chapter text has. Nothing here
  * changes the DOM.
  */
-const CHUNK = "[data-chunk-index]";
+export const CHUNK = "[data-chunk-index]";
 
 /** Every chunk's spans, in document order. */
 export function chunkElements(root: HTMLElement): Map<number, HTMLElement[]> {

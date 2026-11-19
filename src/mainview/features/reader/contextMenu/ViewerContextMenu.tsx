@@ -48,7 +48,9 @@ const MAX_PRONUNCIATION_CHARS = 60;
  * Custom right-click menu for the reader viewers (Copy / Find / Look up /
  * Highlight / notes / Fix pronunciation).
  * Rendered into `document.body` at the pointer position; closes on
- * click-away, Escape, scroll, resize or window blur.
+ * click-away, Escape, Tab, scroll, resize or window blur. It takes focus when
+ * it opens (arrow keys, Home and End move through it) and gives focus back
+ * when it closes, so it also works from Shift+F10 or the Menu key.
  */
 export function ViewerContextMenu({
 	x,
@@ -83,15 +85,41 @@ export function ViewerContextMenu({
 	}, [x, y]);
 
 	useEffect(() => {
+		const opener = document.activeElement;
+		menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
+		return () => {
+			if (opener instanceof HTMLElement) opener.focus({ preventScroll: true });
+		};
+	}, []);
+
+	useEffect(() => {
 		const onPointerDown = (e: PointerEvent) => {
 			if (menuRef.current?.contains(e.target as Node)) return;
 			onClose();
 		};
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
+			if (e.key === "Escape" || e.key === "Tab") {
 				e.preventDefault();
 				onClose();
+				return;
 			}
+			const items = [...(menuRef.current?.querySelectorAll("button") ?? [])];
+			const at = items.indexOf(document.activeElement as HTMLButtonElement);
+			const to =
+				e.key === "ArrowDown" || e.key === "ArrowRight"
+					? (at + 1) % items.length
+					: e.key === "ArrowUp" || e.key === "ArrowLeft"
+						? (at <= 0 ? items.length : at) - 1
+						: e.key === "Home"
+							? 0
+							: e.key === "End"
+								? items.length - 1
+								: -1;
+			if (to < 0) return;
+			// Not for the page behind: arrows would scroll it or skip sentences.
+			e.preventDefault();
+			e.stopPropagation();
+			items[to]?.focus();
 		};
 		const close = () => onClose();
 		window.addEventListener("pointerdown", onPointerDown, true);
@@ -165,6 +193,7 @@ export function ViewerContextMenu({
 					<Highlighter aria-hidden />
 					<span className="flex-1">Highlight</span>
 					<NoteColorSwatches
+						role="menuitem"
 						onPick={(color) => {
 							onHighlight(color);
 							onClose();

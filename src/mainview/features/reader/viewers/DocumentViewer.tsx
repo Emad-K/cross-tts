@@ -101,7 +101,12 @@ export function DocumentViewer({
 					x: e.clientX,
 					y: e.clientY,
 					selection: window.getSelection()?.toString() ?? "",
-					...captureNoteTarget(rootRef.current, e.clientX, e.clientY),
+					...captureNoteTarget(
+						rootRef.current,
+						e.clientX,
+						e.clientY,
+						e.target as Element,
+					),
 				});
 			}}
 		>

@@ -5,7 +5,7 @@ import {
 	reanchor,
 } from "@shared/notes";
 import { normalizedReaderText, useTtsStore } from "../tts";
-import { offsetAtClientPoint, selectionOffsets } from "./noteDom";
+import { CHUNK, offsetAtClientPoint, selectionOffsets } from "./noteDom";
 import { trimRange } from "./noteOffsets";
 import { getNoteLocation, useNotesStore } from "./notesStore";
 
@@ -17,18 +17,36 @@ export type NoteTarget = {
 	existing: Note | null;
 };
 
-/** Read the selection and pointer position at right-click time. */
+/**
+ * Read the selection and pointer position at right-click time. With nothing
+ * selected, the sentence that was clicked (or has keyboard focus, for
+ * Shift+F10) is what can be highlighted.
+ */
 export function captureNoteTarget(
 	root: HTMLElement | null,
 	x: number,
 	y: number,
+	target: Element | null,
 ): NoteTarget {
 	const { path, chapterId } = getNoteLocation();
 	const { chunks, sourceText } = useTtsStore.getState();
 	if (!root || !path || chunks.length === 0) return { draft: null, existing: null };
 	const text = normalizedReaderText(sourceText);
 
-	const sel = selectionOffsets(root, chunks);
+	const at = offsetAtClientPoint(root, chunks, x, y);
+	const existing =
+		at === null
+			? null
+			: ((useNotesStore.getState().byPath[path] ?? []).find((n) => {
+					if (n.chapterId !== chapterId) return false;
+					const r = reanchor(n, text);
+					return r !== null && r.start <= at && at < r.end;
+				}) ?? null);
+
+	const sentence =
+		chunks[Number(target?.closest<HTMLElement>(CHUNK)?.dataset.chunkIndex)];
+	const sel =
+		selectionOffsets(root, chunks) ?? (existing ? null : (sentence ?? null));
 	const range = sel && trimRange(text, sel.start, sel.end);
 	const now = Date.now();
 	const draft: Note | null = range && {
@@ -40,16 +58,6 @@ export function captureNoteTarget(
 		createdAt: now,
 		updatedAt: now,
 	};
-
-	const at = offsetAtClientPoint(root, chunks, x, y);
-	const existing =
-		at === null
-			? null
-			: ((useNotesStore.getState().byPath[path] ?? []).find((n) => {
-					if (n.chapterId !== chapterId) return false;
-					const r = reanchor(n, text);
-					return r !== null && r.start <= at && at < r.end;
-				}) ?? null);
 	return { draft, existing };
 }
 
