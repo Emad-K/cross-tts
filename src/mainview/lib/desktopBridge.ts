@@ -269,6 +269,22 @@ export async function downloadModel(
 	return b.request.downloadModel({ kind });
 }
 
+export async function removeModel(
+	kind: ModelKind,
+): Promise<ModelStatusMap | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.removeModel({ kind });
+}
+
+export async function setCrashPromptDisabled(
+	disabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setCrashPromptDisabled({ disabled });
+}
+
 /** Subscribe to model-download progress. No-op (noop unsubscribe) on web. */
 export function subscribeToModelProgress(
 	listener: (progress: ModelProgress) => void,

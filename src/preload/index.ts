@@ -34,6 +34,9 @@ const api: AppApi = {
 		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
 		supertonicPresent: () => ipcRenderer.invoke("supertonicPresent"),
 		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
+		removeModel: (params) => ipcRenderer.invoke("removeModel", params),
+		setCrashPromptDisabled: (params) =>
+			ipcRenderer.invoke("setCrashPromptDisabled", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
 		setGpuFp16: (params) => ipcRenderer.invoke("setGpuFp16", params),
 		setShortcutsEnabled: (params) =>

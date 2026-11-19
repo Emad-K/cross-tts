@@ -22,7 +22,7 @@ export const APP_CONFIG_VERSION = 2;
 export type GpuPowerPreference = "auto" | "high-performance" | "low-power";
 
 /**
- * Where speech synthesis runs (Settings → Performance). "auto" picks the best
+ * Where speech synthesis runs (Settings → Voice → Advanced). "auto" picks the best
  * backend that works; the others are explicit choices that still fall back to
  * the CPU when they can't start.
  */
@@ -147,6 +147,8 @@ export type AppConfigInfo = {
 	appearance: Appearance;
 	/** Folders scanned for new .epub/.txt files to auto-add to the library. */
 	watchedFolders: string[];
+	/** True when the dialog offering to report a crash is switched off. */
+	crashPromptDisabled: boolean;
 	/** Whether model files already exist on disk at `dataDir`. */
 	modelsDownloaded: boolean;
 	/** Approximate size of downloaded model files, in bytes. */

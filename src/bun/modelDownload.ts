@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { modelCacheDir } from "./appConfigStore";
 import { downloadToFile } from "./modelCache";
@@ -60,6 +60,11 @@ export function supertonicPresent(): boolean {
 					filePath({ repo: SUPERTONIC_REPO, revision: SUPERTONIC_REVISION, path }),
 				) >= 1,
 		);
+}
+
+/** Delete a model's weights. Its small sidecars stay: Kokoro's kinds share them. */
+export function removeModel(kind: ModelKind): void {
+	rmSync(filePath(MODEL_FILES[kind].weights), { force: true });
 }
 
 function fetchToDisk(

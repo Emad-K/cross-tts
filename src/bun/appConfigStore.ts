@@ -298,6 +298,7 @@ export function appConfigInfo(): AppConfigInfo {
 		autoUpdate: config.autoUpdate,
 		appearance: config.appearance,
 		watchedFolders: config.watchedFolders,
+		crashPromptDisabled: config.crashPromptDisabled,
 		modelsDownloaded: modelBytes > 0,
 		modelBytes,
 	};

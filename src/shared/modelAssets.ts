@@ -45,7 +45,7 @@ export const MODEL_SHA256: Readonly<Record<string, string>> = {
 		"fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 	"onnx/model.onnx":
 		"8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb",
-	// Opt-in WebGPU half precision (Settings → Performance).
+	// Opt-in WebGPU half precision (Settings → Voice → Advanced).
 	"onnx/model_fp16.onnx":
 		"ba4527a874b42b21e35f468c10d326fdff3c7fc8cac1f85e9eb6c0dfc35c334a",
 };
@@ -161,7 +161,7 @@ export const HUB_REPOS: Readonly<Record<string, readonly HubRepo[]>> = {
 export type HubFile = { repo: string; revision: string; path: string };
 
 /**
- * What Settings → Storage downloads per model kind: the weights, the small
+ * What Settings → Voice downloads per model kind: the weights, the small
  * files loading needs (the model is present only when all are on disk), and
  * optional files that may 404.
  */
@@ -214,13 +214,31 @@ export const MODEL_FILES: Record<
 })();
 
 export const MODEL_LABEL: Record<ModelKind, string> = {
-	cpu: "Fallback model (compatibility)",
-	gpu: "Voice model (GPU & CPU)",
-	fp16: "Half-precision GPU model (optional)",
+	cpu: "Compatibility model",
+	gpu: "Kokoro 82M model",
+	fp16: "Smaller graphics-card model",
 	phonon: "Phonon 31M model and voices",
 };
 
 export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "fp16", "phonon"];
+
+/**
+ * Download size in bytes of each kind's files at the pinned revisions (the
+ * weights; for Phonon also its 30 voices and tokenizer). Shown before a
+ * download; bump with the revisions.
+ */
+export const MODEL_BYTES: Record<ModelKind, number> = {
+	cpu: 92_361_116,
+	gpu: 325_532_232,
+	fp16: 163_234_740,
+	phonon: 72_474_399,
+};
+
+/** Download size in bytes of Supertonic 3's four ONNX graphs and configs. */
+export const SUPERTONIC_BYTES = 398_361_202;
+
+/** Optional models Settings can delete again; the others are an engine's only model. */
+export const REMOVABLE_MODEL_KINDS = ["cpu", "fp16"] as const;
 
 export type ModelStatus = { present: boolean; bytes: number };
 export type ModelStatusMap = Record<ModelKind, ModelStatus>;

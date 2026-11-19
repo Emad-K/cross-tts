@@ -97,7 +97,7 @@ export type AppRpcSchema = {
 			params: void;
 			response: ModelStatusMap;
 		};
-		/** Whether Supertonic 3's model is on disk (it has no Storage row). */
+		/** Whether Supertonic 3's model is on disk (it isn't a ModelKind). */
 		supertonicPresent: {
 			params: void;
 			response: boolean;
@@ -106,6 +106,16 @@ export type AppRpcSchema = {
 		downloadModel: {
 			params: { kind: ModelKind };
 			response: ModelStatusMap;
+		};
+		/** Delete an optional model's weights (REMOVABLE_MODEL_KINDS only). */
+		removeModel: {
+			params: { kind: ModelKind };
+			response: ModelStatusMap;
+		};
+		/** Switch the "report this crash?" dialog off or back on. */
+		setCrashPromptDisabled: {
+			params: { disabled: boolean };
+			response: AppConfigInfo;
 		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {

@@ -43,6 +43,7 @@ import {
 	setCpuThreads,
 	setDataDir,
 	setTtsBackend,
+	setCrashPromptDisabled,
 	setGpuFp16,
 	setGpuPower,
 	setShortcutBinding,
@@ -53,10 +54,15 @@ import {
 	setShortcutTarget,
 	unregisterGlobalShortcuts,
 } from "./globalShortcuts";
-import { downloadModel, modelStatus, supertonicPresent } from "./modelDownload";
+import { downloadModel, modelStatus, removeModel, supertonicPresent } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
 import type { Appearance } from "../shared/appearance";
-import { MODEL_KINDS, MODEL_LABEL, type ModelKind } from "../shared/modelAssets";
+import {
+	MODEL_KINDS,
+	MODEL_LABEL,
+	REMOVABLE_MODEL_KINDS,
+	type ModelKind,
+} from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -583,6 +589,29 @@ function registerRpcHandlers(): void {
 		}
 		return modelStatus();
 	});
+	ipcMain.handle("removeModel", (_event, params: { kind?: unknown } | undefined) => {
+		const kind = REMOVABLE_MODEL_KINDS.find((k) => k === params?.kind);
+		if (kind) {
+			try {
+				removeModel(kind);
+			} catch (e) {
+				mainLog({
+					level: "error",
+					source: "models",
+					message: `Couldn't remove ${MODEL_LABEL[kind]}.`,
+					detail: e instanceof Error ? e.message : String(e),
+				});
+			}
+		}
+		return modelStatus();
+	});
+	ipcMain.handle(
+		"setCrashPromptDisabled",
+		(_event, params: { disabled?: unknown } | undefined) => {
+			if (typeof params?.disabled === "boolean") setCrashPromptDisabled(params.disabled);
+			return appConfigInfo();
+		},
+	);
 	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
 		setCpuThreads(threads);
 		return appConfigInfo();
