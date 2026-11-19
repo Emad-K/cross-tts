@@ -30,3 +30,12 @@ overrides:
   js-yaml@4: ^4.3.2
   onnxruntime-node: 1.31.1
   onnxruntime-web: 1.31.1
+
+# Install sharp's prebuilt binaries for both CPU architectures we package, not
+# just the host's: CI builds Linux arm64 on an x64 runner, and transformers
+# requires sharp at load, so without the arm64 binary the native TTS process
+# dies there. electron-builder.yml keeps only the packaged arch's copy.
+supportedArchitectures:
+  os: [current]
+  cpu: [x64, arm64]
+  libc: [glibc]

@@ -38,6 +38,9 @@ files:
   # main/utility only load dist/transformers.node.cjs; the web builds are dead
   # weight (Vite bundles what the renderer needs into out/renderer).
   - "!**/node_modules/@huggingface/transformers/dist/!(transformers.node.cjs)"
+  # pnpm installs sharp's binaries for x64 and arm64 (supportedArchitectures in
+  # pnpm-workspace.yaml); keep the packaged arch's (@img/colour has no arch).
+  - "!**/node_modules/@img/sharp-!(*${arch})/**"
 
 asar: true
 npmRebuild: false
