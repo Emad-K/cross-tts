@@ -10,7 +10,7 @@ import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
 import { isExportActive } from "../audiobook/exportStore";
 import { createIdleWarmer, idleWarmKey } from "./idleWarm";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
-import { isBenchmarkRunning } from "./benchmark";
+import { isBenchmarkRunning, stopBenchmark } from "./benchmark";
 import { splitForFastStart } from "./chunkText";
 import { SynthCore } from "./synthCore";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
@@ -556,6 +556,8 @@ function stopActiveSource(): void {
  * Stops any active playback first.
  */
 export function resetTtsEngine(): void {
+	// A benchmark must not keep measuring an engine unloaded under it.
+	stopBenchmark();
 	stopPlaybackUi();
 	activeEngine().dispose();
 	core.clear();
@@ -567,6 +569,7 @@ export function resetTtsEngine(): void {
  */
 export function switchTtsEngine(previousId: string): void {
 	if (getTtsEngine(previousId) === activeEngine()) return;
+	stopBenchmark();
 	getTtsEngine(previousId).dispose();
 	core.clear();
 	// A loop loading or suspended on the old engine would fail with "TTS engine

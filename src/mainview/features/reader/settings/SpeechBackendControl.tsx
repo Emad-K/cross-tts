@@ -181,8 +181,9 @@ function BackendBenchmark({
 		setPhase("running");
 		// Stops paused playback and unloads the model; the benchmark loads its own.
 		resetTtsEngine();
+		let finished = false;
 		try {
-			await runBenchmark({
+			finished = await runBenchmark({
 				engine: getTtsEngine(engineId),
 				candidates,
 				prefs: (backend) => ({
@@ -201,7 +202,8 @@ function BackendBenchmark({
 			resetTtsEngine();
 			if (abort.current === controller) {
 				abort.current = null;
-				setPhase(controller.signal.aborted ? "idle" : "done");
+				// Stopped early (Cancel, or a setting changed): no result to act on.
+				setPhase(finished ? "done" : "idle");
 			}
 		}
 	};
@@ -354,6 +356,9 @@ export function SpeechBackendControl() {
 	};
 
 	const removeAddon = async () => {
+		// Unload first (this also stops a running benchmark): removing stops
+		// the native engine, which may have the libraries loaded.
+		resetTtsEngine();
 		const next = await cudaAddonRemove();
 		if (next) setConfig(next);
 		resetTtsEngine();

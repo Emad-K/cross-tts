@@ -8,6 +8,7 @@ import {
 	fastestBackend,
 	isBenchmarkRunning,
 	runBenchmark,
+	stopBenchmark,
 } from "./benchmark";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
 
@@ -115,6 +116,30 @@ describe("runBenchmark", () => {
 		});
 		expect(rows).toEqual([]);
 		expect(engine.activeBackend()).toBeNull();
+		expect(isBenchmarkRunning()).toBe(false);
+	});
+
+	test("a reset from outside stops it without a false \"couldn't start\"", async () => {
+		const { engine, now } = fakeEngine({ cpu: { load: 1, synth: 1 }, wasm: { load: 1, synth: 1 } });
+		const rows: BenchmarkRow[] = [];
+		const synthesize = engine.synthesize.bind(engine);
+		engine.synthesize = async (...args) => {
+			// What resetTtsEngine does when a setting changes mid-run.
+			if (rows.length === 1) stopBenchmark();
+			return synthesize(...args);
+		};
+		const finished = await runBenchmark({
+			engine,
+			candidates: [{ backend: "cpu" }, { backend: "wasm" }],
+			prefs,
+			voice: "v",
+			signal: new AbortController().signal,
+			onRow: (row) => rows.push(row),
+			now,
+		});
+		expect(finished).toBe(false);
+		expect(rows.map((r) => r.backend)).toEqual(["cpu"]);
+		expect(rows[0]!.note).toBeUndefined();
 		expect(isBenchmarkRunning()).toBe(false);
 	});
 });

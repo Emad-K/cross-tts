@@ -69,17 +69,28 @@ export function benchmarkCandidates(
 	return out;
 }
 
-let running = false;
+/** Stops the benchmark in progress, if any. */
+let stop: (() => void) | null = null;
 
 /** True while a benchmark owns the engine; playback must not start then. */
 export function isBenchmarkRunning(): boolean {
-	return running;
+	return stop !== null;
+}
+
+/**
+ * End a running benchmark early. Called before anything else unloads the
+ * engine (a changed setting, a deleted model): otherwise the backend being
+ * measured would fail and be reported as "couldn't start".
+ */
+export function stopBenchmark(): void {
+	stop?.();
 }
 
 /**
  * Measure each candidate in turn. `onRow` gets every finished row. Aborting
- * `signal` unloads the engine at once, which fails whatever is in flight.
- * The engine is left unloaded.
+ * `signal` (or stopBenchmark) unloads the engine at once, which fails
+ * whatever is in flight. The engine is left unloaded. Resolves true when
+ * every candidate was handled, false when it was stopped early.
  */
 export async function runBenchmark(opts: {
 	engine: TtsEngine;
@@ -90,15 +101,19 @@ export async function runBenchmark(opts: {
 	signal: AbortSignal;
 	onRow: (row: BenchmarkRow) => void;
 	now?: () => number;
-}): Promise<void> {
+}): Promise<boolean> {
 	const { engine, signal } = opts;
 	const now = opts.now ?? (() => performance.now());
-	const cancel = () => engine.dispose();
+	let stopped = signal.aborted;
+	const cancel = () => {
+		stopped = true;
+		engine.dispose();
+	};
 	signal.addEventListener("abort", cancel);
-	running = true;
+	stop = cancel;
 	try {
 		for (const { backend, skip } of opts.candidates) {
-			if (signal.aborted) return;
+			if (stopped) return false;
 			if (skip) {
 				opts.onRow({ backend, note: skip });
 				continue;
@@ -131,12 +146,13 @@ export async function runBenchmark(opts: {
 					realtime: pcm.length / engine.sampleRate / (Math.max(secondMs, 1) / 1000),
 				});
 			} catch {
-				if (signal.aborted) return;
+				if (stopped) return false;
 				opts.onRow({ backend, note: "couldn't start" });
 			}
 		}
+		return !stopped;
 	} finally {
-		running = false;
+		stop = null;
 		signal.removeEventListener("abort", cancel);
 		engine.dispose();
 	}
