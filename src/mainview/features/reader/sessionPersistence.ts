@@ -268,6 +268,15 @@ export function subscribeDebouncedSessionSave(
 		}
 	};
 
+	// Window close / app quit may not fire visibilitychange, and the main process
+	// does no final save of its own. invoke() posts the IPC message right away,
+	// so a pending save still reaches main before the window is torn down.
+	const onUnload = () => {
+		if (timer === null) return;
+		clearTimeout(timer);
+		flush();
+	};
+
 	const unsubStore = useTtsStore.subscribe(schedule);
 	const unsubRules = useTtsRulesStore.subscribe(schedule);
 	const unsubBookmarks = useBookmarksStore.subscribe(schedule);
@@ -275,11 +284,15 @@ export function subscribeDebouncedSessionSave(
 		if (!writingLibraryFromSlice) schedule();
 	});
 	document.addEventListener("visibilitychange", onVisibility);
+	window.addEventListener("beforeunload", onUnload);
+	window.addEventListener("pagehide", onUnload);
 	scheduleSave = schedule;
 	schedule();
 
 	return () => {
 		document.removeEventListener("visibilitychange", onVisibility);
+		window.removeEventListener("beforeunload", onUnload);
+		window.removeEventListener("pagehide", onUnload);
 		unsubStore();
 		unsubRules();
 		unsubBookmarks();
