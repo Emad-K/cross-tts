@@ -116,3 +116,11 @@ describe("loadChapteredBook", () => {
 		expect(loadChapteredBook(empty)).rejects.toThrow("has no text to read");
 	});
 });
+
+test("a file of unclosed <title tags is converted quickly and keeps the file's name", async () => {
+	const bytes = new TextEncoder().encode(`${"<title".repeat(80_000)}<p>Hello.</p>`);
+	const started = performance.now();
+	const { title } = await convertToChapters("html", bytes, "from-file");
+	expect(title).toBe("from-file");
+	expect(performance.now() - started).toBeLessThan(2000);
+});

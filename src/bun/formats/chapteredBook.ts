@@ -79,7 +79,11 @@ export async function convertToChapters(
 		html = markdownToHtml(new TextDecoder("utf-8").decode(bytes));
 	} else {
 		html = decodeHtml(bytes);
-		const named = /<title\b[^>]*>([^<]*)<\/title\s*>/i.exec(html)?.[1];
+		// Head of the file only, with bounded runs: an unanchored scan of a
+		// crafted file is quadratic.
+		const named = /<title\b[^<>]{0,200}>([^<]{0,1000})<\/title\s*>/i.exec(
+			html.slice(0, 65536),
+		)?.[1];
 		title = named?.replace(/\s+/g, " ").trim().slice(0, 200) || fileTitle;
 	}
 	return { title, chapters: htmlToChapters(html, title) };
