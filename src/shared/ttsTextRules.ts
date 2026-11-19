@@ -431,11 +431,10 @@ function ruleBook(r: Record<string, unknown>): { book?: string } {
 }
 
 /**
- * The rules that apply while reading `book`: all-books rules plus that book's
- * own, ordered so the book's rule has the last word. Regex rules run in order,
- * so the book's go last (they see text the general rules already cleaned).
- * Pronunciation takes the first rule that matches a word, so the book's go
- * first there.
+ * The rules that apply while reading `book`: that book's own rules, then the
+ * all-books ones. The book's rule wins for the same word in both kinds: regex
+ * rules run in order, so the book's rewrites the word before a general rule
+ * can, and pronunciation takes the first rule that matches.
  */
 export function effectiveTtsRules(
 	state: TtsTextRulesState,
@@ -448,7 +447,7 @@ export function effectiveTtsRules(
 	const regex = split(state.regexRules);
 	const pron = split(state.pronunciationRules);
 	return {
-		regexRules: [...regex.all, ...regex.own],
+		regexRules: [...regex.own, ...regex.all],
 		pronunciationRules: [...pron.own, ...pron.all],
 	};
 }

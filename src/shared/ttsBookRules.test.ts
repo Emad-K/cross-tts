@@ -57,14 +57,30 @@ describe("effectiveTtsRules", () => {
 		expect(rules.pronunciationRules.map((r) => r.id)).toEqual(["global-qi"]);
 	});
 
-	test("a book's regex rules run after the all-books ones", () => {
+	test("a book's regex rules run before the all-books ones", () => {
 		const rules = effectiveTtsRules(state, "/a.epub");
-		expect(rules.regexRules.map((r) => r.id)).toEqual(["global", "book-a"]);
-		// dog → cat (all books), then cat → lion (this book).
-		expect(applyTtsTextRules("a dog", rules)).toBe("a lion");
+		expect(rules.regexRules.map((r) => r.id)).toEqual(["book-a", "global"]);
 		expect(applyTtsTextRules("a dog", effectiveTtsRules(state, "/c.txt"))).toBe(
 			"a cat",
 		);
+	});
+
+	test("a book's respelling beats the all-books one for the same word", () => {
+		const respell = (id: string, replacement: string, book?: string) => ({
+			...state.regexRules[0]!,
+			id,
+			pattern: "\\bSiobhan\\b",
+			replacement,
+			book,
+		});
+		const both = {
+			regexRules: [respell("all", "shiv-awn"), respell("own", "see-oh-ban", "/a.epub")],
+			pronunciationRules: [],
+		};
+		const say = (book: string) =>
+			applyTtsTextRules("Siobhan smiled.", effectiveTtsRules(both, book));
+		expect(say("/a.epub")).toBe("see-oh-ban smiled.");
+		expect(say("/b.epub")).toBe("shiv-awn smiled.");
 	});
 
 	test("a book's pronunciation comes first, so it overrides the general one", () => {
