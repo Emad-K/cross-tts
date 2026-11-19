@@ -48,7 +48,8 @@ export function hubRequestPath(pathname: string, token: string): string | null {
 	return `/${rest}`;
 }
 
-const AUDIO_EXT =/\.(mp3|wav|m4b)$/i;
+// An audio file, or its in-progress `<name>.part` (renamed once complete).
+const AUDIO_EXT = /\.(mp3|wav|m4b)(\.part)?$/i;
 
 /**
  * Absolute target for an audiobook export write, or null if the renderer asked

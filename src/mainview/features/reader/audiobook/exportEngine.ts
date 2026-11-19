@@ -3,6 +3,7 @@ import { sanitizeFileName, trackFileName } from "@shared/audiobook";
 import {
 	appendAudioFile,
 	audioFileExists,
+	finishAudioFile,
 	getBookCoverBytes,
 	getEpubChapterContent,
 	writeAudioFile,
@@ -249,11 +250,17 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 			}
 			if (abort) break;
 			if (!single && enc) {
-				// One write, not write+append: resume treats any existing track
-				// file as done, so keep the window for a partial file small.
-				// ponytail: still not atomic; needs a main-process .part→rename IPC.
-				const res = await writeAudioFile(opts.dir, trackName, concat(enc.finish()));
+				// Resume treats any existing track file as done, so write to
+				// `<name>.part` and only rename once the bytes are all on disk.
+				// A crash mid-write leaves just a .part, redone on resume.
+				const res = await writeAudioFile(
+					opts.dir,
+					`${trackName}.part`,
+					concat(enc.finish()),
+				);
 				if (!res.ok) throw new Error(res.error || "Couldn't write the file");
+				const fin = await finishAudioFile(opts.dir, trackName);
+				if (!fin.ok) throw new Error(fin.error || "Couldn't write the file");
 				useExportStore.setState({
 					filesWritten: useExportStore.getState().filesWritten + 1,
 				});

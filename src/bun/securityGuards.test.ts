@@ -63,12 +63,17 @@ describe("audioExportPath", () => {
 			join(root, "01 - Intro.mp3"),
 		);
 		expect(audioExportPath(root, "Book.M4B", [root])).toBe(join(root, "Book.M4B"));
+		expect(audioExportPath(root, "01 - Intro.mp3.part", [root])).toBe(
+			join(root, "01 - Intro.mp3.part"),
+		);
 	});
 	test("rejects traversal, separators, other types, bad input", () => {
 		expect(audioExportPath(root, "../.bashrc.mp3", [root])).toBeNull();
 		expect(audioExportPath(root, "a/b.mp3", [root])).toBeNull();
 		expect(audioExportPath(root, "a\\b.mp3", [root])).toBeNull();
 		expect(audioExportPath(root, "evil.desktop", [root])).toBeNull();
+		expect(audioExportPath(root, "evil.part", [root])).toBeNull();
+		expect(audioExportPath(root, "x.mp3.part.part", [root])).toBeNull();
 		expect(audioExportPath(root, "..", [root])).toBeNull();
 		expect(audioExportPath("/home/u", "x.mp3", [root])).toBeNull();
 		expect(audioExportPath(root, 5, [root])).toBeNull();
