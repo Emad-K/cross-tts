@@ -52,21 +52,29 @@ export function cudaSystemReady(): boolean {
 
 /**
  * Look for the CUDA libraries, once at startup. Returns a line for the log
- * when an NVIDIA driver is installed but CUDA can't be offered, else null.
+ * when an NVIDIA driver is installed but CUDA can't be offered, or when the
+ * lookup itself failed, else null.
  */
 export function detectCuda(): Promise<string | null> {
 	if (process.platform !== "linux" || process.arch !== "x64") {
 		return Promise.resolve(null);
 	}
 	return new Promise((resolve) => {
-		execFile("ldconfig", ["-p"], { timeout: 3000 }, (_err, stdout) => {
+		// ldconfig lives in /usr/sbin, which a normal user's PATH lacks on
+		// Debian and others.
+		const env = { ...process.env, PATH: `${process.env.PATH ?? ""}:/usr/sbin:/sbin` };
+		execFile("ldconfig", ["-p"], { timeout: 3000, env }, (err, stdout) => {
 			const dirs = (process.env.LD_LIBRARY_PATH ?? "").split(delimiter).filter(Boolean);
 			const missing = missingCudaLibs(String(stdout ?? ""), dirs);
 			systemReady = missing.length === 0;
 			resolve(
-				systemReady || missing.includes("libcuda.so.1")
+				systemReady
 					? null
-					: `NVIDIA driver found, but CUDA isn't offered: ${missing.join(", ")} not installed (needs the CUDA 13 runtime and cuDNN 9).`,
+					: err && !stdout
+						? `Couldn't look for the CUDA libraries: ${err.message}`
+						: missing.includes("libcuda.so.1")
+							? null
+							: `NVIDIA driver found, but CUDA isn't offered: ${missing.join(", ")} not installed (needs the CUDA 13 runtime and cuDNN 9).`,
 			);
 		});
 	});
