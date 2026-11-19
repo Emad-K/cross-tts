@@ -83,6 +83,9 @@ async function load(init: InitMessage): Promise<void> {
 	const options = {
 		graphOptimizationLevel: "all",
 		...(init.numThreads > 0 ? { intraOpNumThreads: init.numThreads } : {}),
+		// Four sessions means four intra-op pools; don't let them spin idle
+		// between the many short runs of each chunk.
+		extra: { session: { intra_op: { allow_spinning: "0" } } },
 	};
 	const assets = await loadSupertonicAssets(async (file) => {
 		const res = await fetch(supertonicFileUrl(init.hubBaseUrl, file));
