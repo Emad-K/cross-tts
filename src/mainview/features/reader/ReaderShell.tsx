@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import type { LoadedDocument } from "./types";
 import { ListenEstimateSync } from "./listenEstimate/ListenEstimateSync";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
+import { BookDataSync } from "./bookData/BookDataSync";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
+import { TrayNowPlayingSync } from "./tray/TrayNowPlayingSync";
 import { bookmarkCurrentSpot } from "./bookmarks/bookmarksStore";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { FindBar } from "./find/FindBar";
 import { useFindStore } from "./find/findStore";
 import { ReaderEmptyState } from "./ReaderEmptyState";
 import { ReaderHeader } from "./ReaderHeader";
+import { isUnsavedPaste, savePastedText } from "./paste/usePasteText";
 import { ReaderLoadingOverlay } from "./ReaderLoadingOverlay";
 import { PlaybackControls } from "./PlaybackControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,6 +31,7 @@ export type ReaderShellProps = {
 	onOpenLibrary?: () => void;
 	onOpenBook?: (path: string) => void;
 	onOpenSettings?: () => void;
+	onOpenVoiceSettings?: () => void;
 	onOpenLogs?: () => void;
 	onOpenAudiobook?: () => void;
 	onLoadSample?: () => void;
@@ -48,6 +52,7 @@ export function ReaderShell({
 	onOpenLibrary,
 	onOpenBook,
 	onOpenSettings,
+	onOpenVoiceSettings,
 	onOpenLogs,
 	onOpenAudiobook,
 	onLoadSample,
@@ -113,8 +118,10 @@ export function ReaderShell({
 	return (
 		<TooltipProvider delayDuration={300} skipDelayDuration={0}>
 			<TtsSettingSync />
+			<TrayNowPlayingSync document={document} />
 			<TtsRulesSettingSync />
 			<SleepTimerEffect />
+			<BookDataSync document={document} />
 			<ListenEstimateSync
 				document={document}
 				activeChapterId={activeChapterId}
@@ -133,6 +140,11 @@ export function ReaderShell({
 					onOpenLogs={onOpenLogs}
 					onOpenAudiobook={onOpenAudiobook}
 					showAudiobook={document?.format === "epub"}
+					onSaveToLibrary={
+						window.api && isUnsavedPaste(document)
+							? () => void savePastedText()
+							: undefined
+					}
 				/>
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
 					{documentLoading ? (
@@ -205,7 +217,7 @@ export function ReaderShell({
 						</Button>
 					) : null}
 				</main>
-				{hasDoc ? <PlaybackControls /> : null}
+				{hasDoc ? <PlaybackControls onMoreVoices={onOpenVoiceSettings} /> : null}
 			</div>
 		</TooltipProvider>
 	);

@@ -1,6 +1,6 @@
 {
 	"name": "cross-tts",
-	"version": "1.14.1",
+	"version": "1.15.0",
 	"description": "Listen to your books and documents with offline, natural text-to-speech.",
 	"license": "MIT",
 	"author": {
@@ -50,6 +50,7 @@
 		"fast-xml-parser": "^5.12.1",
 		"jszip": "^3.10.1",
 		"lucide-react": "^1.16.0",
+		"mammoth": "1.13.0",
 		"mp4-muxer": "^5.2.2",
 		"onnxruntime-web": "1.31.1",
 		"phonemizer": "^1.2.1",
@@ -77,6 +78,7 @@
 		"electron-builder": "^26.18.0",
 		"electron-vite": "^6.0.0",
 		"happy-dom": "^20.9.0",
+		"pdfjs-dist": "6.5.438",
 		"playwright": "^1.60.0",
 		"postcss": "^8.4.49",
 		"tailwindcss": "^3.4.16",

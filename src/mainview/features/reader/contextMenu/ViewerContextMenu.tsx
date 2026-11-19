@@ -1,4 +1,12 @@
-import { BookOpenText, Copy, Search } from "lucide-react";
+import {
+	BookOpenText,
+	Copy,
+	Highlighter,
+	Mic,
+	NotebookPen,
+	Search,
+	Trash2,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -7,7 +15,9 @@ import {
 	truncateMenuLabel,
 } from "@shared/dictionary";
 import { cn } from "@/lib/utils";
+import type { NoteColor } from "@shared/notes";
 import { useFindStore } from "../find/findStore";
+import { NoteColorSwatches } from "../notes/NoteDialog";
 
 const VIEWPORT_MARGIN_PX = 8;
 
@@ -20,12 +30,27 @@ export type ViewerContextMenuProps = {
 	onClose: () => void;
 	/** Open the dictionary dialog for a word. */
 	onLookup: (word: string) => void;
+	/** Highlight the selection (absent when it can't be highlighted). */
+	onHighlight?: (color: NoteColor) => void;
+	/** Highlight the selection and write a note on it. */
+	onAddNote?: () => void;
+	/** Edit / remove the saved highlight under the pointer. */
+	onEditNote?: () => void;
+	onRemoveNote?: () => void;
+	/** Open "Fix pronunciation" for a word or short phrase. */
+	onFixPronunciation?: (word: string) => void;
 };
 
+/** Longest selection offered to "Fix pronunciation" (a name, not a sentence). */
+const MAX_PRONUNCIATION_CHARS = 60;
+
 /**
- * Custom right-click menu for the reader viewers (Copy / Find / Look up).
+ * Custom right-click menu for the reader viewers (Copy / Find / Look up /
+ * Highlight / notes / Fix pronunciation).
  * Rendered into `document.body` at the pointer position; closes on
- * click-away, Escape, scroll, resize or window blur.
+ * click-away, Escape, Tab, scroll, resize or window blur. It takes focus when
+ * it opens (arrow keys, Home and End move through it) and gives focus back
+ * when it closes, so it also works from Shift+F10 or the Menu key.
  */
 export function ViewerContextMenu({
 	x,
@@ -33,6 +58,11 @@ export function ViewerContextMenu({
 	selection,
 	onClose,
 	onLookup,
+	onHighlight,
+	onAddNote,
+	onEditNote,
+	onRemoveNote,
+	onFixPronunciation,
 }: ViewerContextMenuProps) {
 	const menuRef = useRef<HTMLDivElement>(null);
 	const [pos, setPos] = useState({ x, y });
@@ -55,15 +85,41 @@ export function ViewerContextMenu({
 	}, [x, y]);
 
 	useEffect(() => {
+		const opener = document.activeElement;
+		menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
+		return () => {
+			if (opener instanceof HTMLElement) opener.focus({ preventScroll: true });
+		};
+	}, []);
+
+	useEffect(() => {
 		const onPointerDown = (e: PointerEvent) => {
 			if (menuRef.current?.contains(e.target as Node)) return;
 			onClose();
 		};
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === "Escape") {
+			if (e.key === "Escape" || e.key === "Tab") {
 				e.preventDefault();
 				onClose();
+				return;
 			}
+			const items = [...(menuRef.current?.querySelectorAll("button") ?? [])];
+			const at = items.indexOf(document.activeElement as HTMLButtonElement);
+			const to =
+				e.key === "ArrowDown" || e.key === "ArrowRight"
+					? (at + 1) % items.length
+					: e.key === "ArrowUp" || e.key === "ArrowLeft"
+						? (at <= 0 ? items.length : at) - 1
+						: e.key === "Home"
+							? 0
+							: e.key === "End"
+								? items.length - 1
+								: -1;
+			if (to < 0) return;
+			// Not for the page behind: arrows would scroll it or skip sentences.
+			e.preventDefault();
+			e.stopPropagation();
+			items[to]?.focus();
 		};
 		const close = () => onClose();
 		window.addEventListener("pointerdown", onPointerDown, true);
@@ -83,6 +139,9 @@ export function ViewerContextMenu({
 	const trimmed = selection.trim();
 	const hasSelection = trimmed.length > 0;
 	const lookupWord = extractLookupWord(trimmed);
+	const phrase = collapseWhitespace(trimmed);
+	const pronounceable =
+		phrase.length > 0 && phrase.length <= MAX_PRONUNCIATION_CHARS ? phrase : null;
 	const findLabel = hasSelection
 		? `Find “${truncateMenuLabel(trimmed)}”`
 		: "Find in chapter";
@@ -125,6 +184,59 @@ export function ViewerContextMenu({
 					icon={<BookOpenText aria-hidden />}
 					onSelect={() => {
 						onLookup(lookupWord);
+						onClose();
+					}}
+				/>
+			) : null}
+			{onHighlight ? (
+				<div className="flex items-center gap-2 px-2 py-1.5 text-sm [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
+					<Highlighter aria-hidden />
+					<span className="flex-1">Highlight</span>
+					<NoteColorSwatches
+						role="menuitem"
+						onPick={(color) => {
+							onHighlight(color);
+							onClose();
+						}}
+					/>
+				</div>
+			) : null}
+			{onAddNote ? (
+				<MenuItem
+					label="Add note…"
+					icon={<NotebookPen aria-hidden />}
+					onSelect={() => {
+						onAddNote();
+						onClose();
+					}}
+				/>
+			) : null}
+			{onEditNote ? (
+				<MenuItem
+					label="Edit note…"
+					icon={<NotebookPen aria-hidden />}
+					onSelect={() => {
+						onEditNote();
+						onClose();
+					}}
+				/>
+			) : null}
+			{onRemoveNote ? (
+				<MenuItem
+					label="Remove highlight"
+					icon={<Trash2 aria-hidden />}
+					onSelect={() => {
+						onRemoveNote();
+						onClose();
+					}}
+				/>
+			) : null}
+			{onFixPronunciation && pronounceable ? (
+				<MenuItem
+					label="Fix pronunciation…"
+					icon={<Mic aria-hidden />}
+					onSelect={() => {
+						onFixPronunciation(pronounceable);
 						onClose();
 					}}
 				/>

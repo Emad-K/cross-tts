@@ -22,16 +22,30 @@ const api: AppApi = {
 			ipcRenderer.invoke("readDocumentAtPath", params),
 		getEpubChapterContent: (params) =>
 			ipcRenderer.invoke("getEpubChapterContent", params),
+		readDocumentBytes: (params) =>
+			ipcRenderer.invoke("readDocumentBytes", params),
+		readClipboardText: () => ipcRenderer.invoke("readClipboardText"),
+		savePastedText: (params) => ipcRenderer.invoke("savePastedText", params),
 		exportTtsRulesToFile: (params) =>
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
+		readUserData: (params) => ipcRenderer.invoke("readUserData", params),
+		writeUserData: (params) => ipcRenderer.invoke("writeUserData", params),
+		exportTextFile: (params) => ipcRenderer.invoke("exportTextFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
-		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
+		setTtsBackend: (params) => ipcRenderer.invoke("setTtsBackend", params),
+		cudaAddonInstall: () => ipcRenderer.invoke("cudaAddonInstall"),
+		cudaAddonCancel: () => ipcRenderer.invoke("cudaAddonCancel"),
+		cudaAddonRemove: () => ipcRenderer.invoke("cudaAddonRemove"),
 		setGpuPower: (params) => ipcRenderer.invoke("setGpuPower", params),
 		getGpuInfo: () => ipcRenderer.invoke("getGpuInfo"),
 		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
+		supertonicPresent: () => ipcRenderer.invoke("supertonicPresent"),
 		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
+		removeModel: (params) => ipcRenderer.invoke("removeModel", params),
+		setCrashPromptDisabled: (params) =>
+			ipcRenderer.invoke("setCrashPromptDisabled", params),
+		setWelcomeSeen: (params) => ipcRenderer.invoke("setWelcomeSeen", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
-		setCudaEnabled: (params) => ipcRenderer.invoke("setCudaEnabled", params),
 		setGpuFp16: (params) => ipcRenderer.invoke("setGpuFp16", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
@@ -48,6 +62,8 @@ const api: AppApi = {
 		getBookCover: (params) => ipcRenderer.invoke("getBookCover", params),
 		getBookCoverBytes: (params) =>
 			ipcRenderer.invoke("getBookCoverBytes", params),
+		getChapterTextLengths: (params) =>
+			ipcRenderer.invoke("getChapterTextLengths", params),
 		findInPage: (params) => ipcRenderer.invoke("findInPage", params),
 		stopFindInPage: () => ipcRenderer.invoke("stopFindInPage"),
 		revealPath: (params) => ipcRenderer.invoke("revealPath", params),
@@ -56,6 +72,14 @@ const api: AppApi = {
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
 		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+		setKeepPlayingInBackground: (params) =>
+			ipcRenderer.invoke("setKeepPlayingInBackground", params),
+		setNowPlaying: (params) => ipcRenderer.invoke("setNowPlaying", params),
+		backupExport: (params) => ipcRenderer.invoke("backupExport", params),
+		backupPick: () => ipcRenderer.invoke("backupPick"),
+		backupApplySettings: (params) =>
+			ipcRenderer.invoke("backupApplySettings", params),
+		missingPaths: (params) => ipcRenderer.invoke("missingPaths", params),
 		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
 		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
 		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),
@@ -68,7 +92,7 @@ const api: AppApi = {
 			ipcRenderer.invoke("getPendingCrashReports"),
 		resolveCrashReports: (params) =>
 			ipcRenderer.invoke("resolveCrashReports", params),
-		ttsNodeInit: (engine) => ipcRenderer.invoke("ttsNodeInit", engine),
+		ttsNodeInit: (params) => ipcRenderer.invoke("ttsNodeInit", params),
 		ttsNodeGenerate: (params) => ipcRenderer.invoke("ttsNodeGenerate", params),
 		ttsNodeStop: (engine) => ipcRenderer.invoke("ttsNodeStop", engine),
 	},
@@ -140,6 +164,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:tts-node-progress", handler);
 		return () => {
 			ipcRenderer.removeListener("app:tts-node-progress", handler);
+		};
+	},
+	onCudaAddonProgress: (listener) => {
+		const handler = (_event: unknown, progress: { loaded: number; total: number }) =>
+			listener(progress);
+		ipcRenderer.on("app:cuda-addon-progress", handler);
+		return () => {
+			ipcRenderer.removeListener("app:cuda-addon-progress", handler);
 		};
 	},
 };

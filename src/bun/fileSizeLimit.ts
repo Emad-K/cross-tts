@@ -4,6 +4,14 @@ import { basename } from "node:path";
 export const MAX_EPUB_BYTES = 300 * 1024 * 1024;
 /** Largest .txt we read as one string and send to the renderer. */
 export const MAX_TXT_BYTES = 50 * 1024 * 1024;
+/** Largest PDF read: its bytes cross IPC to the sandboxed renderer's parser. */
+export const MAX_PDF_BYTES = 100 * 1024 * 1024;
+/** Largest Word document (a zip; mammoth inflates and parses it in memory). */
+export const MAX_DOCX_BYTES = 50 * 1024 * 1024;
+/** Largest HTML or Markdown file, sanitized as one string. */
+export const MAX_MARKUP_BYTES = 20 * 1024 * 1024;
+/** Most clipboard text "Paste text" takes. */
+export const MAX_PASTED_TEXT_BYTES = 5 * 1024 * 1024;
 
 /**
  * Throw a user-readable error when a document is over its cap, before anything

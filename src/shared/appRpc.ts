@@ -1,5 +1,15 @@
-import type { AppConfigInfo, GpuPowerPreference } from "./appConfig";
+import type {
+	AppConfigInfo,
+	GpuPowerPreference,
+	TtsBackend,
+} from "./appConfig";
 import type { Appearance } from "./appearance";
+import type {
+	BackupExportResult,
+	BackupLibrary,
+	BackupPickResult,
+	RestoreMode,
+} from "./backup";
 import type { ForwardedLogEntry } from "./logEntry";
 import type {
 	ModelKind,
@@ -13,6 +23,7 @@ import type { AppSessionFileV1, WebPersistedSlice } from "./appSession";
 import type { CrashRecord } from "./crashReport";
 import type {
 	TtsNodeEngine,
+	TtsNodeEp,
 	TtsNodeGenerateParams,
 	TtsNodeGenerateResult,
 	TtsNodeInitResult,
@@ -51,16 +62,60 @@ export type AppRpcSchema = {
 			params: { filePath: string; chapterId: string };
 			response: EpubChapterContentResult | null;
 		};
+		/** Bytes of a .pdf for the renderer's parser; null if missing or not a PDF. */
+		readDocumentBytes: {
+			params: { filePath: string };
+			response: Uint8Array | null;
+		};
+		/** Plain text on the clipboard. Called only when the user asks to paste. */
+		readClipboardText: {
+			params: void;
+			response: string;
+		};
+		/** Save pasted text as a .txt in the data folder; returns the new path. */
+		savePastedText: {
+			params: { text: string; title: string };
+			response: string | null;
+		};
 		exportTtsRulesToFile: {
 			params: { json: string; suggestedFileName: string };
+			response: { cancelled: boolean; filePath: string | null };
+		};
+		/** Read notes or listening stats from the data folder (null if none yet). */
+		readUserData: {
+			params: { name: "notes" | "stats" };
+			response: unknown;
+		};
+		/** Save notes or listening stats; validated again in the main process. */
+		writeUserData: {
+			params: { name: "notes" | "stats"; data: unknown };
+			response: void;
+		};
+		/** Ask where to save a Markdown file, then write it. */
+		exportTextFile: {
+			params: { text: string; suggestedFileName: string };
 			response: { cancelled: boolean; filePath: string | null };
 		};
 		getAppConfig: {
 			params: void;
 			response: AppConfigInfo;
 		};
-		setGpuEnabled: {
-			params: { enabled: boolean };
+		/** Choose where speech synthesis runs. */
+		setTtsBackend: {
+			params: { backend: TtsBackend };
+			response: AppConfigInfo;
+		};
+		/** Download and verify the CUDA add-on; progress via onCudaAddonProgress. */
+		cudaAddonInstall: {
+			params: void;
+			response: CudaAddonInstallResult;
+		};
+		cudaAddonCancel: {
+			params: void;
+			response: void;
+		};
+		cudaAddonRemove: {
+			params: void;
 			response: AppConfigInfo;
 		};
 		/** Choose which GPU to prefer (multi-GPU machines). */
@@ -78,19 +133,34 @@ export type AppRpcSchema = {
 			params: void;
 			response: ModelStatusMap;
 		};
+		/** Whether Supertonic 3's model is on disk (it isn't a ModelKind). */
+		supertonicPresent: {
+			params: void;
+			response: boolean;
+		};
 		/** Download a model's weights; progress arrives via onModelProgress. */
 		downloadModel: {
 			params: { kind: ModelKind };
 			response: ModelStatusMap;
 		};
+		/** Delete an optional model's weights (REMOVABLE_MODEL_KINDS only). */
+		removeModel: {
+			params: { kind: ModelKind };
+			response: ModelStatusMap;
+		};
+		/** Switch the "report this crash?" dialog off or back on. */
+		setCrashPromptDisabled: {
+			params: { disabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** Record that the first-run welcome was shown. */
+		setWelcomeSeen: {
+			params: { seen: boolean };
+			response: AppConfigInfo;
+		};
 		/** Set CPU (wasm) inference threads; 0 = auto. */
 		setCpuThreads: {
 			params: { threads: number };
-			response: AppConfigInfo;
-		};
-		/** Opt in to the CUDA execution provider for the native engine. */
-		setCudaEnabled: {
-			params: { enabled: boolean };
 			response: AppConfigInfo;
 		};
 		/** Opt in to Kokoro's fp16 weights on WebGPU. */
@@ -153,6 +223,11 @@ export type AppRpcSchema = {
 			params: { filePath: string };
 			response: { data: Uint8Array; mime: string } | null;
 		};
+		/** Text length of each chapter by id (EPUB), for the time-left estimate. */
+		getChapterTextLengths: {
+			params: { filePath: string };
+			response: Record<string, number> | null;
+		};
 		/** Find text in the current page; results arrive via onFoundInPage. */
 		findInPage: {
 			params: { text: string; forward?: boolean; findNext?: boolean };
@@ -192,6 +267,36 @@ export type AppRpcSchema = {
 		relaunchApp: {
 			params: void;
 			response: void;
+		};
+		/** Closing the window hides it to the tray, so playback carries on. */
+		setKeepPlayingInBackground: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** What is playing, for the tray icon's tooltip and menu. */
+		setNowPlaying: {
+			params: { title: string; sentence: string; playing: boolean };
+			response: void;
+		};
+		/** Ask where to save, then write a backup file. Null if cancelled. */
+		backupExport: {
+			params: { library: BackupLibrary };
+			response: BackupExportResult | null;
+		};
+		/** Ask for a backup file and validate it. Null if cancelled. */
+		backupPick: {
+			params: void;
+			response: BackupPickResult | null;
+		};
+		/** Restore the settings of the backup picked by backupPick. */
+		backupApplySettings: {
+			params: { mode: RestoreMode };
+			response: AppConfigInfo;
+		};
+		/** Which of these book paths aren't files on this computer. */
+		missingPaths: {
+			params: { paths: string[] };
+			response: string[];
 		};
 		/** Manually check for updates (downloads if one is found). */
 		checkForUpdates: {
@@ -235,7 +340,7 @@ export type AppRpcSchema = {
 		};
 		/** Start the native (onnxruntime-node) CPU TTS backend; loads the model. */
 		ttsNodeInit: {
-			params: TtsNodeEngine;
+			params: { engine: TtsNodeEngine; ep?: TtsNodeEp };
 			response: TtsNodeInitResult;
 		};
 		/** Synthesize one chunk on the native CPU backend. */
@@ -285,7 +390,15 @@ export type AppApi = {
 	onCrashReports: (listener: (records: CrashRecord[]) => void) => () => void;
 	/** Subscribe to native-TTS model-load progress (0..1) from the main process. */
 	onTtsNodeProgress: (listener: (value: number) => void) => () => void;
+	/** Subscribe to CUDA add-on download progress (bytes). */
+	onCudaAddonProgress: (
+		listener: (progress: { loaded: number; total: number }) => void,
+	) => () => void;
 };
+
+export type CudaAddonInstallResult =
+	| { ok: true; config: AppConfigInfo }
+	| { ok: false; error: string; cancelled?: boolean };
 
 /** Result of an in-page find, mirroring Electron's `found-in-page` event. */
 export type FoundInPageResult = {

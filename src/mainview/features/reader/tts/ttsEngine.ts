@@ -1,18 +1,24 @@
+import { getModelStatus, isDesktopApp, supertonicPresent } from "@/lib/desktopBridge";
 import { logError } from "../logging";
 import {
 	effectiveCpuThreads,
-	isGpuPreferenceEnabled,
+	ttsBackendPreference,
 	useAppSettingsStore,
 } from "../settings/appSettingsStore";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
+import { isExportActive } from "../audiobook/exportStore";
+import { createIdleWarmer, idleWarmKey } from "./idleWarm";
+import { canLoadWithoutDownload } from "./modelOnDisk";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
+import { isBenchmarkRunning, stopBenchmark } from "./benchmark";
 import { splitForFastStart } from "./chunkText";
 import { SynthCore } from "./synthCore";
 import type { TtsBackendPrefs, TtsEngine } from "./ttsEngineTypes";
 import { getTtsEngine, TTS_ENGINES } from "./ttsEngines";
 import { useSweepStore } from "./sweepStore";
+import { listenRateKey } from "@shared/listenTimeEstimate";
 import { useTtsStore } from "./ttsStore";
 
 /**
@@ -31,7 +37,7 @@ function activeEngine(): TtsEngine {
 
 function backendPrefs(): TtsBackendPrefs {
 	return {
-		gpu: isGpuPreferenceEnabled(),
+		backend: ttsBackendPreference(),
 		gpuPower: useAppSettingsStore.getState().config?.gpuPower ?? "auto",
 		cpuThreads: effectiveCpuThreads(),
 		gpuFp16: useAppSettingsStore.getState().config?.gpuFp16 ?? false,
@@ -69,6 +75,24 @@ export function ensureTtsLoaded(): Promise<void> {
 	return activeEngine().ensureLoaded(backendPrefs());
 }
 
+/**
+ * Load the model in the background (a document was opened), but only when
+ * every file it may need is already on disk: a model is downloaded when the
+ * user presses Play or asks for it in Settings, never by opening a book.
+ */
+export async function loadTtsIfDownloaded(): Promise<void> {
+	// The browser build has no model folder to check; it loads as before.
+	if (!isDesktopApp()) return ensureTtsLoaded();
+	const config = useAppSettingsStore.getState().config;
+	const [status, supertonic] = await Promise.all([getModelStatus(), supertonicPresent()]);
+	const disk = status ? { status, supertonic } : null;
+	// Read the engine after the await: restoring a book may have switched it.
+	const engineId = activeEngine().id;
+	if (canLoadWithoutDownload(engineId, ttsBackendPreference(), config?.backends.native ?? false, disk)) {
+		await ensureTtsLoaded();
+	}
+}
+
 /** Load the model and fetch every voice for offline use (Kokoro only for now). */
 export function downloadVoicesAndModel(): Promise<void> {
 	return downloadKokoroAssets(backendPrefs());
@@ -84,9 +108,14 @@ let playbackLoopPromise: Promise<void> | null = null;
 /**
  * Perf instrumentation (console.debug, "[tts-perf]"): wall time from play/seek
  * to the first audible sample, and the audio-clock gap between consecutive
- * chunks beyond the configured sentence pause.
+ * chunks beyond the configured sentence pause. First-audio is split into
+ * `load` (model load; ~0 when preloaded), `synth` (waiting on the first
+ * audio; ~0 on a cache hit) and `wait` (the rest: resuming the audio context
+ * and the output latency).
  */
 let playRequestedAt = 0;
+let firstAudioLoadMs = 0;
+let firstAudioSynthMs = 0;
 function notePerfStart(
 	ctx: AudioContext,
 	start: number,
@@ -96,8 +125,11 @@ function notePerfStart(
 		const ms =
 			performance.now() - playRequestedAt +
 			Math.max(0, start - ctx.currentTime) * 1000;
+		const wait = Math.max(0, ms - firstAudioLoadMs - firstAudioSynthMs);
 		console.debug(
-			`[tts-perf] first-audio ${ms.toFixed(0)}ms (context ${ctx.sampleRate} Hz)`,
+			`[tts-perf] first-audio ${ms.toFixed(0)}ms ` +
+				`(load ${firstAudioLoadMs.toFixed(0)}, synth ${firstAudioSynthMs.toFixed(0)}, ` +
+				`wait ${wait.toFixed(0)}; context ${ctx.sampleRate} Hz)`,
 		);
 	} else {
 		console.debug(`[tts-perf] gap ${((start - expected) * 1000).toFixed(1)}ms`);
@@ -126,8 +158,29 @@ function getAudioGraph(): { ctx: AudioContext; gain: GainNode } {
 		audioContext = new AudioContext();
 		gainNode = audioContext.createGain();
 		gainNode.connect(audioContext.destination);
+		applyOutputDevice();
 	}
 	return { ctx: audioContext, gain: gainNode! };
+}
+
+let outputSinkId = "";
+
+function applyOutputDevice(): void {
+	// setSinkId is Chromium 110+ and missing from older DOM typings.
+	const ctx = audioContext as
+		| (AudioContext & { setSinkId?: (id: string) => Promise<void> })
+		| null;
+	if (!ctx?.setSinkId) return;
+	// A device unplugged mid-call rejects; the picker then re-resolves on the
+	// devicechange event, so there is nothing to do here.
+	void ctx.setSinkId(outputSinkId).catch(() => {});
+}
+
+/** Route playback to an audio output device ("" = the system default). */
+export function setOutputDevice(sinkId: string): void {
+	if (sinkId === outputSinkId) return;
+	outputSinkId = sinkId;
+	applyOutputDevice();
 }
 
 function applyVolumeFromStore(): void {
@@ -279,6 +332,53 @@ export function prefetchTexts(texts: string[]): void {
 		if (!isSpeakableChunkText(text)) continue;
 		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
 	}
+}
+
+/**
+ * Synthesize the sentence the next press of play starts on, split exactly as
+ * the loop's fast start splits it. Play then takes its normal fast-start path
+ * and finds both parts in the cache: same split, same seam, same audio. The
+ * run also absorbs the phonemizer, voice-file and GPU shader warm-up.
+ */
+function warmResumePosition(): void {
+	const { playback, chunks, currentChunkIndex, voice, speed } =
+		useTtsStore.getState();
+	// Only with no loop alive. A paused loop already holds its audio; one that
+	// was dropped by a seek while paused has nothing made for the new place.
+	if (playback !== "idle" && !(playback === "paused" && !playbackLoopPromise)) {
+		return;
+	}
+	// An export owns the engine; don't queue playback work between its chunks.
+	// So does the benchmark (Settings), and extra work would skew its timings.
+	if (isExportActive() || isBenchmarkRunning()) return;
+	if (!activeEngine().activeBackend()) return;
+	const text = chunks[currentChunkIndex]?.text;
+	if (!text || !isSpeakableChunkText(text)) return;
+	if (core.has(text, voice, speed) || core.inFlight(text, voice, speed)) return;
+	// With no loop alive, the only playback jobs still queued are warm-ups for
+	// places the listener has left: a new epoch makes the engine drop them.
+	core.epoch++;
+	const createsContext = !audioContext;
+	prefetchTexts(splitForFastStart(text));
+	// Making buffers needs a context but not a running one. Keep it suspended
+	// until play, so an idle app doesn't hold the audio device open.
+	if (createsContext) void audioContext?.suspend();
+}
+
+/**
+ * Keep the resume position warm while nothing plays: once the model is
+ * loaded, and again (debounced) whenever the position, voice, speed or engine
+ * changes while idle or paused. Never loads a model itself. Returns the
+ * function that stops it.
+ */
+export function startIdleWarm(): () => void {
+	const update = createIdleWarmer(warmResumePosition);
+	update(idleWarmKey(useTtsStore.getState()));
+	const unsubscribe = useTtsStore.subscribe((s) => update(idleWarmKey(s)));
+	return () => {
+		unsubscribe();
+		update(null);
+	};
 }
 
 /**
@@ -498,6 +598,8 @@ function stopActiveSource(): void {
  * Stops any active playback first.
  */
 export function resetTtsEngine(): void {
+	// A benchmark must not keep measuring an engine unloaded under it.
+	stopBenchmark();
 	stopPlaybackUi();
 	activeEngine().dispose();
 	core.clear();
@@ -509,6 +611,7 @@ export function resetTtsEngine(): void {
  */
 export function switchTtsEngine(previousId: string): void {
 	if (getTtsEngine(previousId) === activeEngine()) return;
+	stopBenchmark();
 	getTtsEngine(previousId).dispose();
 	core.clear();
 	// A loop loading or suspended on the old engine would fail with "TTS engine
@@ -605,6 +708,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 		});
 		return;
 	}
+	firstAudioLoadMs = performance.now() - playRequestedAt;
 
 	const { ctx, gain } = getAudioGraph();
 	applyVolumeFromStore();
@@ -658,6 +762,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				!core.inFlight(chunk.text, snap.voice, snap.speed);
 			const parts = fastStart ? splitForFastStart(chunk.text) : [chunk.text];
 			coldStart = false;
+			const synthFrom = performance.now();
 			const made = parts.map((text) =>
 				synthesizeChunkBuffer(ctx, text, snap.voice, snap.speed),
 			);
@@ -704,6 +809,7 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				}
 				ready = true;
 				if (signal.aborted) break;
+				if (!prev) firstAudioSynthMs = performance.now() - synthFrom;
 
 				const text = parts[k]!;
 				const from = doneChars / chunk.text.length;
@@ -714,7 +820,12 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				// and pin this chunk's exact length for the elapsed/total clock.
 				useListenEstimateStore
 					.getState()
-					.recordSample(text.length, buffer.duration, snap.speed);
+					.recordSample(
+						listenRateKey(snap.engineId, snap.voice),
+						text.length,
+						buffer.duration,
+						snap.speed,
+					);
 				chunkSec += buffer.duration;
 				if (k === parts.length - 1) {
 					useTtsStore.getState().recordChunkBaseSec(idx, chunkSec * snap.speed);
@@ -778,6 +889,8 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 export async function startOrResumePlayback(): Promise<void> {
 	const { playback, chunks } = useTtsStore.getState();
 	if (chunks.length === 0) return;
+	// The benchmark (Settings) is loading and unloading the engine.
+	if (isBenchmarkRunning()) return;
 
 	if (
 		playback === "playing" ||
@@ -797,6 +910,25 @@ export async function startOrResumePlayback(): Promise<void> {
 	}
 
 	startPlaybackLoopFresh();
+}
+
+/**
+ * Speak one sentence with the selected engine and voice, outside the reading
+ * loop (the welcome's "Hear a sample"). Stops whatever is playing. Loads the
+ * model, so call it only when the model is on disk: it would download it.
+ */
+export async function playSample(text: string): Promise<void> {
+	stopPlaybackUi();
+	await ensureTtsLoaded();
+	const { voice, speed } = useTtsStore.getState();
+	const { ctx, gain } = getAudioGraph();
+	const buffer = await synthesizeChunkBuffer(ctx, text, voice, speed);
+	if (!buffer) return;
+	// Playback may have started while the sample was made.
+	stopActiveSource();
+	applyVolumeFromStore();
+	await ctx.resume();
+	await scheduleBuffer(ctx, gain, buffer, 0, new AbortController().signal).ended;
 }
 
 export function restartPlaybackIfPlaying(): void {

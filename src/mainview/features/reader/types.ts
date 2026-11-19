@@ -15,6 +15,8 @@ export type LoadedDocument =
 			format: "txt";
 			fileName: string;
 			filePath?: string;
+			/** Clipboard text opened with "Paste text"; unsaved while it has no path. */
+			pasted?: boolean;
 			text: string;
 			chapters?: ReaderChapter[];
 	  }

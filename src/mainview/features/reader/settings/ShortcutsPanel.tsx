@@ -9,6 +9,7 @@ import {
 	defaultShortcutBindings,
 } from "@shared/shortcuts";
 import { cn } from "@/lib/utils";
+import { PASTE_SHORTCUT_LABEL } from "../paste/usePasteText";
 import { useAppSettingsStore } from "./appSettingsStore";
 
 const IS_MAC =
@@ -126,7 +127,7 @@ export function ShortcutsPanel() {
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12">
 				<h2 className="text-base font-semibold leading-none">Shortcuts</h2>
 				<p className="text-sm text-muted-foreground">
-					Global media keys that work even when Cross TTS isn't focused.
+					Global media keys that work even when Cross TTS isn't focused, and the key for pasting text.
 				</p>
 			</div>
 			<ScrollArea className="min-h-0 w-full flex-1">
@@ -174,6 +175,19 @@ export function ShortcutsPanel() {
 					<p className="mt-3 text-xs text-muted-foreground">
 						Click a shortcut, then press the new key combo (must include a
 						modifier). Press Esc to cancel.
+					</p>
+				</div>
+
+				<div className="mt-4 rounded-lg border border-border p-4">
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-sm text-foreground/90">Paste text</span>
+						<kbd className="min-w-[8.5rem] rounded-md border border-border px-3 py-1.5 text-center font-mono text-xs">
+							{PASTE_SHORTCUT_LABEL}
+						</kbd>
+					</div>
+					<p className="mt-3 text-xs text-muted-foreground">
+						Reads the text on your clipboard. This key is fixed and only works
+						while Cross TTS is the active window.
 					</p>
 				</div>
 				</div>

@@ -14,6 +14,7 @@ import {
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
+	setWelcomeSeen,
 	subscribeToCrashReports,
 	subscribeToMainProcessLogs,
 	subscribeToShortcuts,
@@ -21,7 +22,12 @@ import {
 import type { CrashRecord } from "@shared/crashReport";
 import { Toaster } from "@/components/toast/Toaster";
 import { showToast } from "@/components/toast/toastStore";
-import { partitionByDocumentSupport } from "@shared/droppedFiles";
+import {
+	documentKind,
+	partitionByDocumentSupport,
+	SUPPORTED_DOCUMENT_EXTENSIONS,
+	SUPPORTED_DOCUMENT_LABEL,
+} from "@shared/droppedFiles";
 import { SHORTCUT_VOLUME_STEP } from "@shared/shortcuts";
 import { ReaderShell } from "./ReaderShell";
 import { isExportActive } from "./audiobook/exportStore";
@@ -32,6 +38,7 @@ const AudiobookExportDialog = lazy(() =>
 		default: m.AudiobookExportDialog,
 	})),
 );
+import type { SettingsSectionId } from "./settings/SectionPane";
 const SettingsDialog = lazy(() =>
 	import("./settings/SettingsDialog").then((m) => ({
 		default: m.SettingsDialog,
@@ -41,6 +48,11 @@ const LogPanel = lazy(() =>
 	import("./logging").then((m) => ({ default: m.LogPanel })),
 );
 const CrashReportDialog = lazy(() => import("./crash/CrashReportDialog"));
+const WelcomeDialog = lazy(() =>
+	import("./welcome/WelcomeDialog").then((m) => ({ default: m.WelcomeDialog })),
+);
+import { shouldShowWelcome } from "./welcome/welcomeDecision";
+import { openWelcome, useWelcomeStore } from "./welcome/welcomeStore";
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { initUpdateStatusSync } from "./settings/updateStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
@@ -53,7 +65,8 @@ import {
 	toLoadedDocument,
 	touchSessionSave,
 } from "./sessionPersistence";
-import { getBookResume } from "./library/libraryStore";
+import { getBookResume, useLibraryStore } from "./library/libraryStore";
+import { pasteText, usePasteText } from "./paste/usePasteText";
 import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
 import { getTtsEngine } from "./tts/ttsEngines";
 import {
@@ -69,9 +82,10 @@ import {
 	buildTtsChunks,
 	prefetchTexts,
 	seekToChunkAndMaybePlay,
-	ensureTtsLoaded,
+	loadTtsIfDownloaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
+	startIdleWarm,
 	startOrResumePlayback,
 	stopPlaybackUi,
 	toggleMute,
@@ -171,7 +185,8 @@ export function ReaderApp() {
 	const [initialChapterId, setInitialChapterId] = useState<string | null>(null);
 	const [documentLoading, setDocumentLoading] = useState(false);
 	const [loadingMessage, setLoadingMessage] = useState("Opening document…");
-	const [settingsOpen, setSettingsOpen] = useState(false);
+	/** The Settings tab to open on; null while Settings is closed. */
+	const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(null);
 	const [logsOpen, setLogsOpen] = useState(false);
 	const [audiobookOpen, setAudiobookOpen] = useState(false);
 	/** Unreported crashes from previous runs; non-empty shows the crash dialog. */
@@ -240,6 +255,32 @@ export function ReaderApp() {
 		void useAppSettingsStore.getState().hydrate();
 	}, []);
 
+	// First run: show the welcome once. The flag is stored as soon as that is
+	// decided, so someone who upgraded never sees it later either.
+	const welcomeOpen = useWelcomeStore((s) => s.open);
+	useEffect(() => {
+		if (booting) return;
+		void (async () => {
+			const settings = useAppSettingsStore.getState();
+			await settings.hydrate();
+			const config = useAppSettingsStore.getState().config;
+			if (!config || config.welcomeSeen) return;
+			const show = shouldShowWelcome({
+				welcomeSeen: config.welcomeSeen,
+				modelsDownloaded: config.modelsDownloaded,
+				libraryCount: Object.keys(useLibraryStore.getState().books).length,
+				hasOpenDocument: documentRef.current !== null,
+			});
+			if (show) openWelcome();
+			const updated = await setWelcomeSeen(true);
+			if (updated) settings.setConfig(updated);
+		})();
+	}, [booting]);
+	// "Show welcome again" is pressed inside Settings.
+	useEffect(() => {
+		if (welcomeOpen) setSettingsSection(null);
+	}, [welcomeOpen]);
+
 	useEffect(() => {
 		return subscribeToMainProcessLogs((entry) => {
 			useLogStore.getState().add(entry);
@@ -304,18 +345,23 @@ export function ReaderApp() {
 	// (one-time, ~17s on GPU) model load happens while the user reads instead of
 	// on their first press of play. Waits for the GPU/CPU preference to hydrate
 	// first so it loads the right weights. Idempotent; errors are already logged.
+	// Never downloads: a model that isn't on disk waits for Play (or Settings).
 	useEffect(() => {
 		if (!sessionReady || !document) return;
 		let cancelled = false;
 		void (async () => {
 			await useAppSettingsStore.getState().hydrate();
 			if (cancelled) return;
-			await ensureTtsLoaded().catch(() => {});
+			await loadTtsIfDownloaded().catch(() => {});
 		})();
 		return () => {
 			cancelled = true;
 		};
 	}, [document, sessionReady]);
+
+	// With the model loaded and nothing playing, keep the sentence play will
+	// start on synthesized, so the first press of play doesn't wait on it.
+	useEffect(() => startIdleWarm(), []);
 
 	useEffect(() => {
 		setChapterPlaybackFinishedHandler(() => {
@@ -569,6 +615,21 @@ export function ReaderApp() {
 		})();
 	}, []);
 
+	usePasteText({
+		getDocument: () => documentRef.current,
+		open: (doc) => {
+			pendingChunkIndexRef.current = null;
+			setInitialChapterId(null);
+			setActiveChapterId(null);
+			setDocument(doc);
+		},
+		replace: (doc, chunkIndex) => {
+			forceResumeRef.current = true;
+			pendingChunkIndexRef.current = chunkIndex;
+			setDocument(doc);
+		},
+	});
+
 	const openRecentBook = useCallback((path: string) => {
 		if (!isDesktopApp()) return;
 		void (async () => {
@@ -577,7 +638,15 @@ export function ReaderApp() {
 			setDocumentLoading(true);
 			try {
 				const doc = await loadDocumentFromPath(path);
-				if (!doc) return;
+				if (!doc) {
+					showToast({
+						title: "Couldn't open book",
+						description:
+							"The file wasn't found. It may have been moved, renamed or deleted.",
+						variant: "destructive",
+					});
+					return;
+				}
 				restoreBookVoice(path);
 				forceResumeRef.current = resume?.chunkIndex != null;
 				pendingChunkIndexRef.current = resume?.chunkIndex ?? null;
@@ -604,15 +673,19 @@ export function ReaderApp() {
 		const file = e.target.files?.[0];
 		e.target.value = "";
 		if (!file) return;
-		const lower = file.name.toLowerCase();
-		if (lower.endsWith(".epub")) {
-			showToast({ title: "EPUBs need the desktop app", variant: "destructive" });
-			return;
-		}
-		if (!lower.endsWith(".txt")) {
+		const kind = documentKind(file.name);
+		if (kind === null) {
 			showToast({
 				title: `"${file.name}" isn't supported`,
-				description: "Only .txt and .epub files can be opened.",
+				description: `Cross TTS opens ${SUPPORTED_DOCUMENT_LABEL}.`,
+				variant: "destructive",
+			});
+			return;
+		}
+		if (kind !== "txt") {
+			showToast({
+				title: "Only text files open in the browser",
+				description: "Use the desktop app for this file.",
 				variant: "destructive",
 			});
 			return;
@@ -641,7 +714,7 @@ export function ReaderApp() {
 						rejected.length === 1
 							? `"${rejected[0]?.name}" isn't supported`
 							: `${rejected.length} files skipped`,
-					description: "Only .txt and .epub files can be added.",
+					description: `Cross TTS opens ${SUPPORTED_DOCUMENT_LABEL}.`,
 					variant: "destructive",
 				});
 			}
@@ -654,7 +727,8 @@ export function ReaderApp() {
 				);
 				if (!txt) {
 					showToast({
-						title: "EPUBs need the desktop app",
+						title: "Only text files open in the browser",
+						description: "Use the desktop app for this file.",
 						variant: "destructive",
 					});
 					return;
@@ -711,7 +785,7 @@ export function ReaderApp() {
 		[openRecentBook],
 	);
 
-	// Whole-window drag-and-drop: every view accepts .txt/.epub drops.
+	// Whole-window drag-and-drop: every view accepts document drops.
 	useEffect(() => {
 		let depth = 0;
 		const hasFiles = (e: DragEvent) =>
@@ -751,6 +825,13 @@ export function ReaderApp() {
 		};
 	}, [handleDroppedFiles]);
 
+	const loadSample = () => {
+		pendingChunkIndexRef.current = null;
+		setInitialChapterId(null);
+		setActiveChapterId(null);
+		setDocument(SAMPLE_TXT_DOCUMENT);
+	};
+
 	if (booting) return <BootScreen />;
 
 	return (
@@ -758,7 +839,7 @@ export function ReaderApp() {
 			<input
 				ref={inputRef}
 				type="file"
-				accept=".txt,.epub,text/plain,application/epub+zip"
+				accept={SUPPORTED_DOCUMENT_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
 				className="sr-only"
 				aria-hidden
 				tabIndex={-1}
@@ -775,21 +856,21 @@ export function ReaderApp() {
 				onOpenFile={openFilePicker}
 				onOpenLibrary={document ? goToLibrary : undefined}
 				onOpenBook={openRecentBook}
-				onOpenSettings={() => setSettingsOpen(true)}
+				onOpenSettings={() => setSettingsSection("voice")}
+				onOpenVoiceSettings={() => setSettingsSection("voice")}
 				onOpenLogs={() => setLogsOpen(true)}
 				onOpenAudiobook={() => setAudiobookOpen(true)}
-				onLoadSample={() => {
-					pendingChunkIndexRef.current = null;
-					setInitialChapterId(null);
-					setActiveChapterId(null);
-					setDocument(SAMPLE_TXT_DOCUMENT);
-				}}
+				onLoadSample={loadSample}
 			/>
 			{/* Heavy, on-demand dialogs are code-split: their chunks (and deps like
 			    the MP3 encoder) load on first open, not at startup. */}
-			{settingsOpen ? (
+			{settingsSection ? (
 				<Suspense fallback={null}>
-					<SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+					<SettingsDialog
+						open
+						initialSection={settingsSection}
+						onOpenChange={(open) => !open && setSettingsSection(null)}
+					/>
 				</Suspense>
 			) : null}
 			{logsOpen ? (
@@ -816,12 +897,22 @@ export function ReaderApp() {
 					/>
 				</Suspense>
 			) : null}
+			{/* After the crash dialog, never on top of it. */}
+			{welcomeOpen && crashRecords.length === 0 ? (
+				<Suspense fallback={null}>
+					<WelcomeDialog
+						onOpenFile={openFilePicker}
+						onPasteText={() => void pasteText()}
+						onLoadSample={loadSample}
+					/>
+				</Suspense>
+			) : null}
 			{dragActive ? (
 				<div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
 					<div className="rounded-xl border-2 border-dashed border-primary px-10 py-8 text-center">
 						<p className="text-lg font-medium">Drop books to add them</p>
 						<p className="mt-1 text-sm text-muted-foreground">
-							.epub and .txt files
+							{SUPPORTED_DOCUMENT_LABEL}
 						</p>
 					</div>
 				</div>

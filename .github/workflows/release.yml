@@ -145,10 +145,32 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
 
+      # Code signing is optional (docs/SIGNING.md). With no signing secrets
+      # this is exactly the old unsigned build. Secrets are mapped into this
+      # one step only, each only on the OS that uses it, under neutral names.
+      # The script re-exports them under the names electron-builder reads only
+      # when they are set, so an empty value can never switch signing on.
       - name: Package
-        run: pnpm exec electron-builder --publish never
+        shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          MAC_CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          MAC_CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          MAC_APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          MAC_APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          MAC_APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+          MAC_APPLE_API_KEY_P8: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_P8 || '' }}
+          MAC_APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          MAC_APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          WIN_AZURE_TENANT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_TENANT_ID || '' }}
+          WIN_AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_ID || '' }}
+          WIN_AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && secrets.AZURE_CLIENT_SECRET || '' }}
+          WIN_AZURE_ENDPOINT: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_ENDPOINT || '' }}
+          WIN_AZURE_ACCOUNT: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_ACCOUNT || '' }}
+          WIN_AZURE_PROFILE: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_PROFILE || '' }}
+          WIN_AZURE_PUBLISHER: ${{ runner.os == 'Windows' && secrets.AZURE_SIGNING_PUBLISHER || '' }}
+          WIN_PFX_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || '' }}
+          WIN_PFX_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+        run: bash scripts/package-release.sh
 
       # Straight to the draft release, no Actions artifact in between. Every OS
       # emits distinct file names (latest.yml = Windows, latest-mac.yml,

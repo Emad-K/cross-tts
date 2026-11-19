@@ -14,6 +14,8 @@ export type TtsRulesExportRegexRule = {
 	replacement: string;
 	enabled: boolean;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; absent means all books. */
+	book?: string;
 };
 
 export type TtsRulesExportPronunciationRule = {
@@ -21,6 +23,8 @@ export type TtsRulesExportPronunciationRule = {
 	phonetic: string;
 	caseSensitive: boolean;
 	enabled: boolean;
+	/** Book path the rule is limited to; absent means all books. */
+	book?: string;
 };
 
 export type TtsRulesExportFile = {
@@ -39,7 +43,16 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
-/** User-added rules only (excludes built-in defaults). */
+/** A rule's per-book scope as an optional field (omitted for all-books rules). */
+function bookField(book: unknown): { book?: string } {
+	return typeof book === "string" && book ? { book } : {};
+}
+
+/**
+ * User-added, all-books rules only. Built-in defaults are excluded, and so are
+ * this-book rules: their scope is the book's absolute path, which would leak
+ * the user's name and folders into a file meant for sharing. Backups keep them.
+ */
 export function buildTtsRulesExport(
 	state: TtsTextRulesState,
 ): TtsRulesExportFile {
@@ -48,7 +61,7 @@ export function buildTtsRulesExport(
 		version: TTS_RULES_EXPORT_VERSION,
 		exportedAt: new Date().toISOString(),
 		regexRules: state.regexRules
-			.filter((r) => !r.builtIn)
+			.filter((r) => !r.builtIn && !r.book)
 			.map((r) => ({
 				label: r.label,
 				pattern: r.pattern,
@@ -57,7 +70,7 @@ export function buildTtsRulesExport(
 				caseSensitive: r.caseSensitive,
 			})),
 		pronunciationRules: state.pronunciationRules
-			.filter((r) => !r.builtIn)
+			.filter((r) => !r.builtIn && !r.book)
 			.map((r) => ({
 				word: r.word,
 				phonetic: r.phonetic,
@@ -93,6 +106,7 @@ function parseRegexExportItem(
 			typeof item.replacement === "string" ? item.replacement : "",
 		enabled: item.enabled !== false,
 		caseSensitive: item.caseSensitive === true,
+		...bookField(item.book),
 	};
 }
 
@@ -109,6 +123,7 @@ function parsePronunciationExportItem(
 		phonetic,
 		caseSensitive: item.caseSensitive === true,
 		enabled: item.enabled !== false,
+		...bookField(item.book),
 	};
 }
 
@@ -216,6 +231,7 @@ export function applyImportedUserRules(
 			enabled: false,
 			caseSensitive: r.caseSensitive,
 			builtIn: false,
+			...bookField(r.book),
 		}),
 	);
 
@@ -227,6 +243,7 @@ export function applyImportedUserRules(
 			phonetic: r.phonetic,
 			caseSensitive: r.caseSensitive,
 			enabled: r.enabled,
+			...bookField(r.book),
 		}));
 
 	return {

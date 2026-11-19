@@ -1,0 +1,94 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /Outlines 12 0 R /PageMode /UseOutlines >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 112 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 72 720 Tm (A Small Book) Tj
+1 0 0 1 72 678 Tm (Front words before the first chapter.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 295 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 72 720 Tm (Chapter One) Tj
+1 0 0 1 72 678 Tm (The first paragraph runs over two lines and ends with a hyphen-) Tj
+1 0 0 1 72 664 Tm (ated word that must be joined again.) Tj
+1 0 0 1 72 622 Tm (A second paragraph follows after a gap and its sentence is cut by the page) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 90 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 72 720 Tm (break, then carries on at the top of the next page.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 110 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 72 720 Tm (Chapter Two) Tj
+1 0 0 1 72 678 Tm (Closing words of the second chapter.) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Outlines /First 13 0 R /Last 14 0 R /Count 2 >>
+endobj
+13 0 obj
+<< /Title (Chapter One) /Parent 12 0 R /Dest [6 0 R /Fit] /Next 14 0 R >>
+endobj
+14 0 obj
+<< /Title (Chapter Two) /Parent 12 0 R /Dest [10 0 R /Fit] /Prev 13 0 R >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000009 00000 n 
+0000000098 00000 n 
+0000000174 00000 n 
+0000000271 00000 n 
+0000000397 00000 n 
+0000000560 00000 n 
+0000000686 00000 n 
+0000001032 00000 n 
+0000001158 00000 n 
+0000001298 00000 n 
+0000001426 00000 n 
+0000001588 00000 n 
+0000001662 00000 n 
+0000001752 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R >>
+startxref
+1843
+%%EOF

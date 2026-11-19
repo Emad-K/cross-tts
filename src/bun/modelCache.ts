@@ -25,22 +25,26 @@ import { MODEL_REPO, MODEL_REVISION, MODEL_SHA256 } from "../shared/modelAssets"
  * file and throws, so a corrupt or swapped file never lands at `dest`. The
  * temp name is unique per call: the hub and the Settings downloader can fetch
  * the same file at once, and a shared temp would let one truncate the other's
- * bytes after they were hashed.
+ * bytes after they were hashed. `opts.sha512` (base64, as NuGet publishes
+ * it) is checked instead of `sha256`; `opts.signal` cancels the download;
+ * `opts.maxBytes` stops one that sends more than the expected size.
  */
 export async function downloadToFile(
 	url: string,
 	dest: string,
 	sha256?: string,
 	onProgress?: (loaded: number, total: number) => void,
+	opts: { signal?: AbortSignal; sha512?: string; maxBytes?: number } = {},
 ): Promise<void> {
-	const res = await fetch(url, { redirect: "follow" });
+	const res = await fetch(url, { redirect: "follow", signal: opts.signal });
 	if (!res.ok || !res.body) {
 		throw new Error(`Download failed ${res.status}: ${url}`);
 	}
 	const total = Number(res.headers.get("content-length") || 0);
 	mkdirSync(dirname(dest), { recursive: true });
 	const tmp = `${dest}.${randomBytes(6).toString("hex")}.download`;
-	const hash = createHash("sha256");
+	const hash = createHash(opts.sha512 ? "sha512" : "sha256");
+	const expected = opts.sha512 ?? sha256;
 	let loaded = 0;
 	try {
 		await pipeline(
@@ -49,13 +53,17 @@ export async function downloadToFile(
 				for await (const chunk of src) {
 					hash.update(chunk);
 					loaded += chunk.length;
+					if (opts.maxBytes !== undefined && loaded > opts.maxBytes) {
+						throw new Error(`Download is larger than expected, discarded: ${url}`);
+					}
 					onProgress?.(loaded, total);
 					yield chunk;
 				}
 			},
 			createWriteStream(tmp),
+			{ signal: opts.signal },
 		);
-		if (sha256 && hash.digest("hex") !== sha256) {
+		if (expected && hash.digest(opts.sha512 ? "base64" : "hex") !== expected) {
 			throw new Error(`Checksum mismatch, download discarded: ${url}`);
 		}
 		renameSync(tmp, dest);

@@ -42,7 +42,9 @@ export function finalizePlainTextInner(raw: string): string {
 			// The webview DOM has no \r (Chromium normalizes on parse), so the regex
 			// path must drop it too or every offset after a CRLF drifts the highlight.
 			.replace(/\r\n?/g, "\n")
-			.replace(/[ \t]+\n/g, "\n")
+			// The lookbehind starts each run at its first space: without it a long
+			// run with no newline after it is rescanned from every position.
+			.replace(/(?<![ \t])[ \t]+\n/g, "\n")
 			.replace(/\n{3,}/g, "\n\n")
 			.replace(/[ \t]{2,}/g, " ")
 	);

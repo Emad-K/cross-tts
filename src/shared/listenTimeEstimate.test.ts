@@ -2,9 +2,14 @@ import { describe, expect, test } from "bun:test";
 import {
 	addListenRateSample,
 	baseSecondsPerChar,
+	bookTimeLeft,
 	chapterTimeline,
+	coerceListenRates,
+	DEFAULT_BASE_SEC_PER_CHAR,
 	EMPTY_LISTEN_RATE,
+	listenRateKey,
 	MIN_MEASURED_CHARS,
+	secondsPerChar,
 } from "./listenTimeEstimate";
 
 describe("addListenRateSample", () => {
@@ -90,8 +95,10 @@ describe("chapterTimeline", () => {
 		expect(t!.totalSec).toBeCloseTo(30);
 	});
 
-	test("null while the rate is unknown and a chunk is unmeasured", () => {
-		expect(chapterTimeline([100, 200], [10], EMPTY_LISTEN_RATE, 1)).toBeNull();
+	test("falls back to the default rate while the voice is unmeasured", () => {
+		const t = chapterTimeline([100, 200], [10], undefined, 2);
+		expect(t!.starts).toEqual([0, 5]);
+		expect(t!.totalSec).toBeCloseTo(5 + (200 * DEFAULT_BASE_SEC_PER_CHAR) / 2);
 	});
 
 	test("null for an invalid speed", () => {
@@ -117,3 +124,72 @@ describe("chapterTimeline", () => {
 	});
 });
 
+
+describe("per-voice rates", () => {
+	test("keys by engine and voice", () => {
+		expect(listenRateKey("kokoro", "af_heart")).toBe("kokoro:af_heart");
+	});
+
+	test("secondsPerChar uses the measurement, else the default", () => {
+		expect(secondsPerChar(undefined)).toBe(DEFAULT_BASE_SEC_PER_CHAR);
+		expect(secondsPerChar({ chars: 10, baseSeconds: 5 })).toBe(
+			DEFAULT_BASE_SEC_PER_CHAR,
+		);
+		expect(secondsPerChar({ chars: 200, baseSeconds: 20 })).toBeCloseTo(0.1);
+	});
+
+	test("coerceListenRates keeps valid entries and drops junk", () => {
+		expect(
+			coerceListenRates({
+				"kokoro:af_heart": { chars: 200, baseSeconds: 20, extra: 1 },
+				bad: { chars: "200", baseSeconds: 20 },
+				zero: { chars: 0, baseSeconds: 0 },
+				nan: { chars: Number.NaN, baseSeconds: 1 },
+				nope: null,
+			}),
+		).toEqual({ "kokoro:af_heart": { chars: 200, baseSeconds: 20 } });
+		for (const junk of [null, "x", 3, [1, 2]]) {
+			expect(coerceListenRates(junk)).toEqual({});
+		}
+	});
+});
+
+describe("bookTimeLeft", () => {
+	const base = {
+		chapterIds: ["a", "b", "c"],
+		chapterChars: { a: 1000, b: 2000, c: 3000 },
+		chapterLeftSec: 30,
+		secPerChar: 0.1,
+		speed: 1,
+	};
+
+	test("adds the later chapters to what is left of this one", () => {
+		expect(bookTimeLeft({ ...base, activeChapterId: "a" })).toBeCloseTo(530);
+		expect(bookTimeLeft({ ...base, activeChapterId: "c" })).toBeCloseTo(30);
+	});
+
+	test("scales the later chapters by speed", () => {
+		expect(
+			bookTimeLeft({ ...base, activeChapterId: "a", speed: 2 }),
+		).toBeCloseTo(30 + 250);
+	});
+
+	test("a chapter file listed twice in the contents counts once", () => {
+		expect(
+			bookTimeLeft({
+				...base,
+				chapterIds: ["a", "b", "b", "c", "b"],
+				activeChapterId: "a",
+			}),
+		).toBeCloseTo(530);
+	});
+
+	test("null when it can't be known", () => {
+		expect(bookTimeLeft({ ...base, activeChapterId: null })).toBeNull();
+		expect(bookTimeLeft({ ...base, activeChapterId: "zz" })).toBeNull();
+		expect(
+			bookTimeLeft({ ...base, activeChapterId: "a", chapterChars: { a: 1 } }),
+		).toBeNull();
+		expect(bookTimeLeft({ ...base, activeChapterId: "a", speed: 0 })).toBeNull();
+	});
+});

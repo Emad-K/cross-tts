@@ -33,15 +33,18 @@ import type { AppSessionFileV1, WebPersistedSlice } from "../shared/appSession";
 import {
 	addWatchedFolder,
 	appConfigInfo,
+	backendAvailability,
+	defaultDataDir,
 	dataDir,
 	loadAppConfig,
 	removeWatchedFolder,
 	resetDataDir,
 	setAppearance,
 	setCpuThreads,
-	setCudaEnabled,
 	setDataDir,
-	setGpuEnabled,
+	setTtsBackend,
+	setCrashPromptDisabled,
+	setWelcomeSeen,
 	setGpuFp16,
 	setGpuPower,
 	setShortcutBinding,
@@ -52,10 +55,15 @@ import {
 	setShortcutTarget,
 	unregisterGlobalShortcuts,
 } from "./globalShortcuts";
-import { downloadModel, modelStatus } from "./modelDownload";
+import { downloadModel, modelStatus, removeModel, supertonicPresent } from "./modelDownload";
 import type { GpuPowerPreference } from "../shared/appConfig";
 import type { Appearance } from "../shared/appearance";
-import { MODEL_KINDS, MODEL_LABEL, type ModelKind } from "../shared/modelAssets";
+import {
+	MODEL_KINDS,
+	MODEL_LABEL,
+	REMOVABLE_MODEL_KINDS,
+	type ModelKind,
+} from "../shared/modelAssets";
 import type { ShortcutAction } from "../shared/shortcuts";
 import {
 	loadAppSessionFile,
@@ -78,7 +86,17 @@ import {
 	pickDocument,
 	readDocumentAtPath,
 } from "./documentIo";
+import { registerDocumentInputHandlers } from "./documentInputIpc";
+import { registerChapterLengthHandlers } from "./chapterLengths";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
+import { registerBackupHandlers } from "./backup";
+import {
+	hideInsteadOfClose,
+	refreshTray,
+	registerTrayHandlers,
+	showMainWindow,
+} from "./tray";
+import { registerUserDataHandlers } from "./userDataIo";
 import {
 	pushWatchedFiles,
 	scanWatchedFolders,
@@ -90,11 +108,24 @@ import {
 } from "./kokoroHubServer";
 import {
 	setTtsNodeProgressTarget,
+	clearTtsNodeGpuCrash,
 	stopTtsNode,
 	ttsNodeGenerate,
 	ttsNodeInit,
 } from "./ttsNode";
-import type { TtsNodeEngine, TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
+import type {
+	TtsNodeEngine,
+	TtsNodeEp,
+	TtsNodeGenerateParams,
+} from "../shared/ttsNodeRpc";
+import {
+	cudaAddonDir,
+	cudaAddonErrorText,
+	installCudaAddon,
+	pruneCudaAddons,
+	removeCudaAddon,
+} from "./cudaAddon";
+import { detectCuda, ortBindingDir } from "./cudaSupport";
 import {
 	initCrashCapture,
 	notifyCrashReportsOnLoad,
@@ -129,6 +160,12 @@ if (
 		execPath: process.env["APPIMAGE"] || process.execPath,
 		args: [...process.argv.slice(1), "--ozone-platform=x11"],
 	});
+	app.exit(0);
+} else if (!app.requestSingleInstanceLock()) {
+	// One running copy only: a second launch hands over to the first (which
+	// shows its window, see tray.ts) and exits. Two copies would also overwrite
+	// each other's session file. In this `else` so a process that is about to
+	// relaunch never holds the lock its successor needs.
 	app.exit(0);
 }
 
@@ -267,17 +304,40 @@ const EXPORT_DENIED = {
 const nodeEngine = (engine: unknown): TtsNodeEngine =>
 	engine === "supertonic" ? "supertonic" : "kokoro";
 
+/**
+ * Renderer-requested execution provider, limited to what this machine can
+ * run (Kokoro only; anything else is the CPU).
+ */
+function nodeEp(engine: TtsNodeEngine, ep: unknown): TtsNodeEp {
+	if (engine !== "kokoro") return "cpu";
+	const backends = backendAvailability();
+	if (ep === "cuda" && backends.cuda === "ready") return "cuda";
+	if (ep === "dml" && backends.dml) return "dml";
+	return "cpu";
+}
+
+/** Settles once the startup CUDA library lookup is done (cudaSupport.ts). */
+let cudaDetected: Promise<string | null> = Promise.resolve(null);
+
+/** The CUDA add-on download in progress, if any (Settings → Voice → Advanced). */
+let cudaAddonAbort: AbortController | null = null;
+
 function registerRpcHandlers(): void {
 	// Await hub readiness so the renderer never sees a transient null during
 	// startup and wrongly commits to the remote HuggingFace + browser cache.
 	ipcMain.handle("getKokoroHubBaseUrl", () => kokoroHubReady);
-	ipcMain.handle("ttsNodeInit", async (_event, engine: unknown) =>
-		ttsNodeInit(
-			await kokoroHubReady,
-			loadAppConfig().cpuThreads ?? 0,
-			loadAppConfig().cudaEnabled,
-			nodeEngine(engine),
-		),
+	ipcMain.handle(
+		"ttsNodeInit",
+		async (_event, params: { engine?: unknown; ep?: unknown } | undefined) => {
+			const engine = nodeEngine(params?.engine);
+			return ttsNodeInit(
+				await kokoroHubReady,
+				loadAppConfig().cpuThreads ?? 0,
+				engine,
+				nodeEp(engine, params?.ep),
+				cudaAddonDir(defaultDataDir()),
+			);
+		},
 	);
 	ipcMain.handle("ttsNodeGenerate", (_event, params: TtsNodeGenerateParams) =>
 		ttsNodeGenerate(params),
@@ -312,6 +372,9 @@ function registerRpcHandlers(): void {
 			{ filePath, chapterId }: { filePath: string; chapterId: string },
 		) => getEpubChapterContent(filePath, chapterId),
 	);
+	registerDocumentInputHandlers(
+		(url) => url !== undefined && isAllowedOrigin(url, TRUSTED_ORIGINS),
+	);
 	ipcMain.handle(
 		"exportTtsRulesToFile",
 		(
@@ -319,9 +382,66 @@ function registerRpcHandlers(): void {
 			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
 		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
 	);
-	ipcMain.handle("getAppConfig", () => appConfigInfo());
-	ipcMain.handle("setGpuEnabled", (_event, { enabled }: { enabled: boolean }) => {
-		setGpuEnabled(enabled);
+	registerUserDataHandlers(() => mainWindow, dataDir);
+	// Waits for the CUDA lookup so Settings lists the right backends.
+	ipcMain.handle("getAppConfig", async () => {
+		// Also where a tray host that started after the app gets noticed.
+		await Promise.all([cudaDetected, refreshTray()]);
+		return appConfigInfo();
+	});
+	ipcMain.handle("setTtsBackend", (_event, { backend }: { backend: unknown }) => {
+		setTtsBackend(backend);
+		clearTtsNodeGpuCrash();
+		return appConfigInfo();
+	});
+	// The only request the app makes to nuget.org, and only on this click.
+	ipcMain.handle("cudaAddonInstall", async (event) => {
+		if (backendAvailability().cuda !== "needs-addon" || cudaAddonAbort) {
+			return { ok: false, error: "The CUDA add-on can't be installed right now." };
+		}
+		const abort = new AbortController();
+		cudaAddonAbort = abort;
+		let lastSent = 0;
+		try {
+			await installCudaAddon({
+				userData: defaultDataDir(),
+				bindingDir: ortBindingDir(),
+				signal: abort.signal,
+				onProgress: (loaded, total) => {
+					// About ten updates a second is plenty for a progress bar.
+					if (loaded < total && Date.now() - lastSent < 100) return;
+					lastSent = Date.now();
+					if (!event.sender.isDestroyed()) {
+						event.sender.send("app:cuda-addon-progress", { loaded, total });
+					}
+				},
+			});
+			mainLog({ level: "info", source: "models", message: "CUDA add-on installed." });
+			return { ok: true, config: appConfigInfo() };
+		} catch (e) {
+			if (!abort.signal.aborted) {
+				mainLog({
+					level: "error",
+					source: "models",
+					message: "Couldn't install the CUDA add-on.",
+					detail: e instanceof Error ? e.message : String(e),
+				});
+			}
+			return {
+				ok: false,
+				error: cudaAddonErrorText(e),
+				cancelled: abort.signal.aborted,
+			};
+		} finally {
+			cudaAddonAbort = null;
+		}
+	});
+	ipcMain.handle("cudaAddonCancel", () => cudaAddonAbort?.abort());
+	ipcMain.handle("cudaAddonRemove", () => {
+		// The native engine may have the libraries loaded.
+		stopTtsNode();
+		if (!cudaAddonAbort) removeCudaAddon(defaultDataDir());
+		if (loadAppConfig().ttsBackend === "cuda") setTtsBackend("auto");
 		return appConfigInfo();
 	});
 	ipcMain.handle(
@@ -420,6 +540,7 @@ function registerRpcHandlers(): void {
 		"getBookCoverBytes",
 		(_event, { filePath }: { filePath: string }) => getBookCoverBytes(filePath),
 	);
+	registerChapterLengthHandlers();
 	ipcMain.handle(
 		"findInPage",
 		(
@@ -462,6 +583,7 @@ function registerRpcHandlers(): void {
 	});
 	ipcMain.handle("getGpuInfo", () => getGpuInfo());
 	ipcMain.handle("getModelStatus", () => modelStatus());
+	ipcMain.handle("supertonicPresent", () => supertonicPresent());
 	ipcMain.handle("downloadModel", async (_event, { kind }: { kind: ModelKind }) => {
 		if (!MODEL_KINDS.includes(kind)) return modelStatus();
 		const send = (loaded: number, total: number, done: boolean, error?: string) => {
@@ -490,12 +612,35 @@ function registerRpcHandlers(): void {
 		}
 		return modelStatus();
 	});
-	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
-		setCpuThreads(threads);
+	ipcMain.handle("removeModel", (_event, params: { kind?: unknown } | undefined) => {
+		const kind = REMOVABLE_MODEL_KINDS.find((k) => k === params?.kind);
+		if (kind) {
+			try {
+				removeModel(kind);
+			} catch (e) {
+				mainLog({
+					level: "error",
+					source: "models",
+					message: `Couldn't remove ${MODEL_LABEL[kind]}.`,
+					detail: e instanceof Error ? e.message : String(e),
+				});
+			}
+		}
+		return modelStatus();
+	});
+	ipcMain.handle(
+		"setCrashPromptDisabled",
+		(_event, params: { disabled?: unknown } | undefined) => {
+			if (typeof params?.disabled === "boolean") setCrashPromptDisabled(params.disabled);
+			return appConfigInfo();
+		},
+	);
+	ipcMain.handle("setWelcomeSeen", (_event, params: { seen?: unknown } | undefined) => {
+		setWelcomeSeen(params?.seen === true);
 		return appConfigInfo();
 	});
-	ipcMain.handle("setCudaEnabled", (_event, { enabled }: { enabled: boolean }) => {
-		setCudaEnabled(enabled === true);
+	ipcMain.handle("setCpuThreads", (_event, { threads }: { threads: number }) => {
+		setCpuThreads(threads);
 		return appConfigInfo();
 	});
 	ipcMain.handle("setGpuFp16", (_event, { enabled }: { enabled: boolean }) => {
@@ -572,6 +717,8 @@ function registerRpcHandlers(): void {
 		app.relaunch();
 		app.exit(0);
 	});
+	registerTrayHandlers(() => mainWindow);
+	registerBackupHandlers(() => mainWindow);
 	ipcMain.handle("addWatchedFolder", async () => {
 		if (!mainWindow) return null;
 		const result = await dialog.showOpenDialog(mainWindow, {
@@ -650,7 +797,11 @@ function createWindow(): void {
 	setTtsNodeProgressTarget(mainWindow);
 	notifyCrashReportsOnLoad(mainWindow);
 	applyGlobalShortcuts();
-	mainWindow.on("close", () => snapshotWindowState());
+	mainWindow.on("close", (event) => {
+		snapshotWindowState();
+		// "Keep playing when the window is closed": hide to the tray instead.
+		if (mainWindow && hideInsteadOfClose(mainWindow)) event.preventDefault();
+	});
 	mainWindow.on("closed", () => {
 		setLogTarget(null);
 		setShortcutTarget(null);
@@ -667,10 +818,13 @@ app.whenReady().then(async () => {
 	Menu.setApplicationMenu(null);
 
 	// Electron grants every permission by default. Deny all except clipboard
-	// writes (context-menu "Copy") from the app's own origin. WebGPU, audio
-	// playback, mediaSession and findInPage need no permission.
+	// writes (context-menu "Copy") and choosing an audio output (the player's
+	// output picker: lists speakers and their names, never microphones) from
+	// the app's own origin. WebGPU, audio playback, mediaSession and
+	// findInPage need no permission.
 	const allowPermission = (permission: string, url: string) =>
-		permission === "clipboard-sanitized-write" &&
+		(permission === "clipboard-sanitized-write" ||
+			permission === "speaker-selection") &&
 		isAllowedOrigin(url, TRUSTED_ORIGINS);
 	session.defaultSession.setPermissionRequestHandler((_wc, permission, cb, details) =>
 		cb(allowPermission(permission, details.requestingUrl)),
@@ -683,9 +837,15 @@ app.whenReady().then(async () => {
 	// before the window loads it.
 	handleAppRequests(join(__dirname, "../renderer"));
 
+	pruneCudaAddons(defaultDataDir());
+	cudaDetected = detectCuda();
+
 	registerRpcHandlers();
 	createWindow();
-	void initAutoUpdate();
+	void cudaDetected.then((note) => {
+		if (note) mainLog({ level: "info", source: "models", message: note });
+	});
+	void initAutoUpdate(() => mainWindow);
 
 	kokoroHubReady = startKokoroHubServer(TRUSTED_ORIGINS)
 		.then((url) => {
@@ -706,6 +866,8 @@ app.whenReady().then(async () => {
 
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) createWindow();
+		// A window hidden to the menu bar comes back on a Dock click.
+		else showMainWindow();
 	});
 
 	console.log("Cross TTS started!");

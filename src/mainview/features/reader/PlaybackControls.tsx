@@ -15,15 +15,10 @@ import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuItem,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
-	DropdownMenuSub,
-	DropdownMenuSubContent,
-	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import {
 	Tooltip,
@@ -31,6 +26,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { OutputDeviceControl } from "./OutputDeviceControl";
 import {
 	seekProgressPercent,
 	setVolumeLive,
@@ -38,8 +34,7 @@ import {
 	togglePlayPause,
 	useTtsStore,
 } from "./tts";
-import { getTtsEngine } from "./tts/ttsEngines";
-import { supertonicLanguageName } from "./tts/supertonicVoices";
+import { VoicePicker } from "./VoicePicker";
 import { ChapterTime } from "./listenEstimate/ChapterTime";
 import { SleepTimerControl } from "./sleepTimer/SleepTimerControl";
 
@@ -51,12 +46,14 @@ function speedLabelToNumber(label: (typeof SPEEDS)[number]): number {
 
 export type PlaybackControlsProps = {
 	className?: string;
+	/** Opens Settings on the Voice tab (the voice menu's last item). */
+	onMoreVoices?: () => void;
 };
 
 /**
- * Media-style footer wired to Kokoro TTS and zustand playback state.
+ * Media-style footer wired to the TTS engine and zustand playback state.
  */
-export function PlaybackControls({ className }: PlaybackControlsProps) {
+export function PlaybackControls({ className, onMoreVoices }: PlaybackControlsProps) {
 	const volumeId = useId();
 	const [progress, setProgress] = useState([0]);
 	const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -65,8 +62,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	const progressPct = useTtsStore((s) => s.progressPct);
 	const currentChunkIndex = useTtsStore((s) => s.currentChunkIndex);
 	const volumePct = useTtsStore((s) => s.volumePct);
-	const voice = useTtsStore((s) => s.voice);
-	const engineId = useTtsStore((s) => s.engineId);
 	const speedNum = useTtsStore((s) => s.speed);
 	const chunks = useTtsStore((s) => s.chunks);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
@@ -91,24 +86,6 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 	}, [speedLabel]);
 
 	const setSpeed = useTtsStore((s) => s.setSpeed);
-	const setVoice = useTtsStore((s) => s.setVoice);
-
-	const menuVoices = useMemo(
-		() => getTtsEngine(engineId).listVoices(),
-		[engineId],
-	);
-	/**
-	 * Supertonic's 310 voices get one submenu per language; Kokoro's 40 stay a
-	 * flat list (its default voices must not sit a level down).
-	 */
-	const voicesByLanguage = useMemo(() => {
-		if (engineId !== "supertonic") return null;
-		const groups = new Map<string, typeof menuVoices>();
-		for (const v of menuVoices) {
-			groups.set(v.language, [...(groups.get(v.language) ?? []), v]);
-		}
-		return [...groups];
-	}, [engineId, menuVoices]);
 
 	useEffect(() => {
 		if (!isDraggingProgress) {
@@ -337,6 +314,7 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 
 					<div className="flex shrink-0 flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-end">
 						<div className="flex w-28 shrink-0 items-center gap-2 sm:w-32">
+							<OutputDeviceControl />
 							<Volume2
 								className="size-4 shrink-0 text-muted-foreground"
 								aria-hidden
@@ -354,54 +332,10 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 							</span>
 						</div>
 
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="w-full shrink-0 justify-between gap-2 border-border bg-transparent sm:min-w-[10rem] sm:w-auto"
-								>
-									{menuVoices.find((o) => o.id === voice)?.label ?? voice}
-									<ChevronDown className="size-4 opacity-70" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent
-								align="end"
-								className="min-w-[12rem] overflow-hidden p-0"
-							>
-								<ScrollArea className="h-72">
-									<div className="p-1">
-										{voicesByLanguage
-											? voicesByLanguage.map(([lang, voices]) => (
-													<DropdownMenuSub key={lang}>
-														<DropdownMenuSubTrigger>
-															{supertonicLanguageName(lang)}
-														</DropdownMenuSubTrigger>
-														<DropdownMenuSubContent>
-															{voices.map((o) => (
-																<DropdownMenuItem
-																	key={o.id}
-																	onClick={() => setVoice(o.id)}
-																>
-																	{o.label}
-																</DropdownMenuItem>
-															))}
-														</DropdownMenuSubContent>
-													</DropdownMenuSub>
-												))
-											: menuVoices.map((o) => (
-													<DropdownMenuItem
-														key={o.id}
-														onClick={() => setVoice(o.id)}
-													>
-														{o.label}
-													</DropdownMenuItem>
-												))}
-									</div>
-								</ScrollArea>
-							</DropdownMenuContent>
-						</DropdownMenu>
+						<VoicePicker
+							className="w-full shrink-0 sm:min-w-[10rem] sm:w-auto"
+							onMore={onMoreVoices}
+						/>
 					</div>
 				</div>
 			</div>

@@ -90,9 +90,9 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 - **Memory:** 4 GB RAM minimum, 8 GB comfortable.
 - **Disk:** roughly a few hundred MB — the app plus the voice files, downloaded once and cached.
 - **OS:** Windows 10/11, macOS 12 (Monterey)+, or a current 64-bit Linux desktop.
-- **Internet:** only for the one-time voice download and app updates. Reading and listening are **100% offline** after that.
+- **Internet:** only for the one-time voice download, app updates, and the optional NVIDIA CUDA add-on if you ask for it. Reading and listening are **100% offline** after that.
 
-Synthesis settings (use GPU, CPU thread count) live in **Settings → Performance** if you want to tune them.
+Synthesis settings (graphics card or processor, thread count) live under **Settings → Voice → Advanced** if you want to tune them.
 
 ---
 
@@ -143,18 +143,25 @@ helper are kept in [third_party/](third_party/) and shipped under the app's
 
 Built with Electron, React, TypeScript, Tailwind, and Vite (electron-vite). TTS is [Kokoro](https://github.com/hexgrad/kokoro) (`onnx-community/Kokoro-82M-v1.0-ONNX`) driven directly through transformers.js 4 on ONNX Runtime 1.31 — WebGPU in a Web Worker when available, otherwise native CPU (`onnxruntime-node`, fp32) in an Electron utility process, with a WASM (q8) Web Worker as the last-resort fallback. onnxruntime-node 1.31 has no Intel-Mac (darwin/x64) binary, so on Intel Macs the native engine is skipped and the CPU path is the WASM worker (about 2.5× slower than native).
 
-**Supertonic 3** (Settings → Playback → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
+**Supertonic 3** (Settings → Voice → Voice engine) is the second engine: four fp32 ONNX graphs (~400 MB) driven directly on ONNX Runtime. It reads 31 languages; a voice is `<lang>:<style>` (10 preset styles). It runs native CPU first (about 7× realtime at the default 8 denoising steps on an 8-core desktop), then WebGPU, then multi-threaded WASM (1.3× realtime measured on its first, warm-up sentence). The quality slider sets the denoising steps (2–16).
 
-**Optional CUDA (Linux/Windows x64, experimental):** Settings → Performance →
-"Use NVIDIA GPU (CUDA) for native engine" (off by default) makes the native
-engine try ONNX Runtime's CUDA execution provider. It needs CUDA 12 and cuDNN 9
-on the machine *and* ONNX Runtime's CUDA provider libraries next to the
-binding, which installers don't ship (hundreds of MB; npm only offers them for
-Linux x64 via `ONNXRUNTIME_NODE_INSTALL=cuda12 node node_modules/onnxruntime-node/script/install.js`
-in a dev checkout). The setting only appears when that provider library is
-found (in a packaged app: under `resources/app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6/<os>/x64/`),
-so stock installers don't show it. When anything else is missing, or a CUDA
-run fails, the engine logs why and continues on the CPU.
+**Run speech on (Settings → Voice → Advanced):** "Automatic" keeps the order
+above. The picker also lists explicit choices, each only where it can work:
+Graphics card (WebGPU), Processor (native), Processor (compatibility mode,
+WASM), and two graphics-card providers for the native Kokoro engine. Any of
+them falls back to the processor when it can't start, and "Test speed on this
+computer" times them on request (it never runs on its own).
+
+- **DirectML (Windows, experimental):** ships with the app; nothing to install.
+- **NVIDIA CUDA (Linux x64 only):** offered only when the CUDA 13 runtime and
+  cuDNN 9 are already installed (ONNX Runtime 1.31's CUDA provider links
+  those; CUDA 12 is not enough, and its Windows build has no CUDA). The app
+  never installs them. Picking it downloads a one-time 234 MB add-on (ONNX
+  Runtime's CUDA provider libraries, SHA-512 pinned) from nuget.org into the
+  app-data folder. That click is the only time the app contacts nuget.org.
+  The checksum is checked at download time only: the unpacked libraries sit
+  in your own app-data folder and are loaded from there afterwards, like any
+  other file your user account can change.
 
 ```bash
 pnpm install

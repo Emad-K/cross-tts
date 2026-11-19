@@ -1,4 +1,11 @@
-import { ArrowDownUp, BookOpen, FileText, FolderOpen, Search } from "lucide-react";
+import {
+	ArrowDownUp,
+	BookOpen,
+	ClipboardPaste,
+	FileText,
+	FolderOpen,
+	Search,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { BookProgress } from "@shared/recentBooks";
 import { recentBooksList } from "@shared/recentBooks";
@@ -23,7 +30,10 @@ import {
 	sortLibrary,
 } from "./library/libraryFilters";
 import { useLibraryStore } from "./library/libraryStore";
+import { PASTE_SHORTCUT_LABEL, pasteText } from "./paste/usePasteText";
+import { MissingBadge } from "./library/missingBooks";
 import { touchSessionSave } from "./sessionPersistence";
+import { BookStatsLine, StatsButton } from "./stats/StatsButton";
 
 /** Covers are immutable per file; cache so the grid fetches each one once. */
 const coverCache = new Map<string, string | null>();
@@ -118,6 +128,7 @@ function CoverCard({
 							{book.title}
 						</span>
 					</div>
+					<MissingBadge path={book.path} />
 					{/* Read-progress bar. */}
 					{pct > 0 ? (
 						<div
@@ -139,6 +150,7 @@ function CoverCard({
 						{book.series}
 					</span>
 				) : null}
+				<BookStatsLine book={book} />
 			</button>
 			<BookCardMenu book={book} onRemove={onRemove} onSaveDetails={onSaveDetails} />
 		</div>
@@ -195,11 +207,11 @@ export function ReaderEmptyState({
 					Open a document
 				</h1>
 				<p className="mb-2 max-w-md text-sm text-muted-foreground sm:text-base">
-					Open a plain text or EPUB book to read and listen with TTS.
+					Open a book or document to read and listen, or paste some text.
 				</p>
 				<p className="mb-8 flex items-center justify-center gap-2 text-xs text-muted-foreground/90 sm:text-sm">
 					<FileText className="size-4 shrink-0" aria-hidden />
-					<span>.txt and .epub supported</span>
+					<span>EPUB, PDF, Word, text, Markdown and HTML</span>
 				</p>
 				<div className="flex w-full max-w-sm flex-col gap-3 sm:flex-row sm:justify-center">
 					<Button
@@ -210,6 +222,17 @@ export function ReaderEmptyState({
 					>
 						<FolderOpen className="size-4" aria-hidden />
 						Open file
+					</Button>
+					<Button
+						type="button"
+						size="lg"
+						variant="outline"
+						className="gap-2 border-border sm:min-w-[11rem]"
+						onClick={() => void pasteText()}
+						title={`Read the text on your clipboard (${PASTE_SHORTCUT_LABEL})`}
+					>
+						<ClipboardPaste className="size-4" aria-hidden />
+						Paste text
 					</Button>
 					{onLoadSample ? (
 						<Button
@@ -235,6 +258,17 @@ export function ReaderEmptyState({
 						My books
 					</h1>
 					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="gap-2 border-border bg-transparent"
+							onClick={() => void pasteText()}
+							title={`Read the text on your clipboard (${PASTE_SHORTCUT_LABEL})`}
+						>
+							<ClipboardPaste className="size-4" aria-hidden />
+							Paste text
+						</Button>
 						<div className="relative">
 							<Search
 								className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -279,6 +313,7 @@ export function ReaderEmptyState({
 								</DropdownMenuRadioGroup>
 							</DropdownMenuContent>
 						</DropdownMenu>
+						<StatsButton />
 					</div>
 				</div>
 

@@ -5,9 +5,6 @@ import {
 	FONT_SCALE_MAX,
 	FONT_SCALE_MIN,
 	FONT_SCALE_STEP,
-	MAX_CHUNK_CHARS_MAX,
-	MAX_CHUNK_CHARS_MIN,
-	MAX_CHUNK_CHARS_STEP,
 	READER_PADDINGS,
 	THEMES,
 	type ColorMode,
@@ -25,8 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { seekToChunkAndMaybePlay, useTtsStore } from "../tts";
 import { useAppSettingsStore } from "./appSettingsStore";
+import { HighlightModeControl } from "./HighlightModeControl";
 
 const MODES: { id: ColorMode; label: string; icon: typeof Sun }[] = [
 	{ id: "system", label: "System", icon: Monitor },
@@ -56,15 +53,13 @@ export function AppearancePanel() {
 
 	const [scaleDraft, setScaleDraft] = useState<number | null>(null);
 	const scale = scaleDraft ?? a.fontScale;
-	const [chunkDraft, setChunkDraft] = useState<number | null>(null);
-	const chunkChars = chunkDraft ?? a.maxChunkChars;
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4 pr-12">
 				<h2 className="text-base font-semibold leading-none">Appearance</h2>
 				<p className="text-sm text-muted-foreground">
-					Theme, light/dark mode, and the reading font.
+					Theme, light/dark mode, the reading font and the read-along highlight.
 				</p>
 			</div>
 			<ScrollArea className="min-h-0 w-full flex-1">
@@ -188,30 +183,7 @@ export function AppearancePanel() {
 						</p>
 					</Field>
 
-					<Field label={`Max segment length · ${chunkChars} chars`}>
-						<Slider
-							value={[chunkChars]}
-							min={MAX_CHUNK_CHARS_MIN}
-							max={MAX_CHUNK_CHARS_MAX}
-							step={MAX_CHUNK_CHARS_STEP}
-							onValueChange={(v) => setChunkDraft(v[0] ?? MAX_CHUNK_CHARS_MIN)}
-							onValueCommit={(v) => {
-								setChunkDraft(null);
-								const next = v[0] ?? MAX_CHUNK_CHARS_MIN;
-								void setAppearance({ maxChunkChars: next });
-								// Rebuild the open document's chunks with the new size.
-								useTtsStore.getState().rechunk();
-								// Restart (or drop, if paused) the loop at the mapped position.
-								seekToChunkAndMaybePlay(useTtsStore.getState().currentChunkIndex);
-							}}
-						/>
-						<p className="mt-2 text-xs text-muted-foreground">
-							Longest text the engine speaks at once. Shorter = snappier start
-							and finer highlighting; longer = fewer breaks. On Linux, raising
-							this can make very long segments sound slightly off — keep it
-							lower if you notice it.
-						</p>
-					</Field>
+					<HighlightModeControl />
 				</div>
 			</ScrollArea>
 		</div>

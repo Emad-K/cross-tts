@@ -42,6 +42,11 @@ test("crash dialog appears after a crash and dismiss clears it", async () => {
 		mkdirSync(crashesDir, { recursive: true });
 		const crashFile = join(crashesDir, "crash-1765000000000-0.json");
 		writeFileSync(crashFile, crashRecordToJson(FAKE_CRASH));
+		// Not a first run: the welcome would wait behind the crash dialog.
+		writeFileSync(
+			join(userDataDir, "app-config.json"),
+			JSON.stringify({ version: 2, welcomeSeen: true }),
+		);
 
 		electronApp = await _electron.launch({
 			args: [MAIN_BUNDLE, "--no-sandbox", "--disable-gpu"],

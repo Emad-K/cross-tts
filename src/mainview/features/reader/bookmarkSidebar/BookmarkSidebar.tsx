@@ -1,4 +1,5 @@
-import { Bookmark, BookmarkPlus, Trash2 } from "lucide-react";
+import { BookmarkPlus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { hasBookmark, sortBookmarks } from "@shared/bookmarks";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,6 +9,8 @@ import {
 	navigateToBookmark,
 	useBookmarksStore,
 } from "../bookmarks/bookmarksStore";
+import { NotesPanel } from "../notes/NotesPanel";
+import { useNoteLocation, useNotesStore } from "../notes/notesStore";
 import { useTtsStore } from "../tts";
 
 export type BookmarkSidebarProps = {
@@ -30,13 +33,23 @@ export function BookmarkSidebar({ open, className }: BookmarkSidebarProps) {
 	const alreadyHere =
 		canBookmark && hasBookmark(list, chapterId, currentChunkIndex);
 
+	const [tab, setTab] = useState<"bookmarks" | "notes">("bookmarks");
+	const notePath = useNoteLocation().path;
+	const noteCount = useNotesStore((s) =>
+		notePath ? (s.byPath[notePath]?.length ?? 0) : 0,
+	);
+	const tabs = [
+		{ id: "bookmarks", label: "Bookmarks", count: sorted.length },
+		{ id: "notes", label: "Notes", count: noteCount },
+	] as const;
+
 	const addHere = () => {
 		if (canBookmark) bookmarkCurrentSpot();
 	};
 
 	return (
 		<aside
-			aria-label="Bookmarks"
+			aria-label="Bookmarks and notes"
 			aria-hidden={!open}
 			className={cn(
 				"flex h-full min-h-0 w-full flex-col overflow-hidden bg-muted/20 transition-opacity duration-200 ease-out",
@@ -46,21 +59,39 @@ export function BookmarkSidebar({ open, className }: BookmarkSidebarProps) {
 		>
 			{/* Clears the floating bookmarks toggle pinned at the page corner. */}
 			<div className="h-11 shrink-0" aria-hidden />
-			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-				<Bookmark
-					className="size-4 shrink-0 text-muted-foreground"
-					aria-hidden
-				/>
-				<h2 className="text-sm font-semibold tracking-tight text-foreground">
-					Bookmarks
-				</h2>
-				{sorted.length > 0 ? (
-					<span className="ml-auto text-xs tabular-nums text-muted-foreground">
-						{sorted.length}
-					</span>
-				) : null}
+			{/* Two toggle buttons, not ARIA tabs: no arrow-key pattern to promise. */}
+			<div
+				role="group"
+				aria-label="Show bookmarks or notes"
+				className="flex shrink-0 gap-1 border-b border-border px-2 py-2"
+			>
+				{tabs.map((t) => (
+					<button
+						key={t.id}
+						type="button"
+						aria-pressed={tab === t.id}
+						onClick={() => setTab(t.id)}
+						className={cn(
+							"flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+							tab === t.id
+								? "bg-accent text-foreground"
+								: "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+						)}
+					>
+						{t.label}
+						{t.count > 0 ? (
+							<span className="text-xs tabular-nums text-muted-foreground">
+								{t.count}
+							</span>
+						) : null}
+					</button>
+				))}
 			</div>
 
+			{tab === "notes" ? (
+				<NotesPanel />
+			) : (
+				<>
 			<div className="shrink-0 px-3 py-3">
 				<Button
 					type="button"
@@ -127,6 +158,8 @@ export function BookmarkSidebar({ open, className }: BookmarkSidebarProps) {
 					</ul>
 				)}
 			</ScrollArea>
+				</>
+			)}
 		</aside>
 	);
 }

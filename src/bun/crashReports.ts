@@ -17,6 +17,8 @@ import {
 	type CrashRecord,
 } from "../shared/crashReport";
 import { crashPromptDisabled, dataDir, setCrashPromptDisabled } from "./appConfigStore";
+import { shouldRecordChildGone } from "./nativeEngineGate";
+import { nativeTtsReady } from "./ttsNode";
 
 const CRASHES_SUBDIR = "crashes";
 
@@ -155,7 +157,7 @@ export function initCrashCapture(): void {
 		);
 	});
 	app.on("child-process-gone", (_event, details) => {
-		if (details.reason === "clean-exit" || details.reason === "killed") return;
+		if (!shouldRecordChildGone(details, { nativeReady: nativeTtsReady() })) return;
 		writeCrashRecord(
 			"child-process-gone",
 			new Error(

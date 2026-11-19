@@ -20,6 +20,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { exportTtsRulesForUser } from "../ttsRules/ttsRulesExchangeUi";
+import {
+	RuleScopeBadge,
+	RuleScopeFilter,
+	RuleScopeSelect,
+	useScopeFilteredRules,
+} from "./RuleScopeSelect";
 
 export type TtsRulesPanelProps = {
 	/** True when this panel is the active settings section (drives scroll-into-view). */
@@ -60,12 +66,16 @@ type RegexFormDraft = {
 	pattern: string;
 	replacement: string;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; undefined = all books. */
+	book?: string;
 };
 
 type PronFormDraft = {
 	word: string;
 	phonetic: string;
 	caseSensitive: boolean;
+	/** Book path the rule is limited to; undefined = all books. */
+	book?: string;
 };
 
 function RuleRow({
@@ -248,6 +258,7 @@ function RulesAccordionSection({
 			</AccordionTrigger>
 			<AccordionContent>
 				<div className="flex flex-col gap-2.5 pb-1">
+					<RuleScopeFilter id={`rule-scope-filter-${value}`} />
 					<ScrollArea className="h-[min(15rem,40vh)] w-full rounded-md border border-border/60 bg-muted/5">
 						<div className="p-1.5 pr-3">
 							{isEmpty ? <RulesEmptyState message={emptyMessage} /> : list}
@@ -316,6 +327,11 @@ function InlineRegexForm({
 }) {
 	return (
 		<div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
+			<RuleScopeSelect
+				id="regex-form-scope"
+				value={draft.book}
+				onChange={(book) => onDraftChange({ book })}
+			/>
 			<Input
 				placeholder="Label (optional)"
 				value={draft.label}
@@ -375,6 +391,11 @@ function InlinePronForm({
 }) {
 	return (
 		<div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-3">
+			<RuleScopeSelect
+				id="pron-form-scope"
+				value={draft.book}
+				onChange={(book) => onDraftChange({ book })}
+			/>
 			<div className="grid gap-2 sm:grid-cols-2">
 				<div className="space-y-1">
 					<Label htmlFor="pron-form-word">Word</Label>
@@ -420,7 +441,7 @@ function InlinePronForm({
 }
 
 /**
- * Text-cleanup and pronunciation rules editor. Rendered as a section inside the
+ * Pronunciation fixes and text-cleanup rules editor (Settings → Pronunciation). Rendered as a section inside the
  * unified Settings dialog (see {@link SettingsDialog}).
  */
 export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
@@ -447,9 +468,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 	const importUserRules = useTtsRulesStore((s) => s.importUserRules);
 
 	const { ungrouped: ungroupedRegexRules, groups: regexGroups } =
-		splitRuleGroups(regexRules);
+		splitRuleGroups(useScopeFilteredRules(regexRules));
 	const { ungrouped: ungroupedPronRules, groups: pronGroups } =
-		splitRuleGroups(pronunciationRules);
+		splitRuleGroups(useScopeFilteredRules(pronunciationRules));
 
 	const importInputRef = useRef<HTMLInputElement>(null);
 	const [importError, setImportError] = useState<string | null>(null);
@@ -530,6 +551,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			pattern: rule.pattern,
 			replacement: rule.replacement,
 			caseSensitive: rule.caseSensitive,
+			book: rule.book,
 		});
 		setRegexError(null);
 	};
@@ -559,6 +581,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			replacement: regexDraft.replacement,
 			enabled: true,
 			caseSensitive: regexDraft.caseSensitive,
+			book: regexDraft.book,
 		});
 		closeRegexForm();
 	};
@@ -576,6 +599,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			pattern,
 			replacement: regexDraft.replacement,
 			caseSensitive: regexDraft.caseSensitive,
+			book: regexDraft.book,
 		});
 		closeRegexForm();
 	};
@@ -595,6 +619,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			word: rule.word,
 			phonetic: rule.phonetic,
 			caseSensitive: rule.caseSensitive,
+			book: rule.book,
 		});
 		setPronError(null);
 	};
@@ -618,6 +643,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			phonetic: pronDraft.phonetic.trim(),
 			caseSensitive: pronDraft.caseSensitive,
 			enabled: true,
+			book: pronDraft.book,
 		});
 		closePronForm();
 	};
@@ -633,6 +659,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 			word: pronDraft.word.trim(),
 			phonetic: pronDraft.phonetic.trim(),
 			caseSensitive: pronDraft.caseSensitive,
+			book: pronDraft.book,
 		});
 		closePronForm();
 	};
@@ -712,6 +739,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 								(case sensitive)
 							</span>
 						) : null}
+						<RuleScopeBadge book={rule.book} />
 					</>
 				}
 				actions={
@@ -770,6 +798,7 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 							{" "}
 							→ {rule.phonetic}
 						</span>
+						<RuleScopeBadge book={rule.book} />
 					</>
 				}
 				actions={
@@ -819,12 +848,15 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="shrink-0 space-y-1 border-b border-border px-6 py-4">
 				<h2 className="text-base font-semibold leading-none">
-					Text &amp; pronunciation rules
+					Pronunciation
 				</h2>
 				<p className="text-sm text-muted-foreground">
-					Clean up chunk text before speech. Highlights still use the original
-					text. Pronunciation overrides inject IPA phonemes (English voices
-					only; not markdown).
+					Fix how words are said and skip clutter before reading.
+				</p>
+				<p className="text-xs text-muted-foreground">
+					Highlights still use the original text. Pronunciation fixes are
+					written in IPA phonemes (English voices only); text cleanup rules
+					are regex patterns.
 				</p>
 				<div className="flex flex-wrap items-center gap-2 pt-2">
 					<Button
@@ -874,58 +906,9 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 					<Accordion
 						type="single"
 						collapsible
-						defaultValue="regex"
+						defaultValue="pronunciation"
 						className="w-full"
 					>
-						<RulesAccordionSection
-							value="regex"
-							title="Text cleanup (regex)"
-							ruleCount={regexRules.length}
-							isEmpty={regexRules.length === 0}
-							emptyMessage="No regex rules yet. Add a rule to clean up text before speech."
-							addLabel="Add rule"
-							addFormOpen={regexFormKey === "add"}
-							onAddClick={() =>
-								regexFormKey === "add" ? closeRegexForm() : openAddRegex()
-							}
-							list={
-								<>
-									<ul className="space-y-1.5">
-										{ungroupedRegexRules.map(renderRegexRule)}
-									</ul>
-									{regexGroups.map(([group, rules]) => (
-										<RuleGroupSection
-											key={group}
-											title={group}
-											enabledCount={rules.filter((r) => r.enabled).length}
-											totalCount={rules.length}
-											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
-											onSetAllEnabled={(enabled) =>
-												setRegexGroupEnabled(group, enabled)
-											}
-										>
-											{rules.map(renderRegexRule)}
-										</RuleGroupSection>
-									))}
-								</>
-							}
-							footer={
-								regexFormKey === "add" ? (
-									<InlineRegexForm
-										draft={regexDraft}
-										error={regexError}
-										submitLabel="Add rule"
-										onDraftChange={(patch) => {
-											setRegexDraft((d) => ({ ...d, ...patch }));
-											setRegexError(null);
-										}}
-										onSubmit={submitRegexAdd}
-										onCancel={closeRegexForm}
-									/>
-								) : null
-							}
-						/>
-
 						<RulesAccordionSection
 							value="pronunciation"
 							title="Pronunciation fixes"
@@ -970,6 +953,55 @@ export function TtsRulesPanel({ active }: TtsRulesPanelProps) {
 										}}
 										onSubmit={submitPronAdd}
 										onCancel={closePronForm}
+									/>
+								) : null
+							}
+						/>
+
+						<RulesAccordionSection
+							value="regex"
+							title="Text cleanup"
+							ruleCount={regexRules.length}
+							isEmpty={regexRules.length === 0}
+							emptyMessage="No cleanup rules yet. Add a rule (a regex pattern) to clean up text before speech."
+							addLabel="Add rule"
+							addFormOpen={regexFormKey === "add"}
+							onAddClick={() =>
+								regexFormKey === "add" ? closeRegexForm() : openAddRegex()
+							}
+							list={
+								<>
+									<ul className="space-y-1.5">
+										{ungroupedRegexRules.map(renderRegexRule)}
+									</ul>
+									{regexGroups.map(([group, rules]) => (
+										<RuleGroupSection
+											key={group}
+											title={group}
+											enabledCount={rules.filter((r) => r.enabled).length}
+											totalCount={rules.length}
+											description={BUILTIN_GROUP_DESCRIPTIONS[group]}
+											onSetAllEnabled={(enabled) =>
+												setRegexGroupEnabled(group, enabled)
+											}
+										>
+											{rules.map(renderRegexRule)}
+										</RuleGroupSection>
+									))}
+								</>
+							}
+							footer={
+								regexFormKey === "add" ? (
+									<InlineRegexForm
+										draft={regexDraft}
+										error={regexError}
+										submitLabel="Add rule"
+										onDraftChange={(patch) => {
+											setRegexDraft((d) => ({ ...d, ...patch }));
+											setRegexError(null);
+										}}
+										onSubmit={submitRegexAdd}
+										onCancel={closeRegexForm}
 									/>
 								) : null
 							}
