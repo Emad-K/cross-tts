@@ -205,3 +205,9 @@ describe("buildPreToCanonicalMap", () => {
 		}
 	});
 });
+
+test("a long run of spaces with no newline after it is collapsed in linear time", () => {
+	const started = performance.now();
+	expect(finalizePlainTextInner(`a${" ".repeat(400_000)}b \t\nc`)).toBe("a b\nc");
+	expect(performance.now() - started).toBeLessThan(1000);
+});
