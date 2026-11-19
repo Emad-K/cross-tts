@@ -97,14 +97,18 @@ export function PlaybackControls({ className }: PlaybackControlsProps) {
 		() => getTtsEngine(engineId).listVoices(),
 		[engineId],
 	);
-	/** Voices by language; many-language engines get one submenu per language. */
+	/**
+	 * Supertonic's 310 voices get one submenu per language; Kokoro's 40 stay a
+	 * flat list (its default voices must not sit a level down).
+	 */
 	const voicesByLanguage = useMemo(() => {
+		if (engineId !== "supertonic") return null;
 		const groups = new Map<string, typeof menuVoices>();
 		for (const v of menuVoices) {
 			groups.set(v.language, [...(groups.get(v.language) ?? []), v]);
 		}
-		return groups.size > 2 ? [...groups] : null;
-	}, [menuVoices]);
+		return [...groups];
+	}, [engineId, menuVoices]);
 
 	useEffect(() => {
 		if (!isDraggingProgress) {
