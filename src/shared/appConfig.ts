@@ -43,17 +43,19 @@ export type BackendAvailability = {
 };
 
 /**
- * The stored backend choice, or the one older settings map to: the CUDA
- * opt-in becomes "cuda", GPU switched off (schema v2) becomes "cpu", which
- * loads in the same order GPU-off did.
+ * The stored backend choice, or the one older settings map to: GPU switched
+ * off (schema v2) becomes "cpu", which loads in the same order GPU-off did;
+ * otherwise the CUDA opt-in becomes "cuda".
  */
 export function coerceTtsBackend(o: Record<string, unknown>): TtsBackend {
 	if (TTS_BACKENDS.includes(o.ttsBackend as TtsBackend)) {
 		return o.ttsBackend as TtsBackend;
 	}
-	if (o.cudaEnabled === true) return "cuda";
+	// GPU switched off wins over the CUDA opt-in: "cuda" without its add-on
+	// acts as "auto", which would turn WebGPU back on.
 	const version = typeof o.version === "number" ? o.version : 1;
 	if (version >= APP_CONFIG_VERSION && o.gpuEnabled === false) return "cpu";
+	if (o.cudaEnabled === true) return "cuda";
 	return "auto";
 }
 

@@ -13,6 +13,8 @@ describe("coerceTtsBackend", () => {
 	test("migrates the 1.14 settings", () => {
 		expect(coerceTtsBackend({ version: 2, cudaEnabled: true })).toBe("cuda");
 		expect(coerceTtsBackend({ version: 2, gpuEnabled: false })).toBe("cpu");
+		// GPU off wins: "cuda" without its add-on would act as "auto" (WebGPU).
+		expect(coerceTtsBackend({ version: 2, cudaEnabled: true, gpuEnabled: false })).toBe("cpu");
 		expect(coerceTtsBackend({ version: 2, gpuEnabled: true })).toBe("auto");
 		// v1 had GPU off by default; that was never the user's choice.
 		expect(coerceTtsBackend({ version: 1, gpuEnabled: false })).toBe("auto");
