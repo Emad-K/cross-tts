@@ -1,24 +1,28 @@
-# Electrobun Project
+# Cross TTS
 
-This is an Electrobun desktop application.
+Offline text-to-speech reader (EPUB / text documents, audiobook export) built
+with **Electron** (main + preload + React renderer), bundled by electron-vite
+and packaged with electron-builder. Package manager: pnpm. Unit tests: bun test.
 
-IMPORTANT: Electrobun is NOT Electron. Do not use Electron APIs or patterns.
+Use normal Electron APIs and patterns. The `src/bun` directory name is legacy
+(the project once used Electrobun); its code runs in Electron's Node main
+process, not in Bun.
 
-## Documentation
+## Layout
 
-Full API reference: https://blackboard.sh/electrobun/llms.txt
-Getting started: https://blackboard.sh/electrobun/docs/
+- `src/bun/` — Electron main process (`index.ts`: windows, `ipcMain` handlers,
+  `app://` protocol, auto-update, model hub proxy). `ttsNodeWorker.ts` is a
+  separate entry started with `utilityProcess.fork` for native CPU synthesis
+  (Kokoro on onnxruntime-node).
+- `src/preload/` — `contextBridge` exposing `window.api` (IPC requests/events).
+- `src/mainview/` — React renderer (Vite root), served via `app://bundle/`.
+  Talk to the main process only through `src/mainview/lib/desktopBridge.ts`.
+- `src/shared/` — pure TypeScript shared by all processes (`@shared` alias).
+- `e2e/` — Playwright tests driving the Electron app.
 
-## Quick Reference
+## Commands
 
-Import patterns:
-- Main process (Bun): `import { BrowserWindow } from "electrobun/bun"`
-- Browser context: `import { Electroview } from "electrobun/view"`
-
-Use `views://` URLs to load bundled assets (e.g., `url: "views://mainview/index.html"`).
-Views must be configured in `electrobun.config.ts` to be built and copied into the bundle.
-
-## About
-
-Electrobun is built by Blackboard (https://blackboard.sh), an innovation lab building
-tools and funding teams that define the next generation of technology.
+- `pnpm dev` — run the app in development
+- `pnpm run typecheck`, `pnpm run test`, `pnpm run build`
+- `pnpm run test:e2e` — Playwright (needs a display, e.g. `xvfb-run -a`)
+- `pnpm run dist:linux|win|mac` — package with electron-builder (`electron-builder.yml`)
