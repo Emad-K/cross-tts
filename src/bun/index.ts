@@ -122,15 +122,19 @@ initCrashCapture();
 //      is a deprecated escape hatch that no longer works everywhere, so it can't
 //      be relied on alone.
 // Both must be set before the app is ready.
-app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 // Linux only: Chromium ships WebGPU off here (navigator.gpu is absent and the
 // GPU process falls back to software), so CPU/wasm is the only path unless we
 // force it on. These flags bring up hardware WebGPU (Vulkan) — verified on
 // Wayland + NVIDIA. Windows/macOS already expose WebGPU without them, and
 // `ignore-gpu-blocklist` there could force GPU onto genuinely-broken drivers,
 // so scope it to Linux.
+// A second appendSwitch("enable-features", …) replaces the first rather than
+// merging, so all features go in one call.
+app.commandLine.appendSwitch(
+	"enable-features",
+	process.platform === "linux" ? "SharedArrayBuffer,Vulkan" : "SharedArrayBuffer",
+);
 if (process.platform === "linux") {
-	app.commandLine.appendSwitch("enable-features", "Vulkan");
 	app.commandLine.appendSwitch("enable-unsafe-webgpu");
 	app.commandLine.appendSwitch("ignore-gpu-blocklist");
 	app.commandLine.appendSwitch("ozone-platform-hint", "auto");
