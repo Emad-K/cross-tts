@@ -82,6 +82,7 @@ import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
+import { softwareAdapterReason } from "../tts/gpuAdapter";
 
 type SectionId =
 	| "appearance"
@@ -153,13 +154,13 @@ function ModelRow({
 	bytes: number;
 	onDownload: () => void;
 }) {
-	const Icon = kind === "gpu" ? Zap : Cpu;
+	const Icon = kind === "cpu" ? Cpu : Zap;
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-3">
 			<Icon
 				className={cn(
 					"size-4 shrink-0",
-					kind === "gpu" ? "text-amber-400" : "text-muted-foreground",
+					kind === "cpu" ? "text-muted-foreground" : "text-amber-400",
 				)}
 				aria-hidden
 			/>
@@ -569,6 +570,42 @@ function CudaControl() {
 	);
 }
 
+function GpuFp16Control() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setGpuFp16 = useAppSettingsStore((s) => s.setGpuFp16);
+	if (!config) return null;
+	const onToggle = async (next: boolean) => {
+		await setGpuFp16(next);
+		// The GPU model's precision is chosen when it loads (and a failed fp16
+		// load may have left the engine on the CPU).
+		resetTtsEngine();
+	};
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<label
+				htmlFor={switchId}
+				className="flex cursor-pointer items-center justify-between gap-4"
+			>
+				<span className="text-sm font-medium">
+					Half-precision GPU model (Kokoro)
+				</span>
+				<Switch
+					id={switchId}
+					checked={config.gpuFp16}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</label>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Experimental. Loads the smaller fp16 weights (about 160 MB instead of
+				325 MB) when your GPU supports 16-bit shaders and they are downloaded
+				(Storage → Voice models); otherwise the full model. It may sound
+				slightly different; switch off if it does.
+			</p>
+		</div>
+	);
+}
+
 function capitalize(s: string): string {
 	return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
@@ -692,7 +729,8 @@ function PerformancePanel() {
 		void (async () => {
 			try {
 				const adapter = await navigator.gpu?.requestAdapter();
-				setWebgpuAvailable(!!adapter);
+				// A software rasterizer is no GPU (same rule as the engine's probe).
+				setWebgpuAvailable(!!adapter && !softwareAdapterReason(adapter));
 			} catch {
 				setWebgpuAvailable(false);
 			}
@@ -744,6 +782,7 @@ function PerformancePanel() {
 				</p>
 			</div>
 			{gpuEnabled && webgpuAvailable !== false ? <GpuPreferenceControl /> : null}
+			{gpuEnabled && webgpuAvailable !== false ? <GpuFp16Control /> : null}
 			<CpuThreadsControl />
 			<CudaControl />
 		</SectionPane>

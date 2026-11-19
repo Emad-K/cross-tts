@@ -78,6 +78,7 @@ export function loadAppConfig(): AppConfigFileV1 {
 			next.cpuThreads = Math.max(0, Math.floor(o.cpuThreads));
 		}
 		if (typeof o.cudaEnabled === "boolean") next.cudaEnabled = o.cudaEnabled;
+		if (typeof o.gpuFp16 === "boolean") next.gpuFp16 = o.gpuFp16;
 		if (typeof o.shortcutsEnabled === "boolean") {
 			next.shortcutsEnabled = o.shortcutsEnabled;
 		}
@@ -141,6 +142,10 @@ export function setCpuThreads(value: number): void {
 
 export function setCudaEnabled(value: boolean): void {
 	persist({ ...loadAppConfig(), cudaEnabled: value });
+}
+
+export function setGpuFp16(value: boolean): void {
+	persist({ ...loadAppConfig(), gpuFp16: value });
 }
 
 export function shortcutsEnabled(): boolean {
@@ -260,6 +265,7 @@ export function appConfigInfo(): AppConfigInfo {
 		cpuThreads: config.cpuThreads,
 		cudaEnabled: config.cudaEnabled,
 		cudaSupported: cudaSupported(),
+		gpuFp16: config.gpuFp16,
 		shortcutsEnabled: config.shortcutsEnabled,
 		shortcuts: config.shortcuts,
 		autoUpdate: config.autoUpdate,

@@ -255,6 +255,14 @@ export async function setCudaEnabled(
 	return b.request.setCudaEnabled({ enabled });
 }
 
+export async function setGpuFp16(
+	enabled: boolean,
+): Promise<AppConfigInfo | null> {
+	const b = bridge();
+	if (!b) return null;
+	return b.request.setGpuFp16({ enabled });
+}
+
 export async function setShortcutsEnabled(
 	enabled: boolean,
 ): Promise<AppConfigInfo | null> {

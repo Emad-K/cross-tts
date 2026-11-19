@@ -1,5 +1,6 @@
 import {
 	getKokoroHubBaseUrl,
+	getModelStatus,
 	onTtsNodeProgress,
 	ttsNodeGenerate,
 	ttsNodeInit,
@@ -8,6 +9,8 @@ import {
 import { logError, logInfo, logWarn } from "../logging";
 import { useAppSettingsStore } from "../settings/appSettingsStore";
 import { getTtsRulesForEngine } from "../ttsRules/ttsRulesStore";
+import type { GpuPowerPreference } from "@shared/appConfig";
+import { describeAdapter, softwareAdapterReason } from "./gpuAdapter";
 import { getKokoroHubBaseUrlSync, setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { kokoroVoiceOptions } from "./kokoroVoices";
 import { prefetchAllVoiceBins } from "./prefetchKokoroAssets";
@@ -27,7 +30,7 @@ import { useTtsStore } from "./ttsStore";
  */
 
 type KokoroDevice = "webgpu" | "wasm";
-type KokoroDtype = "fp32" | "q8";
+type KokoroDtype = "fp32" | "fp16" | "q8";
 /**
  * Where synthesis actually runs: the renderer worker (webgpu/wasm) or the
  * native onnxruntime-node utility process ("node" — the preferred CPU path,
@@ -89,6 +92,8 @@ let lastLoadMs = 0;
 let loggedFirstSynth = false;
 /** Backend of the currently loaded model, or null when nothing is loaded. */
 let activeDevice: KokoroBackend | null = null;
+/** Weights precision of the loaded model (fp32 on the native backend). */
+let activeDtype: KokoroDtype = "fp32";
 /**
  * Bumped by every teardown. A load started under an older generation was
  * superseded by a reset and must not mark the engine ready or tear down the
@@ -219,19 +224,42 @@ function initWorker(
 	return ready;
 }
 
-/** Probe whether a usable WebGPU adapter exists, and record it for the UI. */
-async function detectWebgpu(): Promise<boolean> {
+let loggedAdapter = false;
+
+/**
+ * Probe whether a usable WebGPU adapter exists (on the preferred GPU), and
+ * record it for the UI. Software adapters count as none. `f16`: the adapter
+ * has the shader-f16 feature fp16 weights need.
+ */
+async function detectWebgpu(
+	power: GpuPowerPreference,
+): Promise<{ available: boolean; f16: boolean }> {
 	let available = false;
+	let f16 = false;
 	try {
 		if (typeof navigator !== "undefined" && navigator.gpu) {
-			const adapter = await navigator.gpu.requestAdapter();
-			available = !!adapter;
+			const adapter = await navigator.gpu.requestAdapter(
+				power === "auto" ? undefined : { powerPreference: power },
+			);
+			if (adapter) {
+				const software = softwareAdapterReason(adapter);
+				if (!loggedAdapter) {
+					loggedAdapter = true;
+					logInfo(
+						`WebGPU adapter: ${describeAdapter(adapter.info)}` +
+							(software ? ` (software: ${software}; using the CPU instead).` : "."),
+						{ source: "models" },
+					);
+				}
+				available = !software;
+				f16 = adapter.features.has("shader-f16");
+			}
 		}
 	} catch {
 		available = false;
 	}
 	useAppSettingsStore.getState().setWebgpuAvailable(available);
-	return available;
+	return { available, f16 };
 }
 
 /**
@@ -243,17 +271,35 @@ async function detectWebgpu(): Promise<boolean> {
  * precision (`dtype: "fp32"` — q8 on WebGPU gives garbage audio), while the CPU
  * (wasm) path uses the smaller quantized `q8` weights. GPU is on by default and
  * used whenever the preference is enabled AND an adapter is present; otherwise
- * we fall back to CPU.
+ * we fall back to CPU. Half-precision `fp16` GPU weights are opt-in (Settings)
+ * and need the adapter's shader-f16 feature.
  */
 async function resolveKokoroLoadOptions(prefs: TtsBackendPrefs): Promise<{
 	device: KokoroDevice;
 	dtype: KokoroDtype;
 }> {
 	const wantGpu = prefs.gpu && !gpuFailed;
-	const hasGpu = wantGpu ? await detectWebgpu() : false;
-	const device: KokoroDevice = wantGpu && hasGpu ? "webgpu" : "wasm";
-	const dtype: KokoroDtype = device === "webgpu" ? "fp32" : "q8";
-	return { device, dtype };
+	const gpu = wantGpu
+		? await detectWebgpu(prefs.gpuPower)
+		: { available: false, f16: false };
+	if (!gpu.available) return { device: "wasm", dtype: "q8" };
+	if (!prefs.gpuFp16) return { device: "webgpu", dtype: "fp32" };
+	if (!gpu.f16) {
+		logInfo("This GPU lacks 16-bit shaders (shader-f16); using the fp32 model.", {
+			source: "models",
+		});
+		return { device: "webgpu", dtype: "fp32" };
+	}
+	// Never fetch fp16 implicitly: the app must stay offline once its models
+	// are downloaded, so it is only used after an explicit download.
+	if (!(await getModelStatus().catch(() => null))?.fp16.present) {
+		logInfo(
+			"The half-precision model isn't downloaded (Settings → Storage → Voice models); using the fp32 model.",
+			{ source: "models" },
+		);
+		return { device: "webgpu", dtype: "fp32" };
+	}
+	return { device: "webgpu", dtype: "fp16" };
 }
 
 /** Synthesize one chunk on the native (onnxruntime-node) CPU backend. */
@@ -399,10 +445,25 @@ function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 			const { device, dtype } = await resolveKokoroLoadOptions(prefs);
 			checkCurrent();
 			let backend: KokoroBackend | null = null;
+			let loadedDtype: KokoroDtype = "fp32";
 			if (device === "webgpu") {
-				logInfo("Loading voice model (GPU)…", { source: "models" });
+				logInfo(`Loading voice model (GPU, ${dtype})…`, { source: "models" });
 				try {
-					await initWorker(device, dtype, prefs);
+					try {
+						await initWorker(device, dtype, prefs);
+						loadedDtype = dtype;
+					} catch (e) {
+						if (dtype !== "fp16") throw e;
+						checkCurrent();
+						// Opt-in fp16 may lack kernels or shader-f16 on ORT's device.
+						logWarn("The half-precision GPU model failed to load; trying fp32.", {
+							source: "models",
+							detail: e instanceof Error ? e.message : String(e),
+						});
+						worker?.terminate();
+						worker = null;
+						await initWorker(device, "fp32", prefs);
+					}
 					backend = "webgpu";
 				} catch (e) {
 					checkCurrent();
@@ -424,8 +485,10 @@ function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 				await initWorker("wasm", "q8", prefs);
 				checkCurrent();
 				backend = "wasm";
+				loadedDtype = "q8";
 			}
 			activeDevice = backend;
+			activeDtype = loadedDtype;
 			setModelPhase("ready");
 			setModelProgress(1);
 			const label =
@@ -523,6 +586,7 @@ export const kokoroEngine: TtsEngine = {
 	listVoices: kokoroVoiceOptions,
 	ensureLoaded: ensureKokoroLoaded,
 	activeBackend: () => activeDevice,
+	audioVariant: () => activeDtype,
 	synthesize: synthesizeKokoro,
 	recover: recoverKokoro,
 	dispose() {

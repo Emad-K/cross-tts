@@ -2,8 +2,10 @@
  * Kokoro ONNX model assets, split by dtype. Full-precision fp32 weights serve
  * both main paths — WebGPU *and* the native CPU engine (q8 is slower than fp32
  * on the native CPU EP). The quantized q8 weights are only loaded by the
- * last-resort in-app (wasm) fallback. transformers.js resolves these exact
- * file names from the dtype. Kind keys keep their historical names.
+ * last-resort in-app (wasm) fallback. The half-precision fp16 weights are an
+ * optional download, used on WebGPU only when opted in and on disk.
+ * transformers.js resolves these exact file names from the dtype. Kind keys
+ * keep their historical names.
  */
 import {
 	PHONON_REPO,
@@ -16,7 +18,7 @@ import {
 	phononVoicePath,
 } from "./phononAssets";
 
-export type ModelKind = "cpu" | "gpu" | "phonon";
+export type ModelKind = "cpu" | "gpu" | "fp16" | "phonon";
 
 export const MODEL_REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
 
@@ -31,6 +33,7 @@ export const MODEL_REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 export const MODEL_ONNX = {
 	cpu: "onnx/model_quantized.onnx",
 	gpu: "onnx/model.onnx",
+	fp16: "onnx/model_fp16.onnx",
 } as const;
 
 /**
@@ -42,6 +45,9 @@ export const MODEL_SHA256: Readonly<Record<string, string>> = {
 		"fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 	"onnx/model.onnx":
 		"8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb",
+	// Opt-in WebGPU half precision (Settings → Performance).
+	"onnx/model_fp16.onnx":
+		"ba4527a874b42b21e35f468c10d326fdff3c7fc8cac1f85e9eb6c0dfc35c334a",
 };
 
 /**
@@ -186,6 +192,11 @@ export const MODEL_FILES: Record<
 			sidecars: kokoroSidecars,
 			optional: kokoroOptional,
 		},
+		fp16: {
+			weights: kokoro(MODEL_ONNX.fp16),
+			sidecars: kokoroSidecars,
+			optional: kokoroOptional,
+		},
 		phonon: {
 			weights: phonon(PHONON_WEIGHTS),
 			sidecars: [
@@ -205,10 +216,11 @@ export const MODEL_FILES: Record<
 export const MODEL_LABEL: Record<ModelKind, string> = {
 	cpu: "Fallback model (compatibility)",
 	gpu: "Voice model (GPU & CPU)",
+	fp16: "Half-precision GPU model (optional)",
 	phonon: "Phonon 31M model and voices",
 };
 
-export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "phonon"];
+export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "fp16", "phonon"];
 
 export type ModelStatus = { present: boolean; bytes: number };
 export type ModelStatusMap = Record<ModelKind, ModelStatus>;

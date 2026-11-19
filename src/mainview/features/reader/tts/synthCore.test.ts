@@ -51,7 +51,7 @@ function fakeEngine(id: string) {
 function coreFor(getEngine: () => TtsEngine) {
 	return new SynthCore<Float32Array>({
 		engine: getEngine,
-		prefs: () => ({ gpu: true, gpuPower: "auto", cpuThreads: 1 }),
+		prefs: () => ({ gpu: true, gpuPower: "auto", cpuThreads: 1, gpuFp16: false }),
 		rulesSignature: () => "sig",
 		prepareText: (t) => t.toUpperCase(),
 	});
@@ -95,6 +95,16 @@ describe("SynthCore with a fake engine", () => {
 		const before = core.key("hi", "v1", 1);
 		tag = "4";
 		expect(core.key("hi", "v1", 1)).not.toBe(before);
+	});
+
+	test("keys audio by the engine's audio variant (e.g. fp16 vs fp32)", () => {
+		const a = fakeEngine("a");
+		let variant = "fp32";
+		a.engine.audioVariant = () => variant;
+		const core = coreFor(() => a.engine);
+		const fp32 = core.key("hi", "v1", 1);
+		variant = "fp16";
+		expect(core.key("hi", "v1", 1)).not.toBe(fp32);
 	});
 
 	test("recovers from a backend fault, retries once, and drops cached audio", async () => {

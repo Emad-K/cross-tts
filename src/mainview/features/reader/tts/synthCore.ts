@@ -28,16 +28,18 @@ export class SynthCore<V> {
 			rulesSignature: () => string;
 			/** Chunk text as the engine should read it (regex rules, normalization). */
 			prepareText: (chunkText: string) => string;
-			cacheSize?: number;
+			/** Cache bound in `cacheCost` units (default: 64 entries). */
+			cacheMax?: number;
+			cacheCost?: (value: V) => number;
 		},
 	) {
-		this.cache = new AudioCache<V>(deps.cacheSize ?? 64);
+		this.cache = new AudioCache<V>(deps.cacheMax ?? 64, deps.cacheCost);
 	}
 
 	key(chunkText: string, voice: string, speed: number): string {
 		const engine = this.deps.engine();
 		return audioCacheKey(
-			engine.cacheTag ? `${engine.id}#${engine.cacheTag()}` : engine.id,
+			`${engine.id}${engine.audioVariant ? `/${engine.audioVariant()}` : ""}${engine.cacheTag ? `#${engine.cacheTag()}` : ""}`,
 			chunkText,
 			voice,
 			speed,
@@ -48,6 +50,11 @@ export class SynthCore<V> {
 	/** True when this chunk's audio is already synthesized. */
 	has(chunkText: string, voice: string, speed: number): boolean {
 		return this.cache.has(this.key(chunkText, voice, speed));
+	}
+
+	/** True while this chunk is being synthesized for playback or prefetch. */
+	inFlight(chunkText: string, voice: string, speed: number): boolean {
+		return this.cache.isInFlight(this.key(chunkText, voice, speed));
 	}
 
 	clear(): void {
@@ -97,7 +104,7 @@ export class SynthCore<V> {
 		chunkText: string,
 		voice: string,
 		speed: number,
-		toValue: (pcm: Float32Array, sampleRate: number) => V,
+		toValue: (pcm: Float32Array, sampleRate: number) => V | Promise<V>,
 	): Promise<V | null> {
 		const key = this.key(chunkText, voice, speed);
 		const { sampleRate } = this.deps.engine();
@@ -125,7 +132,7 @@ export class SynthCore<V> {
 						throw e;
 					}
 					if (!pcm) return null;
-					return toValue(pcm, sampleRate);
+					return await toValue(pcm, sampleRate);
 				}
 			} finally {
 				this.wantedAtEpoch.delete(key);

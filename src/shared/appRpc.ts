@@ -93,6 +93,11 @@ export type AppRpcSchema = {
 			params: { enabled: boolean };
 			response: AppConfigInfo;
 		};
+		/** Opt in to Kokoro's fp16 weights on WebGPU. */
+		setGpuFp16: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
 		/** Enable/disable OS-global media shortcuts. */
 		setShortcutsEnabled: {
 			params: { enabled: boolean };

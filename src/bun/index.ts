@@ -42,6 +42,7 @@ import {
 	setCudaEnabled,
 	setDataDir,
 	setGpuEnabled,
+	setGpuFp16,
 	setGpuPower,
 	setShortcutBinding,
 	setShortcutsEnabled,
@@ -474,6 +475,10 @@ function registerRpcHandlers(): void {
 	});
 	ipcMain.handle("setCudaEnabled", (_event, { enabled }: { enabled: boolean }) => {
 		setCudaEnabled(enabled === true);
+		return appConfigInfo();
+	});
+	ipcMain.handle("setGpuFp16", (_event, { enabled }: { enabled: boolean }) => {
+		setGpuFp16(enabled === true);
 		return appConfigInfo();
 	});
 	ipcMain.handle(
