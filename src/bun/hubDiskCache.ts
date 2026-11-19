@@ -51,12 +51,12 @@ export function hubDiskCache(
 	};
 	return {
 		match: async (key: string) => pathFor(key),
-		// Nothing to store: the hub wrote the file before answering. Drain the
-		// body so the local connection is released. (A
+		// Nothing to store: the hub wrote the file before answering. Cancel the
+		// body (no need to buffer it) so the local connection is released. (A
 		// first-time .onnx download isn't put at all — match() already finds
 		// the file — so that one response body is left to GC.)
 		put: async (_key: string, response: Response) => {
-			await response.arrayBuffer().catch(() => {});
+			await response.body?.cancel().catch(() => {});
 		},
 	};
 }
