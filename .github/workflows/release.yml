@@ -43,6 +43,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - id: check
         run: |
@@ -62,14 +63,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      VERSION: ${{ needs.detect.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       # Pick the previous release by version order, not git ancestry. Release
       # tags have historically landed off main's lineage (squash-merges), so
@@ -80,6 +79,9 @@ jobs:
       # A draft left by an earlier failed run is reused (retargeted to this
       # commit); build legs overwrite its assets with --clobber.
       - name: Create or reuse draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             echo "Draft v$VERSION already exists — reusing it."
@@ -94,6 +96,13 @@ jobs:
           fi
           gh release create "v$VERSION" "${ARGS[@]}"
 
+  # Residual tradeoff: job-level contents: write is needed so each leg can
+  # upload straight to the draft (avoiding the Actions storage quota). The
+  # token is only exposed to the final upload step and is not persisted in
+  # .git/config, but a malicious dependency run by `pnpm install` could still
+  # tamper with later steps via $GITHUB_PATH/$GITHUB_ENV. Such a dependency
+  # would already ship inside the installers, so splitting the upload into a
+  # separate job would cost artifact storage for little real gain.
   build:
     needs: [detect, draft]
     strategy:
@@ -108,6 +117,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
