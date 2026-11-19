@@ -61,9 +61,10 @@ const COI_HEADERS: Record<string, string> = {
  *   reaches cdn.jsdelivr.net nor imports its glue from a blob URL, and its
  *   pthread workers start from that app:// .mjs (verified: multi-threaded
  *   wasm synthesis works with all three removed).
- * - 127.0.0.1:* is the local Kokoro hub; huggingface.co (+ its LFS/xet CDNs)
- *   is the fallback when the hub is down; dictionaryapi.dev and gstatic serve
- *   dictionary lookups and pronunciation audio.
+ * - 127.0.0.1:* is the local model hub, the only source of model files (the
+ *   engines refuse to load without it rather than fetch huggingface.co
+ *   unverified); dictionaryapi.dev and gstatic serve dictionary lookups and
+ *   pronunciation audio.
  */
 const CSP = [
 	"default-src 'self'",
@@ -73,7 +74,7 @@ const CSP = [
 	"img-src 'self' data: blob:",
 	"font-src 'self' data:",
 	"media-src 'self' blob: data:",
-	"connect-src 'self' blob: data: http://127.0.0.1:* https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.dictionaryapi.dev https://ssl.gstatic.com",
+	"connect-src 'self' blob: data: http://127.0.0.1:* https://api.dictionaryapi.dev https://ssl.gstatic.com",
 	"object-src 'none'",
 	"frame-src 'none'",
 	"frame-ancestors 'none'",

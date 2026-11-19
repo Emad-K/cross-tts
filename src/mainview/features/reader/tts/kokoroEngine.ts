@@ -1,5 +1,6 @@
 import {
 	getKokoroHubBaseUrl,
+	isDesktopApp,
 	getModelStatus,
 	onTtsNodeProgress,
 	ttsNodeGenerate,
@@ -48,11 +49,22 @@ let hubEnvPromise: Promise<void> | null = null;
 
 async function configureKokoroHubEnv(): Promise<void> {
 	const base = await getKokoroHubBaseUrl();
+	// The desktop app never goes online behind the hub's back (no sha256
+	// checks, no disk cache); only a plain browser build uses huggingface.co.
+	if (!base && isDesktopApp()) {
+		throw new Error("The local model server isn't running.");
+	}
 	setKokoroHubBaseUrl(base);
 }
 
 function ensureKokoroHubEnv(): Promise<void> {
-	if (!hubEnvPromise) hubEnvPromise = configureKokoroHubEnv();
+	if (!hubEnvPromise) {
+		hubEnvPromise = configureKokoroHubEnv();
+		// A failed lookup is retried on the next load.
+		hubEnvPromise.catch(() => {
+			hubEnvPromise = null;
+		});
+	}
 	return hubEnvPromise;
 }
 
