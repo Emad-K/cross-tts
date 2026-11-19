@@ -72,6 +72,7 @@ import {
 	ensureTtsLoaded,
 	setChapterPlaybackFinishedHandler,
 	skipChunk,
+	startIdleWarm,
 	startOrResumePlayback,
 	stopPlaybackUi,
 	toggleMute,
@@ -316,6 +317,10 @@ export function ReaderApp() {
 			cancelled = true;
 		};
 	}, [document, sessionReady]);
+
+	// With the model loaded and nothing playing, keep the sentence play will
+	// start on synthesized, so the first press of play doesn't wait on it.
+	useEffect(() => startIdleWarm(), []);
 
 	useEffect(() => {
 		setChapterPlaybackFinishedHandler(() => {

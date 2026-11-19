@@ -7,6 +7,8 @@ import {
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import { isSpeakableChunkText, textForTtsSynthesis } from "./ttsChunkText";
 import { useListenEstimateStore } from "../listenEstimate/listenEstimateStore";
+import { isExportActive } from "../audiobook/exportStore";
+import { createIdleWarmer, idleWarmKey } from "./idleWarm";
 import { downloadVoicesAndModel as downloadKokoroAssets } from "./kokoroEngine";
 import { splitForFastStart } from "./chunkText";
 import { SynthCore } from "./synthCore";
@@ -287,6 +289,52 @@ export function prefetchTexts(texts: string[]): void {
 		if (!isSpeakableChunkText(text)) continue;
 		void synthesizeChunkBuffer(ctx, text, voice, speed).catch(() => {});
 	}
+}
+
+/**
+ * Synthesize the sentence the next press of play starts on, split exactly as
+ * the loop's fast start splits it. Play then takes its normal fast-start path
+ * and finds both parts in the cache: same split, same seam, same audio. The
+ * run also absorbs the phonemizer, voice-file and GPU shader warm-up.
+ */
+function warmResumePosition(): void {
+	const { playback, chunks, currentChunkIndex, voice, speed } =
+		useTtsStore.getState();
+	// Only with no loop alive. A paused loop already holds its audio; one that
+	// was dropped by a seek while paused has nothing made for the new place.
+	if (playback !== "idle" && !(playback === "paused" && !playbackLoopPromise)) {
+		return;
+	}
+	// An export owns the engine; don't queue playback work between its chunks.
+	if (isExportActive()) return;
+	if (!activeEngine().activeBackend()) return;
+	const text = chunks[currentChunkIndex]?.text;
+	if (!text || !isSpeakableChunkText(text)) return;
+	if (core.has(text, voice, speed) || core.inFlight(text, voice, speed)) return;
+	// With no loop alive, the only playback jobs still queued are warm-ups for
+	// places the listener has left: a new epoch makes the engine drop them.
+	core.epoch++;
+	const createsContext = !audioContext;
+	prefetchTexts(splitForFastStart(text));
+	// Making buffers needs a context but not a running one. Keep it suspended
+	// until play, so an idle app doesn't hold the audio device open.
+	if (createsContext) void audioContext?.suspend();
+}
+
+/**
+ * Keep the resume position warm while nothing plays: once the model is
+ * loaded, and again (debounced) whenever the position, voice, speed or engine
+ * changes while idle or paused. Never loads a model itself. Returns the
+ * function that stops it.
+ */
+export function startIdleWarm(): () => void {
+	const update = createIdleWarmer(warmResumePosition);
+	update(idleWarmKey(useTtsStore.getState()));
+	const unsubscribe = useTtsStore.subscribe((s) => update(idleWarmKey(s)));
+	return () => {
+		unsubscribe();
+		update(null);
+	};
 }
 
 /**
