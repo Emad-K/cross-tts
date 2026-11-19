@@ -67,6 +67,22 @@ describe("hubRequestPath", () => {
 		expect(hubRequestPath(`/${t}/org/c/resolve/r/other.gguf`, t, repos)).toBeNull();
 		expect(hubRequestPath(`/${t}/org/c/resolve/r/model.safetensors`, t, repos)).toBeNull();
 	});
+	test("a repo listed by two engines is judged on all its entries, in any order", () => {
+		const a = { repo: "org/v", revision: "r", extensions: ["bin"], unhashedExtensions: ["bin"], sha256: {} };
+		const b = {
+			repo: "org/v",
+			revision: "r",
+			extensions: ["bin", "onnx"],
+			unhashedExtensions: [],
+			sha256: { "v.bin": "hv", "m.onnx": "hm" },
+		};
+		for (const repos of [[a, b], [b, a]]) {
+			expect(hubRequestPath(`/${t}/org/v/resolve/r/m.onnx`, t, repos)).toBe("/org/v/resolve/r/m.onnx");
+			expect(hubFileSha256("/org/v/resolve/r/v.bin", repos)).toBe("hv");
+			expect(hubFileSha256("/org/v/resolve/r/m.onnx", repos)).toBe("hm");
+			expect(hubRequestPath(`/${t}/org/v/resolve/r/x.bin`, t, repos)).toBeNull();
+		}
+	});
 });
 
 describe("isInsideRoot", () => {

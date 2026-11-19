@@ -25,21 +25,30 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const ALL_HUB_REPOS: readonly HubRepo[] = Object.values(HUB_REPOS).flat();
 
-/** The allowlisted repo `hfPath` (`/<repo>/resolve/<rev>/<file>`) belongs to. */
-function matchHubRepo(
+/**
+ * Check `hfPath` (`/<repo>/resolve/<rev>/<file>`) against every allowlisted
+ * entry it matches (engines may share a repo), so entry order never matters.
+ * Null if none matches, or if a match needs a hash and no match provides one.
+ */
+function matchHubFile(
 	hfPath: string,
 	repos: readonly HubRepo[],
-): { repo: HubRepo; file: string } | null {
+): { sha256: string | undefined } | null {
+	let matched = false;
+	let needsHash = false;
+	let sha256: string | undefined;
 	for (const repo of repos) {
 		const re = new RegExp(
 			`^/${escapeRe(repo.repo)}/resolve/${escapeRe(repo.revision)}/((?:${SEG}/)*${SEG}\\.(${repo.extensions.map(escapeRe).join("|")}))$`,
 		);
 		const m = re.exec(hfPath);
 		if (!m) continue;
-		if (!repo.unhashedExtensions.includes(m[2]!) && !repo.sha256[m[1]!]) return null;
-		return { repo, file: m[1]! };
+		matched = true;
+		needsHash ||= !repo.unhashedExtensions.includes(m[2]!);
+		sha256 ??= repo.sha256[m[1]!];
 	}
-	return null;
+	if (!matched || (needsHash && !sha256)) return null;
+	return { sha256 };
 }
 
 /**
@@ -64,7 +73,7 @@ export function hubRequestPath(
 	const prefix = `/${token}/`;
 	if (!token || !p.startsWith(prefix)) return null;
 	const hfPath = `/${p.slice(prefix.length)}`;
-	return matchHubRepo(hfPath, repos) ? hfPath : null;
+	return matchHubFile(hfPath, repos) ? hfPath : null;
 }
 
 /** Expected sha256 of an allowlisted hub file (from hubRequestPath), if known. */
@@ -72,8 +81,7 @@ export function hubFileSha256(
 	hfPath: string,
 	repos: readonly HubRepo[] = ALL_HUB_REPOS,
 ): string | undefined {
-	const m = matchHubRepo(hfPath, repos);
-	return m ? m.repo.sha256[m.file] : undefined;
+	return matchHubFile(hfPath, repos)?.sha256;
 }
 
 // An audio file, or its in-progress `<name>.part` (renamed once complete).
