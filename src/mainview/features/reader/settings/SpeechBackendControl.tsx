@@ -220,6 +220,10 @@ function BackendBenchmark({
 		}
 	};
 
+	// For the confirm text: what will actually run, and whether a GPU is touched.
+	const toRun = candidates.filter((c) => !c.skip).map((c) => c.backend);
+	const usesGpu = toRun.some((b) => b !== "cpu" && b !== "wasm");
+
 	const faster =
 		phase === "done" && config ? fasterChoice(engineId, config.ttsBackend, rows) : null;
 
@@ -255,10 +259,12 @@ function BackendBenchmark({
 			{phase === "confirm" ? (
 				<div className="mt-3 rounded-md border border-border p-3">
 					<p className="text-xs">
-						This loads the voice model on each backend in turn and reads one
-						sentence twice. It briefly uses the GPU, unloads the current model
-						and stops paused playback at its sentence. No voice model is
-						downloaded for it.
+						This loads the voice model on each of these in turn and reads one
+						sentence twice: {toRun.map((b) => LABEL[b]).join(", ")}.{" "}
+						{usesGpu ? "It briefly uses the GPU. " : ""}
+						It unloads the current model and stops paused playback at its
+						sentence. No voice model is downloaded for it; only a small voice
+						file (under 1 MB) if the selected voice has never been used.
 					</p>
 					<div className="mt-3 flex justify-end gap-2">
 						<Button variant="outline" size="sm" onClick={() => setPhase("idle")}>
