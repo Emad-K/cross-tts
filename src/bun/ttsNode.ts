@@ -164,6 +164,17 @@ export function ttsNodeGenerate(
 	const id = ++seq;
 	return new Promise<TtsNodeGenerateResult>((resolve) => {
 		pending.set(id, resolve);
-		proc.postMessage({ type: "generate", id, ...params });
+		// `params` comes from the renderer: copy only the job fields, so it
+		// can't turn this into an init (hub URL/cache dir) or reuse an id.
+		proc.postMessage({
+			text: params.text,
+			voice: params.voice,
+			speed: params.speed,
+			pronunciationRules: params.pronunciationRules,
+			steps: params.steps,
+			epoch: params.epoch,
+			type: "generate",
+			id,
+		});
 	});
 }

@@ -156,6 +156,7 @@ parentPort.on("message", (event) => {
 		jobs.push(msg);
 		return;
 	}
+	if (msg.type !== "init") return;
 	const startedAt = performance.now();
 	loadPromise ??= load(msg).catch((e) => {
 		loadPromise = null;
