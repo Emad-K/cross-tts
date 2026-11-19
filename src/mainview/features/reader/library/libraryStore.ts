@@ -45,6 +45,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
 export function getBookResume(path: string): {
 	chapterId: string | null;
 	chunkIndex: number;
+	engine?: string;
 	voice?: string;
 	speed?: number;
 } | null {
@@ -53,6 +54,7 @@ export function getBookResume(path: string): {
 	return {
 		chapterId: entry.chapterId,
 		chunkIndex: entry.chunkIndex,
+		engine: entry.engine,
 		voice: entry.voice,
 		speed: entry.speed,
 	};

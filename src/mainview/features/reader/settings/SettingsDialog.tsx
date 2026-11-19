@@ -59,9 +59,12 @@ import {
 import type { UpdateStatus } from "@shared/updateStatus";
 import { cn } from "@/lib/utils";
 import {
+	coerceEngineVoice,
 	getActiveDevice,
+	getTtsEngine,
 	MAX_SENTENCE_PAUSE_MS,
 	resetTtsEngine,
+	TTS_ENGINES,
 	useTtsStore,
 } from "../tts";
 import { AppearancePanel } from "./AppearancePanel";
@@ -851,6 +854,41 @@ function formatPauseMs(ms: number): string {
 	return `${ms} ms`;
 }
 
+function EngineControl() {
+	const engineId = useTtsStore((s) => s.engineId);
+	const voice = useTtsStore((s) => s.voice);
+	const setEngine = useTtsStore((s) => s.setEngine);
+	const engine = getTtsEngine(engineId);
+
+	return (
+		<div className="mb-3 rounded-lg border border-border bg-muted/20 p-4">
+			<div className="mb-3 text-sm font-medium">Voice engine</div>
+			<Select
+				value={engine.id}
+				onValueChange={(id) =>
+					setEngine(id, coerceEngineVoice(getTtsEngine(id), voice))
+				}
+			>
+				<SelectTrigger className="w-full" aria-label="Voice engine">
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					{TTS_ENGINES.map((e) => (
+						<SelectItem key={e.id} value={e.id}>
+							{e.displayName}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+			<p className="mt-3 text-xs text-muted-foreground">
+				{engine.listVoices().length} voices · {engine.languages.join(", ")} ·{" "}
+				{engine.licence.name} licence. Each book remembers its engine and
+				voice.
+			</p>
+		</div>
+	);
+}
+
 function PlaybackPanel() {
 	const stored = useTtsStore((s) => s.sentencePauseMs);
 	const setSentencePauseMs = useTtsStore((s) => s.setSentencePauseMs);
@@ -863,6 +901,7 @@ function PlaybackPanel() {
 			title="Playback"
 			description="How reading flows from sentence to sentence."
 		>
+			<EngineControl />
 			<div className="rounded-lg border border-border bg-muted/20 p-4">
 				<div className="flex items-center justify-between gap-4">
 					<span className="flex items-center gap-2 text-sm font-medium">

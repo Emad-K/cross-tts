@@ -81,15 +81,16 @@ import {
 } from "./tts";
 
 /**
- * Apply a book's saved voice / speed, if it has any, before it opens. Every
+ * Apply a book's saved engine / voice / speed, if it has any, before it opens. Every
  * way of opening a book goes through this (library, drag-drop, file picker,
  * session restore), so a book always plays with its own voice.
  */
 function restoreBookVoice(path: string): void {
 	const resume = getBookResume(path);
-	const engine = getTtsEngine(useTtsStore.getState().engineId);
+	// Books saved before engines existed have Kokoro voices.
+	const engine = getTtsEngine(resume?.engine ?? "kokoro");
 	if (resume?.voice && engine.listVoices().some((v) => v.id === resume.voice)) {
-		useTtsStore.getState().setVoice(resume.voice);
+		useTtsStore.getState().setEngine(engine.id, resume.voice);
 	}
 	if (resume?.speed != null) useTtsStore.getState().setSpeed(resume.speed);
 }

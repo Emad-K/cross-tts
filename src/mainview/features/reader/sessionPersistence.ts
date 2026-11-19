@@ -67,6 +67,7 @@ export function buildWebSlice(
 			chapterId,
 			chunkIndex: t.currentChunkIndex,
 			progress: readProgress(doc, chapterId, t.currentChunkIndex, t.chunks.length),
+			engine: t.engineId,
 			voice: t.voice,
 			speed: t.speed,
 			updatedAt: Date.now(),
@@ -80,6 +81,7 @@ export function buildWebSlice(
 	}
 
 	return {
+		engine: t.engineId,
 		voice: t.voice,
 		volumePct: t.volumePct,
 		speed: t.speed,
@@ -163,8 +165,9 @@ export async function hydratePersistedSession(): Promise<HydratedSession> {
 		};
 	}
 	const { web } = file;
-	const engine = getTtsEngine(useTtsStore.getState().engineId);
-	useTtsStore.getState().setVoice(coerceEngineVoice(engine, web.voice));
+	// Unknown or missing engine ids (sessions from before engines) → default.
+	const engine = getTtsEngine(web.engine ?? "kokoro");
+	useTtsStore.getState().setEngine(engine.id, coerceEngineVoice(engine, web.voice));
 	useTtsStore.getState().setVolumePct(web.volumePct);
 	useTtsStore.getState().setSpeed(web.speed);
 	if (typeof web.sentencePauseMs === "number") {
