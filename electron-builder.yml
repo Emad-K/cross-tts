@@ -29,10 +29,18 @@ files:
 asar: true
 npmRebuild: false
 
+# Turn the packaged binary into "only this app", not a general Node/Electron
+# interpreter: no ELECTRON_RUN_AS_NODE, no NODE_OPTIONS, no --inspect, and no
+# loading code from outside app.asar. The TTS worker uses utilityProcess.fork,
+# which starts a Chromium utility process and doesn't need RunAsNode.
+# Flipped in scripts/after-pack-fuses.cjs (runAsNode, NodeOptions env,
+# CLI inspect, GrantFileProtocolExtraPrivileges off; OnlyLoadAppFromAsar on).
+# Move to the `electronFuses` option when upgrading to electron-builder 26+.
+afterPack: scripts/after-pack-fuses.cjs
+
 # onnxruntime-node's native libraries can't be loaded from inside the asar.
 asarUnpack:
   - "**/node_modules/onnxruntime-node/**"
-
 # Tells electron-updater where to look for new versions (embedded as
 # app-update.yml). CI still uploads assets manually (--publish never); this only
 # configures the update feed, it does not publish.
@@ -103,6 +111,10 @@ linux:
 # work) and add an AppArmor profile granting user namespaces — without it the
 # app fails to launch on Ubuntu 24.04+, where unprivileged userns is restricted
 # and Electron's sandbox needs it. See assets/linux/deb-after-install.sh.
+# Keep the profile: it is what lets the renderer sandbox start at all. The
+# userns grant is scoped to this binary, and the fuses above stop that binary
+# from being reused as a generic Node interpreter (RunAsNode / NODE_OPTIONS /
+# --inspect), which is the main way the grant could be borrowed.
 deb:
   afterInstall: assets/linux/deb-after-install.sh
   afterRemove: assets/linux/deb-after-remove.sh
