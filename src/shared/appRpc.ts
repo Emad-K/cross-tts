@@ -56,6 +56,21 @@ export type AppRpcSchema = {
 			params: { filePath: string; chapterId: string };
 			response: EpubChapterContentResult | null;
 		};
+		/** Bytes of a .pdf for the renderer's parser; null if missing or not a PDF. */
+		readDocumentBytes: {
+			params: { filePath: string };
+			response: Uint8Array | null;
+		};
+		/** Plain text on the clipboard. Called only when the user asks to paste. */
+		readClipboardText: {
+			params: void;
+			response: string;
+		};
+		/** Save pasted text as a .txt in the data folder; returns the new path. */
+		savePastedText: {
+			params: { text: string; title: string };
+			response: string | null;
+		};
 		exportTtsRulesToFile: {
 			params: { json: string; suggestedFileName: string };
 			response: { cancelled: boolean; filePath: string | null };

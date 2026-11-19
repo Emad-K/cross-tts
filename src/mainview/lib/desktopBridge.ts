@@ -69,7 +69,19 @@ export async function saveAppSession(web: WebPersistedSlice): Promise<void> {
 export async function pickDocument(): Promise<ReadDocumentResult | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.pickDocument();
+	return finishPdf(await b.request.pickDocument());
+}
+
+/**
+ * The main process doesn't parse PDFs: it returns a book with no chapters and
+ * the renderer's pdf.js (in a Web Worker) fills them in. Loaded on demand.
+ */
+async function finishPdf(
+	result: ReadDocumentResult | null,
+): Promise<ReadDocumentResult | null> {
+	if (result?.format !== "epub" || result.source !== "pdf") return result;
+	const { openPdf } = await import("@/features/reader/pdf/pdfDocument");
+	return openPdf(result);
 }
 
 /** Absolute OS path of a dropped/picked File, or null on web / unknown path. */
@@ -86,12 +98,18 @@ export function ipcErrorMessage(err: unknown): string {
 	return msg.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, "");
 }
 
+/**
+ * Read a document. `peek` skips parsing a PDF (its chapter list comes back
+ * empty): for callers that only need to know the file is there and its title.
+ */
 export async function readDocumentAtPath(
 	filePath: string,
+	options?: { peek?: boolean },
 ): Promise<ReadDocumentResult | null> {
 	const b = bridge();
 	if (!b) return null;
-	return b.request.readDocumentAtPath({ filePath });
+	const result = await b.request.readDocumentAtPath({ filePath });
+	return options?.peek ? result : finishPdf(result);
 }
 
 export async function getEpubChapterContent(
@@ -100,6 +118,10 @@ export async function getEpubChapterContent(
 ): Promise<EpubChapterContentResult | null> {
 	const b = bridge();
 	if (!b) return null;
+	if (filePath.toLowerCase().endsWith(".pdf")) {
+		const { pdfChapter } = await import("@/features/reader/pdf/pdfDocument");
+		return pdfChapter(filePath, chapterId);
+	}
 	return b.request.getEpubChapterContent({ filePath, chapterId });
 }
 
