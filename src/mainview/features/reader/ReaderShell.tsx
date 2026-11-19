@@ -6,6 +6,7 @@ import { ListenEstimateSync } from "./listenEstimate/ListenEstimateSync";
 import { SleepTimerEffect } from "./sleepTimer/SleepTimerEffect";
 import { TtsRulesSettingSync } from "./ttsRules/TtsRulesSettingSync";
 import { TtsSettingSync } from "./tts";
+import { TrayNowPlayingSync } from "./tray/TrayNowPlayingSync";
 import { bookmarkCurrentSpot } from "./bookmarks/bookmarksStore";
 import { ReaderDocumentLayout } from "./ReaderDocumentLayout";
 import { FindBar } from "./find/FindBar";
@@ -113,6 +114,7 @@ export function ReaderShell({
 	return (
 		<TooltipProvider delayDuration={300} skipDelayDuration={0}>
 			<TtsSettingSync />
+			<TrayNowPlayingSync document={document} />
 			<TtsRulesSettingSync />
 			<SleepTimerEffect />
 			<ListenEstimateSync
