@@ -3,6 +3,7 @@ import electronUpdater from "electron-updater";
 import { IDLE_UPDATE_STATUS, type UpdateStatus } from "../shared/updateStatus";
 import { autoUpdatePref, setAutoUpdate } from "./appConfigStore";
 import { mainLog } from "./logBridge";
+import { markQuitting } from "./tray";
 
 const { autoUpdater } = electronUpdater;
 
@@ -147,6 +148,8 @@ export function checkForUpdatesNow(): UpdateStatus {
 
 /** Restart into the downloaded update (renderer "Restart now" action). */
 export function quitAndInstallUpdate(): void {
+	// Or a window set to hide on close would stay open and block the install.
+	markQuitting();
 	setImmediate(() => autoUpdater.quitAndInstall());
 }
 

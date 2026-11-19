@@ -212,6 +212,16 @@ export type AppRpcSchema = {
 			params: void;
 			response: void;
 		};
+		/** Closing the window hides it to the tray, so playback carries on. */
+		setKeepPlayingInBackground: {
+			params: { enabled: boolean };
+			response: AppConfigInfo;
+		};
+		/** What is playing, for the tray icon's tooltip and menu. */
+		setNowPlaying: {
+			params: { title: string; sentence: string; playing: boolean };
+			response: void;
+		};
 		/** Manually check for updates (downloads if one is found). */
 		checkForUpdates: {
 			params: void;

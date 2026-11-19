@@ -59,6 +59,9 @@ const api: AppApi = {
 		resetDataDirectory: () => ipcRenderer.invoke("resetDataDirectory"),
 		revealDataDirectory: () => ipcRenderer.invoke("revealDataDirectory"),
 		relaunchApp: () => ipcRenderer.invoke("relaunchApp"),
+		setKeepPlayingInBackground: (params) =>
+			ipcRenderer.invoke("setKeepPlayingInBackground", params),
+		setNowPlaying: (params) => ipcRenderer.invoke("setNowPlaying", params),
 		checkForUpdates: () => ipcRenderer.invoke("checkForUpdates"),
 		getUpdateStatus: () => ipcRenderer.invoke("getUpdateStatus"),
 		quitAndInstallUpdate: () => ipcRenderer.invoke("quitAndInstallUpdate"),
