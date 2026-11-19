@@ -415,6 +415,34 @@ function scheduleBuffer(
 	return { start: startTime, end: startTime + total / rate, ended };
 }
 
+/**
+ * Settles when the audio clock reaches `t` (or on abort). Driven by a silent
+ * source on the audio thread, so a user pause (suspended context) holds it.
+ */
+function audioClockReaches(
+	ctx: AudioContext,
+	gain: GainNode,
+	t: number,
+	signal: AbortSignal,
+): Promise<void> {
+	if (signal.aborted || t <= ctx.currentTime) return Promise.resolve();
+	return new Promise((resolve) => {
+		const node = ctx.createConstantSource();
+		node.offset.value = 0;
+		node.connect(gain); // adds silence; connected so it is processed
+		const done = () => {
+			signal.removeEventListener("abort", done);
+			node.onended = null;
+			node.disconnect();
+			resolve();
+		};
+		node.onended = done;
+		signal.addEventListener("abort", done, { once: true });
+		node.start();
+		node.stop(t);
+	});
+}
+
 /** Audio-clock span of the audio now playing and the share of its chunk it covers. */
 let sweepSpan: { start: number; end: number; from: number; to: number } | null =
 	null;
@@ -683,6 +711,8 @@ async function runPlaybackLoop(signal: AbortSignal): Promise<void> {
 				const next = scheduleBuffer(ctx, gain, buffer, expected ?? 0, signal);
 				notePerfStart(ctx, next.start, expected);
 				if (prev) await prev.ended;
+				// Keep the highlight on the sentence just spoken through the pause.
+				await audioClockReaches(ctx, gain, next.start, signal);
 				if (signal.aborted) break;
 				playing = next;
 				sweepSpan = {
