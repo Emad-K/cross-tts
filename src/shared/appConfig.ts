@@ -61,7 +61,8 @@ export function coerceTtsBackend(o: Record<string, unknown>): TtsBackend {
 
 /**
  * The choice the app acts on: a GPU provider this machine can't run right now
- * (CUDA without its add-on, DirectML off Windows) counts as "auto".
+ * (CUDA without its add-on, DirectML off Windows) counts as "auto", and the
+ * native CPU where there is no native engine (Intel Macs) counts as "wasm".
  */
 export function effectiveTtsBackend(
 	chosen: TtsBackend,
@@ -69,6 +70,9 @@ export function effectiveTtsBackend(
 ): TtsBackend {
 	if (chosen === "cuda" && backends.cuda !== "ready") return "auto";
 	if (chosen === "dml" && !backends.dml) return "auto";
+	// Same thing runs either way (native CPU falls back to WASM); this only
+	// keeps Settings from showing a native engine that doesn't exist here.
+	if (chosen === "cpu" && !backends.native) return "wasm";
 	return chosen;
 }
 

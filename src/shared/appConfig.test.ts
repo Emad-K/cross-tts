@@ -31,8 +31,9 @@ describe("effectiveTtsBackend", () => {
 		expect(effectiveTtsBackend("dml", none)).toBe("auto");
 		expect(effectiveTtsBackend("dml", { ...none, dml: true })).toBe("dml");
 	});
-	test("CPU choices stay even without the native engine (GPU stays off)", () => {
-		expect(effectiveTtsBackend("cpu", { ...none, native: false })).toBe("cpu");
+	test("CPU choices stay on the CPU; native without a native engine is WASM", () => {
+		expect(effectiveTtsBackend("cpu", none)).toBe("cpu");
+		expect(effectiveTtsBackend("cpu", { ...none, native: false })).toBe("wasm");
 		expect(effectiveTtsBackend("wasm", none)).toBe("wasm");
 	});
 });
