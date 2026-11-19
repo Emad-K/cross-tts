@@ -560,6 +560,40 @@ function CudaControl() {
 	);
 }
 
+function GpuFp16Control() {
+	const switchId = useId();
+	const config = useAppSettingsStore((s) => s.config);
+	const setGpuFp16 = useAppSettingsStore((s) => s.setGpuFp16);
+	if (!config) return null;
+	const onToggle = async (next: boolean) => {
+		await setGpuFp16(next);
+		// The GPU model's precision is chosen when it loads.
+		if (getActiveDevice() === "webgpu") resetTtsEngine();
+	};
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<label
+				htmlFor={switchId}
+				className="flex cursor-pointer items-center justify-between gap-4"
+			>
+				<span className="text-sm font-medium">
+					Half-precision GPU model (Kokoro)
+				</span>
+				<Switch
+					id={switchId}
+					checked={config.gpuFp16}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</label>
+			<p className="mt-3 text-xs text-muted-foreground">
+				Experimental. Loads the smaller fp16 weights (about 160 MB instead of
+				325 MB) when your GPU supports 16-bit shaders, otherwise the full
+				model. It may sound slightly different; switch off if it does.
+			</p>
+		</div>
+	);
+}
+
 function capitalize(s: string): string {
 	return s ? s[0]!.toUpperCase() + s.slice(1) : s;
 }
@@ -736,6 +770,7 @@ function PerformancePanel() {
 				</p>
 			</div>
 			{gpuEnabled && webgpuAvailable !== false ? <GpuPreferenceControl /> : null}
+			{gpuEnabled && webgpuAvailable !== false ? <GpuFp16Control /> : null}
 			<CpuThreadsControl />
 			<CudaControl />
 		</SectionPane>

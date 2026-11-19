@@ -40,6 +40,12 @@ export type AppConfigFileV1 = {
 	 * Opt-in; Linux/Windows x64 only; falls back to CPU when CUDA can't load.
 	 */
 	cudaEnabled: boolean;
+	/**
+	 * Load Kokoro's half-precision (fp16) weights on WebGPU when the GPU has
+	 * the shader-f16 feature. Opt-in: smaller and maybe faster, but quality
+	 * hasn't been checked on every GPU. fp32 otherwise.
+	 */
+	gpuFp16: boolean;
 	/** Global media shortcuts enabled (work when the app isn't focused). */
 	shortcutsEnabled: boolean;
 	/** Accelerator per action (Electron syntax). */
@@ -75,6 +81,7 @@ export type AppConfigInfo = {
 	cudaEnabled: boolean;
 	/** Whether this platform can try the CUDA EP at all (Linux/Windows x64). */
 	cudaSupported: boolean;
+	gpuFp16: boolean;
 	shortcutsEnabled: boolean;
 	shortcuts: ShortcutBindings;
 	/** Automatic updates: true/false chosen, null = not asked yet. */
@@ -95,6 +102,7 @@ export const defaultAppConfig = (defaultDataDir: string): AppConfigFileV1 => ({
 	gpuPower: "auto",
 	cpuThreads: 0,
 	cudaEnabled: false,
+	gpuFp16: false,
 	shortcutsEnabled: false,
 	shortcuts: defaultShortcutBindings(),
 	autoUpdate: null,

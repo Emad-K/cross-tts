@@ -37,8 +37,9 @@ export class SynthCore<V> {
 	}
 
 	key(chunkText: string, voice: string, speed: number): string {
+		const engine = this.deps.engine();
 		return audioCacheKey(
-			this.deps.engine().id,
+			`${engine.id}${engine.audioVariant ? `/${engine.audioVariant()}` : ""}`,
 			chunkText,
 			voice,
 			speed,

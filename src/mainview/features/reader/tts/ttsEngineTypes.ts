@@ -25,6 +25,8 @@ export type TtsBackendPrefs = {
 	gpuPower: GpuPowerPreference;
 	/** CPU inference threads (already resolved from "auto"). */
 	cpuThreads: number;
+	/** Prefer half-precision weights on the GPU where supported (opt-in). */
+	gpuFp16: boolean;
 };
 
 export type TtsSynthOptions = {
@@ -51,6 +53,11 @@ export interface TtsEngine {
 	ensureLoaded(prefs: TtsBackendPrefs): Promise<void>;
 	/** Backend running requests now (e.g. "webgpu", "node"); null when not loaded. */
 	activeBackend(): string | null;
+	/**
+	 * Anything else about the loaded model that changes its audio (e.g. the
+	 * weights' precision); part of the audio cache key.
+	 */
+	audioVariant?(): string;
 	/**
 	 * Mono PCM at `sampleRate` for already rule-processed text; null when there
 	 * is nothing to speak. Throws Error(message) on failure, Error(CANCELLED)

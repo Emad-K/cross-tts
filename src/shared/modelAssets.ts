@@ -31,6 +31,9 @@ export const MODEL_SHA256: Readonly<Record<string, string>> = {
 		"fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 	"onnx/model.onnx":
 		"8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb",
+	// Opt-in WebGPU half precision (Settings → Performance).
+	"onnx/model_fp16.onnx":
+		"ba4527a874b42b21e35f468c10d326fdff3c7fc8cac1f85e9eb6c0dfc35c334a",
 };
 
 /**

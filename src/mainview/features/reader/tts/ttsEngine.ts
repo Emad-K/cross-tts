@@ -34,6 +34,7 @@ function backendPrefs(): TtsBackendPrefs {
 		gpu: isGpuPreferenceEnabled(),
 		gpuPower: useAppSettingsStore.getState().config?.gpuPower ?? "auto",
 		cpuThreads: effectiveCpuThreads(),
+		gpuFp16: useAppSettingsStore.getState().config?.gpuFp16 ?? false,
 	};
 }
 
