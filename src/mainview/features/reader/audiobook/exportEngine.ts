@@ -140,6 +140,8 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 
 	// Snapshot the playback pause setting once so the whole export is uniform.
 	const sentencePauseMs = useTtsStore.getState().sentencePauseMs;
+	// opts.voice and the encoders' sample rate belong to this engine.
+	const engineId = useTtsStore.getState().engineId;
 
 	try {
 		await ensureTtsLoaded();
@@ -202,7 +204,12 @@ export async function startExport(opts: StartExportOpts): Promise<void> {
 			for (const chunk of chunks) {
 				await gate();
 				if (abort) break;
-				const pcm = await synthesizeChunkPcm(chunk.text, opts.voice, opts.speed);
+				const pcm = await synthesizeChunkPcm(
+					chunk.text,
+					opts.voice,
+					opts.speed,
+					engineId,
+				);
 				if (pcm) {
 					// Match playback's inter-sentence pause: silence before every
 					// chunk except the first one written to an encoder.

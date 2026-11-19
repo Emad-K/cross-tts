@@ -89,7 +89,12 @@ function restoreBookVoice(path: string): void {
 	const resume = getBookResume(path);
 	// Books saved before engines existed have Kokoro voices.
 	const engine = getTtsEngine(resume?.engine ?? "kokoro");
-	if (resume?.voice && engine.listVoices().some((v) => v.id === resume.voice)) {
+	// A running export is bound to the current engine; keep it.
+	if (
+		!isExportActive() &&
+		resume?.voice &&
+		engine.listVoices().some((v) => v.id === resume.voice)
+	) {
 		useTtsStore.getState().setEngine(engine.id, resume.voice);
 	}
 	if (resume?.speed != null) useTtsStore.getState().setSpeed(resume.speed);

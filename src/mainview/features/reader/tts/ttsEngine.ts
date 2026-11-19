@@ -281,13 +281,21 @@ export function prefetchTexts(texts: string[]): void {
 	}
 }
 
-/** Synthesize one chunk to raw PCM (for audiobook export). Null = nothing to speak. */
+/**
+ * Synthesize one chunk to raw PCM (for audiobook export). Null = nothing to
+ * speak. `engineId` is the engine the export started with: a different
+ * engine would take another voice set and sample rate, so that throws.
+ */
 export async function synthesizeChunkPcm(
 	chunkText: string,
 	voice: string,
 	speed: number,
+	engineId: string,
 ): Promise<{ audio: Float32Array; sampleRate: number } | null> {
 	if (!isSpeakableChunkText(chunkText)) return null;
+	if (activeEngine().id !== engineId) {
+		throw new Error("The voice engine changed during the export.");
+	}
 	const { sampleRate } = activeEngine();
 	const audio = await core.generate(chunkText, voice, speed);
 	return audio ? { audio, sampleRate } : null;

@@ -80,6 +80,7 @@ import type { TtsEngine } from "../tts/ttsEngineTypes";
 import { AppearancePanel } from "./AppearancePanel";
 import { maxCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 import { useUpdateStore } from "./updateStore";
+import { isExportPhaseActive, useExportStore } from "../audiobook/exportStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 import { softwareAdapterReason } from "../tts/gpuAdapter";
@@ -967,6 +968,8 @@ function EngineControl() {
 	const steps = useTtsStore((s) => s.supertonicSteps);
 	const modelPhase = useTtsStore((s) => s.modelPhase);
 	const modelProgress = useTtsStore((s) => s.modelProgress);
+	// An export is bound to the engine (and steps) it started with.
+	const exporting = useExportStore((s) => isExportPhaseActive(s.phase));
 	const engine = getTtsEngine(engineId);
 	/** Engine waiting for its licence to be accepted before it's selected. */
 	const [pending, setPending] = useState<TtsEngine | null>(null);
@@ -987,7 +990,7 @@ function EngineControl() {
 	return (
 		<div className="mb-3 rounded-lg border border-border bg-muted/20 p-4">
 			<div className="mb-3 text-sm font-medium">Voice engine</div>
-			<Select value={engine.id} onValueChange={onPick}>
+			<Select value={engine.id} onValueChange={onPick} disabled={exporting}>
 				<SelectTrigger className="w-full" aria-label="Voice engine">
 					<SelectValue />
 				</SelectTrigger>
@@ -1043,6 +1046,7 @@ function EngineControl() {
 						<Slider
 							className="mt-3"
 							aria-label="Supertonic quality (denoising steps)"
+							disabled={exporting}
 							min={SUPERTONIC_MIN_STEPS}
 							max={SUPERTONIC_MAX_STEPS}
 							step={1}
