@@ -24,6 +24,9 @@ const api: AppApi = {
 			ipcRenderer.invoke("getEpubChapterContent", params),
 		exportTtsRulesToFile: (params) =>
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
+		readUserData: (params) => ipcRenderer.invoke("readUserData", params),
+		writeUserData: (params) => ipcRenderer.invoke("writeUserData", params),
+		exportTextFile: (params) => ipcRenderer.invoke("exportTextFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
 		setTtsBackend: (params) => ipcRenderer.invoke("setTtsBackend", params),
 		cudaAddonInstall: () => ipcRenderer.invoke("cudaAddonInstall"),

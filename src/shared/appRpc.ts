@@ -60,6 +60,21 @@ export type AppRpcSchema = {
 			params: { json: string; suggestedFileName: string };
 			response: { cancelled: boolean; filePath: string | null };
 		};
+		/** Read notes or listening stats from the data folder (null if none yet). */
+		readUserData: {
+			params: { name: "notes" | "stats" };
+			response: unknown;
+		};
+		/** Save notes or listening stats; validated again in the main process. */
+		writeUserData: {
+			params: { name: "notes" | "stats"; data: unknown };
+			response: void;
+		};
+		/** Ask where to save a Markdown file, then write it. */
+		exportTextFile: {
+			params: { text: string; suggestedFileName: string };
+			response: { cancelled: boolean; filePath: string | null };
+		};
 		getAppConfig: {
 			params: void;
 			response: AppConfigInfo;

@@ -80,6 +80,7 @@ import {
 	readDocumentAtPath,
 } from "./documentIo";
 import { exportTtsRulesToFile } from "./ttsRulesIo";
+import { registerUserDataHandlers } from "./userDataIo";
 import {
 	pushWatchedFiles,
 	scanWatchedFolders,
@@ -356,6 +357,7 @@ function registerRpcHandlers(): void {
 			{ json, suggestedFileName }: { json: string; suggestedFileName: string },
 		) => exportTtsRulesToFile(mainWindow, json, suggestedFileName),
 	);
+	registerUserDataHandlers(() => mainWindow, dataDir);
 	// Waits for the CUDA lookup so Settings lists the right backends.
 	ipcMain.handle("getAppConfig", async () => {
 		await cudaDetected;
