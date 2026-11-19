@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { loadNotes } from "../notes/notesStore";
 import { loadStats, startStatsTracker } from "../stats/statsStore";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
 import type { LoadedDocument } from "../types";
@@ -19,6 +20,7 @@ export function BookDataSync({ document }: { document: LoadedDocument | null }) 
 	}, [document]);
 
 	useEffect(() => {
+		void loadNotes();
 		void loadStats();
 		return startStatsTracker();
 	}, []);

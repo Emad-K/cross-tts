@@ -111,6 +111,7 @@ function renderTextWithChunks(
 			<span
 				key={nextKey(ctx)}
 				ref={active ? ctx.activeChunkRef : undefined}
+				data-chunk-index={chunk.index}
 				role="button"
 				tabIndex={0}
 				className={cn(

@@ -134,6 +134,7 @@ const ChunkSpan = memo(function ChunkSpan({
 	return (
 		<span
 			ref={activeRef ?? undefined}
+			data-chunk-index={index}
 			role="button"
 			tabIndex={0}
 			className={cn(
