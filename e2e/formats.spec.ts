@@ -31,6 +31,7 @@ test("opens PDF, Word and Markdown files and pasted text", async () => {
 				[book("sample.docx"), "Word sample"],
 				[book("sample.md"), "Markdown sample"],
 				[book("scanned.pdf"), "Scanned sample"],
+				[book("cjk-cmap.pdf"), "Chinese sample"],
 			].map(([path, title], i) => [
 				path,
 				{ path, title, format: "epub", chapterId: null, chunkIndex: 0, updatedAt: i + 1 },
@@ -84,6 +85,11 @@ test("opens PDF, Word and Markdown files and pasted text", async () => {
 			// Chapters come from the PDF's outline.
 			await expect(page.getByText("Chapter Two", { exact: true })).toBeVisible();
 			await expect(page.getByText("Front matter", { exact: true })).toBeVisible();
+		});
+
+		await test.step("PDF: Chinese text in a font that needs pdf.js's CMap files", async () => {
+			await openFromLibrary("Chinese sample");
+			await expect(body).toContainText("你好，世界。这是一个用来测试中文字体映射表的简短句子。");
 		});
 
 		await test.step("Word: headings are chapters, styled runs are text", async () => {

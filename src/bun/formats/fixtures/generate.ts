@@ -9,8 +9,16 @@ import JSZip from "jszip";
 
 const here = import.meta.dirname;
 
-/** A minimal PDF: one content stream per page, optional top-level outline. */
-function buildPdf(pages: string[], outline: { title: string; page: number }[] = []): Uint8Array {
+/**
+ * A minimal PDF: one content stream per page, optional top-level outline.
+ * `font` replaces Helvetica: given the next free object id, it returns the
+ * font object followed by any objects it refers to.
+ */
+function buildPdf(
+	pages: string[],
+	outline: { title: string; page: number }[] = [],
+	font?: (nextId: number) => string[],
+): Uint8Array {
 	const objects: string[] = [];
 	const add = (body: string) => objects.push(body);
 	const pageId = (i: number) => 4 + i * 2;
@@ -20,7 +28,10 @@ function buildPdf(pages: string[], outline: { title: string; page: number }[] = 
 		`<< /Type /Catalog /Pages 2 0 R${outline.length ? ` /Outlines ${outlineRoot} 0 R /PageMode /UseOutlines` : ""} >>`,
 	);
 	add(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] /Count ${pages.length} >>`);
-	add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+	const [fontBody, ...fontParts] = font?.(
+		outlineRoot + (outline.length ? 1 + outline.length : 0),
+	) ?? ["<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"];
+	add(fontBody!);
 	for (const [i, content] of pages.entries()) {
 		add(
 			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId(i) + 1} 0 R >>`,
@@ -39,6 +50,7 @@ function buildPdf(pages: string[], outline: { title: string; page: number }[] = 
 			);
 		}
 	}
+	fontParts.forEach(add);
 
 	let pdf = "%PDF-1.4\n";
 	const offsets: number[] = [];
@@ -100,6 +112,23 @@ const plainPdf = buildPdf(
 
 // A page with a drawn rectangle and no text: what a scan looks like to us.
 const scannedPdf = buildPdf(["0.5 g\n72 72 468 648 re\nf"]);
+
+// Chinese text in a font that isn't embedded and names a predefined CMap
+// (UniGB-UCS2-H): readable only when pdf.js is given its CMap files.
+export const CJK_TEXT = "你好，世界。这是一个用来测试中文字体映射表的简短句子。";
+const cjkPdf = buildPdf(
+	[
+		`BT /F1 12 Tf 72 700 Td <${[...CJK_TEXT]
+			.map((c) => c.charCodeAt(0).toString(16).padStart(4, "0"))
+			.join("")}> Tj ET`,
+	],
+	[],
+	(id) => [
+		`<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [${id} 0 R] >>`,
+		`<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor ${id + 1} 0 R /DW 1000 >>`,
+		"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>",
+	],
+);
 
 const DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -202,6 +231,7 @@ writeFileSync(join(here, "outline.pdf"), outlinePdf);
 writeFileSync(join(here, "columns.pdf"), columnsPdf);
 writeFileSync(join(here, "plain.pdf"), plainPdf);
 writeFileSync(join(here, "scanned.pdf"), scannedPdf);
+writeFileSync(join(here, "cjk-cmap.pdf"), cjkPdf);
 writeFileSync(join(here, "sample.docx"), await buildDocx());
 writeFileSync(join(here, "sample.html"), HTML);
 writeFileSync(join(here, "sample.md"), MARKDOWN);

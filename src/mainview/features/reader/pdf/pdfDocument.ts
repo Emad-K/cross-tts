@@ -19,9 +19,9 @@ import {
  * The worker is a bundled chunk served from app:// (CSP `worker-src 'self'`);
  * pdf.js is loaded on first use, so it costs nothing until a PDF is opened.
  *
- * Limitation: pdf.js's CMap files are not bundled, so PDFs that rely on the
- * predefined CJK CMaps extract as garbled text. Bundling `pdfjs-dist/cmaps`
- * (about 1.6 MB) and passing `cMapUrl` fixes that.
+ * pdf.js's CMap files ship with the app under /cmaps/ (see the `pdfCmaps`
+ * build plugin): most Chinese, Japanese and Korean PDFs need one to be read.
+ * They are fetched from the app's own origin, never the network.
  */
 
 type OpenPdf = {
@@ -72,6 +72,8 @@ async function parse(filePath: string): Promise<OpenPdf> {
 			useSystemFonts: false,
 			useWasm: false,
 			useWorkerFetch: false,
+			cMapUrl: new URL("/cmaps/", location.href).href,
+			cMapPacked: true,
 			enableXfa: false,
 			verbosity: lib.VerbosityLevel.ERRORS,
 		}).promise;
