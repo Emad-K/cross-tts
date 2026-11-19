@@ -89,4 +89,10 @@ describe("splitForFastStart", () => {
 		const noBreak = "x".repeat(300);
 		expect(splitForFastStart(noBreak)).toEqual([noBreak]);
 	});
+
+	test("never splits mid-phrase at a plain space", () => {
+		const text =
+			"The old ferryman walked slowly toward the river where the boats had been tied since the spring floods and the water was still high and brown with mud.";
+		expect(splitForFastStart(text)).toEqual([text]);
+	});
 });

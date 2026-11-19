@@ -58,7 +58,11 @@ function collectSentenceSpans(full: string): { start: number; end: number }[] {
 }
 
 /** Prefer commas / semicolons / colons, then spaces, inside a long clause. */
-function clauseBreakWithin(s: string, maxChars: number): number {
+function clauseBreakWithin(
+	s: string,
+	maxChars: number,
+	allowSpace = true,
+): number {
 	const hard = Math.min(s.length, maxChars);
 	const win = s.slice(0, hard);
 	const min = win.length * 0.22;
@@ -73,6 +77,7 @@ function clauseBreakWithin(s: string, maxChars: number): number {
 		win.lastIndexOf("–"),
 	);
 	if (punct > min) return punct + 1;
+	if (!allowSpace) return 0;
 	const space = win.lastIndexOf(" ");
 	return space > min ? space + 1 : 0;
 }
@@ -87,7 +92,9 @@ const FAST_START_CHARS = 120;
  */
 export function splitForFastStart(text: string): string[] {
 	if (text.length <= FAST_START_CHARS + 40) return [text];
-	const br = clauseBreakWithin(text, FAST_START_CHARS);
+	// Punctuation only: a head cut at a plain space ends mid-phrase, and
+	// Kokoro speaks it with sentence-final intonation.
+	const br = clauseBreakWithin(text, FAST_START_CHARS, false);
 	if (br === 0) return [text];
 	const head = text.slice(0, br).trim();
 	const tail = text.slice(br).trim();
