@@ -4,6 +4,7 @@ import {
 	env,
 } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
+import { isPlausibleAudio } from "../mainview/features/reader/tts/audioPlausibility";
 import { phonemizeForKokoro } from "../mainview/features/reader/tts/kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "../mainview/features/reader/tts/phonemeTokenSplit";
 import { KOKORO_MODEL_ID } from "../mainview/features/reader/tts/kokoroVoices";
@@ -166,6 +167,10 @@ parentPort.on("message", (event) => {
 				for (const a of audios) {
 					joined.set(a, offset);
 					offset += a.length;
+				}
+				if (!isPlausibleAudio(joined)) {
+					parentPort.postMessage({ type: "result", id: msg.id, error: "bad-output" });
+					return;
 				}
 				parentPort.postMessage({
 					type: "result",

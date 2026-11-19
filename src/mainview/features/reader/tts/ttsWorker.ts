@@ -2,6 +2,7 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import type { PronunciationRule } from "@shared/ttsTextRules";
+import { isPlausibleAudio } from "./audioPlausibility";
 import { phonemizeForKokoro } from "./kokoroPhonemize";
 import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
 import { KOKORO_MODEL_ID, type KokoroVoiceId } from "./kokoroVoices";
@@ -197,6 +198,10 @@ ctx.onmessage = (event: MessageEvent<InMessage>) => {
 				for (const a of audios) {
 					joined.set(a, offset);
 					offset += a.length;
+				}
+				if (!isPlausibleAudio(joined)) {
+					ctx.postMessage({ type: "result", id: msg.id, error: "bad-output" });
+					return;
 				}
 				ctx.postMessage(
 					{
