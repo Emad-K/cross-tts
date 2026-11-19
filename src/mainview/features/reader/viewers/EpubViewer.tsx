@@ -10,6 +10,7 @@ import {
 	renderEpubReadAlong,
 } from "./epubHtmlRender";
 import { scrollElementFullyVisible } from "./scrollActiveChunk";
+import { useWordHighlight } from "./wordHighlight";
 
 export type EpubViewerProps = {
 	filePath: string;
@@ -32,6 +33,7 @@ export function EpubViewer({
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const activeChunkRef = useRef<HTMLSpanElement | null>(null);
+	useWordHighlight();
 
 	useEffect(() => {
 		let cancelled = false;

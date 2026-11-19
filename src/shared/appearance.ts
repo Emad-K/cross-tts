@@ -16,6 +16,9 @@ export type FontId =
 
 export type ReaderPadding = "comfortable" | "compact" | "tight";
 
+/** What follows the voice while reading: the sentence, or also the word. */
+export type HighlightMode = "sentence" | "word";
+
 export type Appearance = {
 	mode: ColorMode;
 	theme: ThemeId;
@@ -26,6 +29,8 @@ export type Appearance = {
 	readerPadding: ReaderPadding;
 	/** Max characters per TTS chunk. */
 	maxChunkChars: number;
+	/** Read-along highlight granularity. */
+	highlightMode: HighlightMode;
 };
 
 export const THEMES: { id: ThemeId; label: string }[] = [
@@ -94,6 +99,7 @@ export const defaultAppearance = (): Appearance => ({
 	fontScale: 1,
 	readerPadding: "comfortable",
 	maxChunkChars: MAX_CHUNK_CHARS_DEFAULT,
+	highlightMode: "sentence",
 });
 
 export function fontStack(id: FontId): string {
@@ -129,6 +135,9 @@ export function coerceAppearance(raw: unknown): Appearance {
 			MAX_CHUNK_CHARS_MAX,
 			Math.max(MAX_CHUNK_CHARS_MIN, Math.round(o.maxChunkChars)),
 		);
+	}
+	if (o.highlightMode === "sentence" || o.highlightMode === "word") {
+		d.highlightMode = o.highlightMode;
 	}
 	return d;
 }

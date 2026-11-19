@@ -14,6 +14,7 @@ import { normalizedReaderText } from "@/features/reader/tts/chunkText";
 import { SWEEP_CLASS, bindSweep } from "@/features/reader/tts/sweepStore";
 import { cn } from "@/lib/utils";
 import { isTextSelectionClick } from "./chunkClickGuard";
+import { useWordHighlight } from "./wordHighlight";
 
 const SCROLL_EDGE_PADDING_PX = 12;
 
@@ -134,6 +135,7 @@ const ChunkSpan = memo(function ChunkSpan({
 	return (
 		<span
 			ref={activeRef ?? undefined}
+			data-chunk-index={index}
 			role="button"
 			tabIndex={0}
 			className={cn(
@@ -170,6 +172,7 @@ export function TxtViewer({
 }: TxtViewerProps) {
 	const normalized = useMemo(() => normalizedReaderText(text), [text]);
 	const activeChunkRef = useRef<HTMLSpanElement | null>(null);
+	useWordHighlight();
 
 	useLayoutEffect(() => {
 		if (!chunks?.length || activeChunkIndex == null) return;
