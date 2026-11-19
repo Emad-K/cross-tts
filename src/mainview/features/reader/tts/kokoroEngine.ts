@@ -11,6 +11,8 @@ import { logError, logInfo, logWarn } from "../logging";
 import { useAppSettingsStore } from "../settings/appSettingsStore";
 import { getTtsRulesForEngine } from "../ttsRules/ttsRulesStore";
 import type { GpuPowerPreference } from "@shared/appConfig";
+import type { TtsNodeEp } from "@shared/ttsNodeRpc";
+import { announceFallback, loadPlan } from "./backendChoice";
 import { describeAdapter, softwareAdapterReason } from "./gpuAdapter";
 import { getKokoroHubBaseUrlSync, setKokoroHubBaseUrl } from "./kokoroHubConfig";
 import { kokoroVoiceOptions } from "./kokoroVoices";
@@ -23,9 +25,11 @@ import type {
 import { useTtsStore } from "./ttsStore";
 
 /**
- * Kokoro-82M behind the TtsEngine interface. Backends, in preference order:
- * WebGPU renderer worker (ttsWorker.ts, fp32) → native onnxruntime-node
- * utility process (src/bun/ttsNodeWorker.ts) → WASM renderer worker (q8).
+ * Kokoro-82M behind the TtsEngine interface. Backends, in the default
+ * ("auto") order: WebGPU renderer worker (ttsWorker.ts, fp32) → native
+ * onnxruntime-node utility process (src/bun/ttsNodeWorker.ts) → WASM renderer
+ * worker (q8). Other backend choices reorder this (backendChoice.ts); the
+ * native process can also run on NVIDIA CUDA or DirectML when picked.
  * Both workers phonemize, split phonemes at Kokoro's token limit, and check
  * the audio is plausible.
  */
@@ -104,6 +108,8 @@ let lastLoadMs = 0;
 let loggedFirstSynth = false;
 /** Backend of the currently loaded model, or null when nothing is loaded. */
 let activeDevice: KokoroBackend | null = null;
+/** Execution provider the native process runs on (when activeDevice is "node"). */
+let nodeDevice: TtsNodeEp = "cpu";
 /** Weights precision of the loaded model (fp32 on the native backend). */
 let activeDtype: KokoroDtype = "fp32";
 /**
@@ -286,21 +292,19 @@ async function detectWebgpu(
  * we fall back to CPU. Half-precision `fp16` GPU weights are opt-in (Settings)
  * and need the adapter's shader-f16 feature.
  */
-async function resolveKokoroLoadOptions(prefs: TtsBackendPrefs): Promise<{
-	device: KokoroDevice;
-	dtype: KokoroDtype;
-}> {
-	const wantGpu = prefs.gpu && !gpuFailed;
-	const gpu = wantGpu
-		? await detectWebgpu(prefs.gpuPower)
-		: { available: false, f16: false };
-	if (!gpu.available) return { device: "wasm", dtype: "q8" };
-	if (!prefs.gpuFp16) return { device: "webgpu", dtype: "fp32" };
+/** Weights to load on WebGPU, or null when there is no usable GPU for it. */
+async function resolveGpuDtype(
+	prefs: TtsBackendPrefs,
+): Promise<"fp32" | "fp16" | null> {
+	if (gpuFailed) return null;
+	const gpu = await detectWebgpu(prefs.gpuPower);
+	if (!gpu.available) return null;
+	if (!prefs.gpuFp16) return "fp32";
 	if (!gpu.f16) {
 		logInfo("This GPU lacks 16-bit shaders (shader-f16); using the fp32 model.", {
 			source: "models",
 		});
-		return { device: "webgpu", dtype: "fp32" };
+		return "fp32";
 	}
 	// Never fetch fp16 implicitly: the app must stay offline once its models
 	// are downloaded, so it is only used after an explicit download.
@@ -309,9 +313,9 @@ async function resolveKokoroLoadOptions(prefs: TtsBackendPrefs): Promise<{
 			"The half-precision model isn't downloaded (Settings → Storage → Voice models); using the fp32 model.",
 			{ source: "models" },
 		);
-		return { device: "webgpu", dtype: "fp32" };
+		return "fp32";
 	}
-	return { device: "webgpu", dtype: "fp16" };
+	return "fp16";
 }
 
 /** Synthesize one chunk on the native (onnxruntime-node) CPU backend. */
@@ -340,6 +344,12 @@ async function requestGenerateNode(
 					"(later sentences are prefetched while one plays).",
 				{ source: "tts" },
 			);
+		}
+		// A GPU run failed in the native process (e.g. out of GPU memory) and
+		// it moved to the CPU for good: say so once.
+		if (result.device !== nodeDevice && activeDevice === "node") {
+			announceFallback(kokoroEngine.id, nodeDevice, result.device);
+			nodeDevice = result.device;
 		}
 		return {
 			kind: "audio",
@@ -400,19 +410,23 @@ function requestGenerate(
 }
 
 /**
- * Load the model on the preferred CPU backend: the native onnxruntime-node
- * utility process (~2.5× faster than the wasm worker — fp32 native measures
- * 3.5–4× realtime where wasm q8 hovers near 1×). Returns null when the bridge
- * is unavailable (web build) or the process failed, so the caller can fall
- * back to the wasm worker.
+ * Load the model in the native onnxruntime-node utility process, on execution
+ * provider `ep` (on the CPU it is ~2.5× faster than the wasm worker — fp32
+ * native measures 3.5–4× realtime where wasm q8 hovers near 1×). A GPU
+ * provider that can't start leaves the process on the CPU (see nodeDevice).
+ * Returns null when the bridge is unavailable (web build) or the process
+ * failed, so the caller can fall back.
  */
-async function initNodeBackend(): Promise<"node" | null> {
+async function initNodeBackend(ep: TtsNodeEp): Promise<"node" | null> {
 	const { setModelProgress } = useTtsStore.getState();
 	const unsubscribe = onTtsNodeProgress((value) => setModelProgress(value));
 	try {
-		logInfo("Loading voice model (CPU, native)…", { source: "models" });
+		logInfo(
+			`Loading voice model (${ep === "cpu" ? "CPU" : ep.toUpperCase()}, native)…`,
+			{ source: "models" },
+		);
 		loggedFirstSynth = false;
-		const result = await ttsNodeInit();
+		const result = await ttsNodeInit("kokoro", ep);
 		if (!result) return null;
 		if (!result.ok) {
 			logWarn(
@@ -422,6 +436,7 @@ async function initNodeBackend(): Promise<"node" | null> {
 			return null;
 		}
 		lastLoadMs = result.loadMs;
+		nodeDevice = result.device;
 		return "node";
 	} catch (e) {
 		logWarn(
@@ -435,9 +450,10 @@ async function initNodeBackend(): Promise<"node" | null> {
 }
 
 /**
- * Ensure a TTS backend is up and the model is loaded. Preference order:
- * WebGPU (when enabled and present) → native CPU utility process → wasm
- * worker. Each step falls through to the next on failure so playback works.
+ * Ensure a TTS backend is up and the model is loaded. The order comes from
+ * the backend choice (loadPlan; by default WebGPU → native CPU utility
+ * process → wasm worker). Each step falls through to the next on failure so
+ * playback works.
  */
 function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 	if (worker && workerReady) return workerReady;
@@ -454,51 +470,55 @@ function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 		workerReady = (async () => {
 			await ensureKokoroHubEnv();
 			checkCurrent();
-			const { device, dtype } = await resolveKokoroLoadOptions(prefs);
-			checkCurrent();
 			let backend: KokoroBackend | null = null;
 			let loadedDtype: KokoroDtype = "fp32";
-			if (device === "webgpu") {
-				logInfo(`Loading voice model (GPU, ${dtype})…`, { source: "models" });
-				try {
+			const plan = loadPlan(kokoroEngine.id, prefs.backend);
+			for (const step of prefs.noFallback ? plan.slice(0, 1) : plan) {
+				if (step === "webgpu") {
+					const dtype = await resolveGpuDtype(prefs);
+					checkCurrent();
+					if (!dtype) continue;
+					logInfo(`Loading voice model (GPU, ${dtype})…`, { source: "models" });
 					try {
-						await initWorker(device, dtype, prefs);
-						loadedDtype = dtype;
+						try {
+							await initWorker("webgpu", dtype, prefs);
+							loadedDtype = dtype;
+						} catch (e) {
+							if (dtype !== "fp16") throw e;
+							checkCurrent();
+							// Opt-in fp16 may lack kernels or shader-f16 on ORT's device.
+							logWarn("The half-precision GPU model failed to load; trying fp32.", {
+								source: "models",
+								detail: e instanceof Error ? e.message : String(e),
+							});
+							worker?.terminate();
+							worker = null;
+							await initWorker("webgpu", "fp32", prefs);
+						}
+						backend = "webgpu";
 					} catch (e) {
-						if (dtype !== "fp16") throw e;
 						checkCurrent();
-						// Opt-in fp16 may lack kernels or shader-f16 on ORT's device.
-						logWarn("The half-precision GPU model failed to load; trying fp32.", {
+						// GPU failed — fall through to the CPU paths so the app still speaks.
+						logWarn("GPU synthesis failed to initialize; falling back to CPU.", {
 							source: "models",
 							detail: e instanceof Error ? e.message : String(e),
 						});
 						worker?.terminate();
 						worker = null;
-						await initWorker(device, "fp32", prefs);
 					}
-					backend = "webgpu";
-				} catch (e) {
+				} else if (step === "wasm") {
+					logInfo("Loading voice model (CPU)…", { source: "models" });
+					await initWorker("wasm", "q8", prefs);
 					checkCurrent();
-					// GPU failed — fall through to the CPU paths so the app still speaks.
-					logWarn("GPU synthesis failed to initialize; falling back to CPU.", {
-						source: "models",
-						detail: e instanceof Error ? e.message : String(e),
-					});
-					worker?.terminate();
-					worker = null;
+					backend = "wasm";
+					loadedDtype = "q8";
+				} else {
+					backend = await initNodeBackend(step === "cpu" ? "cpu" : step);
+					checkCurrent();
 				}
+				if (backend) break;
 			}
-			if (!backend) {
-				backend = await initNodeBackend();
-				checkCurrent();
-			}
-			if (!backend) {
-				logInfo("Loading voice model (CPU)…", { source: "models" });
-				await initWorker("wasm", "q8", prefs);
-				checkCurrent();
-				backend = "wasm";
-				loadedDtype = "q8";
-			}
+			if (!backend) throw new Error("No speech backend could start.");
 			activeDevice = backend;
 			activeDtype = loadedDtype;
 			setModelPhase("ready");
@@ -507,13 +527,18 @@ function ensureKokoroLoaded(prefs: TtsBackendPrefs): Promise<void> {
 				backend === "webgpu"
 					? "GPU"
 					: backend === "node"
-						? "CPU, native"
+						? nodeDevice === "cpu"
+							? "CPU, native"
+							: `${nodeDevice.toUpperCase()}, native`
 						: "CPU, in-app";
 			logInfo(
 				`Voice model ready (${label}) — ` +
 					`loaded in ${(lastLoadMs / 1000).toFixed(1)}s.`,
 				{ source: "models" },
 			);
+			if (!prefs.noFallback) {
+				announceFallback(kokoroEngine.id, prefs.backend, runningOn()!);
+			}
 		})().catch((e: unknown) => {
 			// Superseded by a reset: the newer load owns the engine state now.
 			if (gen !== loadGen) throw e;
@@ -565,6 +590,10 @@ function recoverKokoro(backend: string, message: string): boolean {
 	return true;
 }
 
+function runningOn() {
+	return activeDevice === "node" ? nodeDevice : activeDevice;
+}
+
 async function synthesizeKokoro(
 	text: string,
 	voice: string,
@@ -598,6 +627,7 @@ export const kokoroEngine: TtsEngine = {
 	listVoices: kokoroVoiceOptions,
 	ensureLoaded: ensureKokoroLoaded,
 	activeBackend: () => activeDevice,
+	runningOn,
 	// Unloaded (e.g. reloading after a GPU fault): don't key audio as the
 	// previous load's precision.
 	cacheTag: () => (activeDevice ? activeDtype : "unloaded"),

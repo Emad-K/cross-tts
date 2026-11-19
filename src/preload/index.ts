@@ -25,13 +25,16 @@ const api: AppApi = {
 		exportTtsRulesToFile: (params) =>
 			ipcRenderer.invoke("exportTtsRulesToFile", params),
 		getAppConfig: () => ipcRenderer.invoke("getAppConfig"),
-		setGpuEnabled: (params) => ipcRenderer.invoke("setGpuEnabled", params),
+		setTtsBackend: (params) => ipcRenderer.invoke("setTtsBackend", params),
+		cudaAddonInstall: () => ipcRenderer.invoke("cudaAddonInstall"),
+		cudaAddonCancel: () => ipcRenderer.invoke("cudaAddonCancel"),
+		cudaAddonRemove: () => ipcRenderer.invoke("cudaAddonRemove"),
 		setGpuPower: (params) => ipcRenderer.invoke("setGpuPower", params),
 		getGpuInfo: () => ipcRenderer.invoke("getGpuInfo"),
 		getModelStatus: () => ipcRenderer.invoke("getModelStatus"),
+		supertonicPresent: () => ipcRenderer.invoke("supertonicPresent"),
 		downloadModel: (params) => ipcRenderer.invoke("downloadModel", params),
 		setCpuThreads: (params) => ipcRenderer.invoke("setCpuThreads", params),
-		setCudaEnabled: (params) => ipcRenderer.invoke("setCudaEnabled", params),
 		setGpuFp16: (params) => ipcRenderer.invoke("setGpuFp16", params),
 		setShortcutsEnabled: (params) =>
 			ipcRenderer.invoke("setShortcutsEnabled", params),
@@ -68,7 +71,7 @@ const api: AppApi = {
 			ipcRenderer.invoke("getPendingCrashReports"),
 		resolveCrashReports: (params) =>
 			ipcRenderer.invoke("resolveCrashReports", params),
-		ttsNodeInit: (engine) => ipcRenderer.invoke("ttsNodeInit", engine),
+		ttsNodeInit: (params) => ipcRenderer.invoke("ttsNodeInit", params),
 		ttsNodeGenerate: (params) => ipcRenderer.invoke("ttsNodeGenerate", params),
 		ttsNodeStop: (engine) => ipcRenderer.invoke("ttsNodeStop", engine),
 	},
@@ -140,6 +143,14 @@ const api: AppApi = {
 		ipcRenderer.on("app:tts-node-progress", handler);
 		return () => {
 			ipcRenderer.removeListener("app:tts-node-progress", handler);
+		};
+	},
+	onCudaAddonProgress: (listener) => {
+		const handler = (_event: unknown, progress: { loaded: number; total: number }) =>
+			listener(progress);
+		ipcRenderer.on("app:cuda-addon-progress", handler);
+		return () => {
+			ipcRenderer.removeListener("app:cuda-addon-progress", handler);
 		};
 	},
 };

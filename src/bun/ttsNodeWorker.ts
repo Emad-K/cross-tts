@@ -19,13 +19,13 @@ import {
 	kokoroVoiceOptions,
 	voiceBinUrlFromHub,
 } from "../mainview/features/reader/tts/kokoroVoices";
-import type { TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
-import { cudaUnavailableReason, ortBindingDir } from "./cudaSupport";
+import type { TtsNodeEp, TtsNodeGenerateParams } from "../shared/ttsNodeRpc";
 import { hubDiskCache } from "./hubDiskCache";
 
 /**
- * Native CPU TTS backend: an Electron utility process running Kokoro on
- * onnxruntime-node (optionally on the CUDA EP, opt-in). fp32 here is ~2.5×
+ * Native TTS backend: an Electron utility process running Kokoro on
+ * onnxruntime-node — on the CPU, or on NVIDIA CUDA / DirectML when the user
+ * picked one (Settings → Performance). fp32 on the CPU here is ~2.5×
  * faster than the renderer's WASM q8 path (native q8 is *slower* than fp32 —
  * dequant overhead dominates on the CPU EP).
  * Mirrors ttsWorker.ts (the renderer WASM/WebGPU worker): same phonemization,
@@ -42,8 +42,8 @@ type InitMessage = {
 	/** Where the hub keeps the files it serves (see hubDiskCache). */
 	hubCacheDir: string;
 	numThreads: number;
-	/** User opted in to the CUDA EP (Settings → Performance). */
-	cuda: boolean;
+	/** Execution provider to try; anything but "cpu" falls back to the CPU. */
+	ep: TtsNodeEp;
 };
 
 type InMessage = InitMessage | GenerateJob;
@@ -58,7 +58,7 @@ function log(level: "info" | "warn", message: string): void {
 let tts: Kokoro | null = null;
 let loadPromise: Promise<Kokoro> | null = null;
 /** Execution provider of the loaded model. */
-let device: "cpu" | "cuda" = "cpu";
+let device: TtsNodeEp = "cpu";
 let numThreads = 0;
 let hubBaseUrl: string | null = null;
 
@@ -71,20 +71,32 @@ const loadVoice = voiceLoader(async (id) => {
 	return res.arrayBuffer();
 });
 
-function loadOn(target: "cpu" | "cuda"): Promise<Kokoro> {
+/**
+ * Session options per GPU provider. onnxruntime-node's binding only reads
+ * `deviceId` from provider options, so GPU memory can't be capped; nodes the
+ * provider can't run fall back to the CPU EP listed after it. DirectML
+ * requires memory patterns off and sequential execution.
+ */
+const GPU_SESSION_OPTIONS = {
+	cuda: { executionProviders: [{ name: "cuda", deviceId: 0 }, "cpu"] },
+	dml: {
+		executionProviders: [{ name: "dml" }, "cpu"],
+		enableMemPattern: false,
+		executionMode: "sequential",
+	},
+} as const;
+
+const EP_LABEL = { cpu: "the CPU", cuda: "NVIDIA CUDA", dml: "DirectML" } as const;
+
+function loadOn(target: TtsNodeEp): Promise<Kokoro> {
 	return loadKokoro({
 		dtype: DTYPE,
 		device: "cpu",
 		// The user's thread preference (Settings → Performance) must reach the
 		// native ORT session. 0 = auto (ORT's default: one per physical core).
-		// CUDA: onnxruntime-node's binding only reads `deviceId` from provider
-		// options, so gpu_mem_limit / arena_extend_strategy can't be set here;
-		// nodes CUDA can't run fall back to the CPU EP listed after it.
 		session_options: {
 			...(numThreads > 0 ? { intraOpNumThreads: numThreads } : {}),
-			...(target === "cuda"
-				? { executionProviders: [{ name: "cuda", deviceId: 0 }, "cpu"] }
-				: {}),
+			...(target === "cpu" ? {} : GPU_SESSION_OPTIONS[target]),
 		},
 		progress_callback: (info) => {
 			if (info.status === "progress") {
@@ -100,32 +112,18 @@ function loadOn(target: "cpu" | "cuda"): Promise<Kokoro> {
 	});
 }
 
-/** CUDA when asked for and loadable, else CPU (with a log line saying why). */
-async function loadPreferred(cuda: boolean): Promise<Kokoro> {
-	if (cuda) {
-		let reason: string | null;
+/** The provider asked for when it loads, else the CPU (logging why). */
+async function loadPreferred(ep: TtsNodeEp): Promise<Kokoro> {
+	if (ep !== "cpu") {
 		try {
-			reason = cudaUnavailableReason(
-				process.platform,
-				process.arch,
-				ortBindingDir(),
-			);
+			const model = await loadOn(ep);
+			log("info", `Native TTS engine running on ${EP_LABEL[ep]}.`);
+			return model;
 		} catch (e) {
-			reason = `ONNX Runtime binding not found (${e instanceof Error ? e.message : String(e)})`;
-		}
-		if (reason) {
-			log("warn", `CUDA unavailable: ${reason}. Using the CPU.`);
-		} else {
-			try {
-				const model = await loadOn("cuda");
-				log("info", "Native TTS engine running on CUDA.");
-				return model;
-			} catch (e) {
-				log(
-					"warn",
-					`CUDA session failed (${e instanceof Error ? e.message : String(e)}); is CUDA 12 + cuDNN 9 installed? Using the CPU.`,
-				);
-			}
+			log(
+				"warn",
+				`${EP_LABEL[ep]} couldn't start (${e instanceof Error ? e.message : String(e)}). Using the CPU.`,
+			);
 		}
 	}
 	return loadOn("cpu");
@@ -147,7 +145,7 @@ function load(init: InitMessage): Promise<Kokoro> {
 			env.customCache = hubDiskCache(init.hubBaseUrl, init.hubCacheDir);
 			env.allowLocalModels = false;
 		}
-		loadPromise = loadPreferred(init.cuda)
+		loadPromise = loadPreferred(init.ep)
 			.then((model) => {
 				tts = model;
 				return model;
@@ -161,21 +159,23 @@ function load(init: InitMessage): Promise<Kokoro> {
 }
 
 /**
- * One piece; a failed CUDA run (e.g. out of GPU memory) switches the engine
- * to CPU for good and retries there.
+ * One piece; a GPU run that fails (e.g. out of GPU memory) or returns
+ * implausible audio switches the engine to the CPU for good and retries there.
  */
 async function generatePiece(
 	phonemes: string,
 	voiceData: Float32Array,
 	speed: number,
 ): Promise<Float32Array> {
+	if (device === "cpu") return generatePhonemes(tts!, phonemes, voiceData, speed);
 	try {
-		return await generatePhonemes(tts!, phonemes, voiceData, speed);
+		const audio = await generatePhonemes(tts!, phonemes, voiceData, speed);
+		if (!isPlausibleAudio(audio)) throw new Error("the audio came out wrong");
+		return audio;
 	} catch (e) {
-		if (device !== "cuda") throw e;
 		log(
 			"warn",
-			`CUDA run failed (${e instanceof Error ? e.message : String(e)}); switching the native engine to CPU.`,
+			`${EP_LABEL[device]} run failed (${e instanceof Error ? e.message : String(e)}); switching the native engine to the CPU.`,
 		);
 		const stale = tts;
 		tts = await loadOn("cpu");
@@ -195,6 +195,7 @@ parentPort.on("message", (event) => {
 				parentPort.postMessage({
 					type: "ready",
 					voices: kokoroVoiceOptions(),
+					device,
 					loadMs: Math.round(performance.now() - startedAt),
 				});
 			})
@@ -283,6 +284,7 @@ async function runGenerate(msg: GenerateJob): Promise<void> {
 			id: msg.id,
 			audio: joined,
 			samplingRate: KOKORO_SAMPLE_RATE,
+			device,
 			synthMs: Math.round(performance.now() - startedAt),
 		});
 	} catch (e) {

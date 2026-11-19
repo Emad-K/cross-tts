@@ -84,6 +84,7 @@ import { isExportPhaseActive, useExportStore } from "../audiobook/exportStore";
 import { ShortcutsPanel } from "./ShortcutsPanel";
 import { TtsRulesPanel } from "./TtsRulesPanel";
 import { softwareAdapterReason } from "../tts/gpuAdapter";
+import { SpeechBackendControl } from "./SpeechBackendControl";
 
 type SectionId =
 	| "appearance"
@@ -536,41 +537,6 @@ function CpuThreadsControl() {
 	);
 }
 
-function CudaControl() {
-	const switchId = useId();
-	const config = useAppSettingsStore((s) => s.config);
-	const setCudaEnabled = useAppSettingsStore((s) => s.setCudaEnabled);
-	if (!config?.cudaSupported) return null;
-	const onToggle = async (next: boolean) => {
-		await setCudaEnabled(next);
-		// The native engine picks its execution provider when it loads.
-		if (getActiveDevice() !== "webgpu") resetTtsEngine();
-	};
-	return (
-		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
-			<label
-				htmlFor={switchId}
-				className="flex cursor-pointer items-center justify-between gap-4"
-			>
-				<span className="text-sm font-medium">
-					Use NVIDIA GPU (CUDA) for native engine
-				</span>
-				<Switch
-					id={switchId}
-					checked={config.cudaEnabled}
-					onCheckedChange={(v) => void onToggle(v)}
-				/>
-			</label>
-			<p className="mt-3 text-xs text-muted-foreground">
-				Experimental. Needs an NVIDIA GPU with CUDA 12 and cuDNN 9 installed,
-				plus ONNX Runtime&apos;s CUDA provider libraries, which this app does
-				not ship. When any of that is missing the native engine logs why and
-				keeps using the CPU.
-			</p>
-		</div>
-	);
-}
-
 function GpuFp16Control() {
 	const switchId = useId();
 	const config = useAppSettingsStore((s) => s.config);
@@ -718,12 +684,13 @@ function GpuPreferenceControl() {
 }
 
 function PerformancePanel() {
-	const gpuSwitchId = useId();
 	const config = useAppSettingsStore((s) => s.config);
 	const webgpuAvailable = useAppSettingsStore((s) => s.webgpuAvailable);
 	const setWebgpuAvailable = useAppSettingsStore((s) => s.setWebgpuAvailable);
-	const setGpuEnabled = useAppSettingsStore((s) => s.setGpuEnabled);
-	const gpuEnabled = config?.gpuEnabled ?? false;
+	// The WebGPU-only options apply when the backend choice can use WebGPU.
+	const mayUseWebgpu =
+		(config?.ttsBackend === "auto" || config?.ttsBackend === "webgpu") &&
+		webgpuAvailable !== false;
 
 	useEffect(() => {
 		if (webgpuAvailable !== null || typeof navigator === "undefined") return;
@@ -738,54 +705,15 @@ function PerformancePanel() {
 		})();
 	}, [webgpuAvailable, setWebgpuAvailable]);
 
-	const onToggleGpu = async (next: boolean) => {
-		await setGpuEnabled(next);
-		// CPU and GPU use different model weights — drop the loaded model so the
-		// next play reloads the right one.
-		resetTtsEngine();
-	};
-
 	return (
 		<SectionPane
 			title="Performance"
 			description="GPU synthesis is faster but uses a separate, larger model. CPU works everywhere."
 		>
-			<div className="rounded-lg border border-border bg-muted/20 p-4">
-				<label
-					htmlFor={gpuSwitchId}
-					className="flex cursor-pointer items-center justify-between gap-4"
-				>
-					<span className="flex items-center gap-2 text-sm font-medium">
-						{gpuEnabled ? (
-							<Zap className="size-4 text-amber-400" aria-hidden />
-						) : (
-							<Cpu className="size-4 text-muted-foreground" aria-hidden />
-						)}
-						<span>
-							Use GPU acceleration
-							<span className="ml-2 text-xs font-normal text-muted-foreground">
-								{gpuEnabled ? "GPU" : "CPU"}
-							</span>
-						</span>
-					</span>
-					<Switch
-						id={gpuSwitchId}
-						checked={gpuEnabled}
-						onCheckedChange={(v) => void onToggleGpu(v)}
-					/>
-				</label>
-				<p className="mt-3 text-xs text-muted-foreground">
-					{webgpuAvailable === false
-						? "No compatible GPU (WebGPU) detected — playback will use the CPU even when this is on."
-						: gpuEnabled
-							? "The GPU model loads on the next playback. If the GPU is unavailable it falls back to CPU automatically."
-							: "Switch on to synthesize with the GPU when a compatible one is available."}
-				</p>
-			</div>
-			{gpuEnabled && webgpuAvailable !== false ? <GpuPreferenceControl /> : null}
-			{gpuEnabled && webgpuAvailable !== false ? <GpuFp16Control /> : null}
+			<SpeechBackendControl />
+			{mayUseWebgpu ? <GpuPreferenceControl /> : null}
+			{mayUseWebgpu ? <GpuFp16Control /> : null}
 			<CpuThreadsControl />
-			<CudaControl />
 		</SectionPane>
 	);
 }

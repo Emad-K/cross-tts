@@ -1,7 +1,7 @@
 import { logError } from "../logging";
 import {
 	effectiveCpuThreads,
-	isGpuPreferenceEnabled,
+	ttsBackendPreference,
 	useAppSettingsStore,
 } from "../settings/appSettingsStore";
 import { useTtsRulesStore } from "../ttsRules/ttsRulesStore";
@@ -31,7 +31,7 @@ function activeEngine(): TtsEngine {
 
 function backendPrefs(): TtsBackendPrefs {
 	return {
-		gpu: isGpuPreferenceEnabled(),
+		backend: ttsBackendPreference(),
 		gpuPower: useAppSettingsStore.getState().config?.gpuPower ?? "auto",
 		cpuThreads: effectiveCpuThreads(),
 		gpuFp16: useAppSettingsStore.getState().config?.gpuFp16 ?? false,
