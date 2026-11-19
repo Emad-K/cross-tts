@@ -6,13 +6,19 @@ name: Release
 # process). There is no separate manual `git tag` step to forget — bumping the
 # version in a merged PR *is* the release action. `workflow_dispatch` is the
 # manual escape hatch (re-run a release for the current version).
+#
+# Flow: detect -> draft (create/reuse a draft release) -> build (each OS
+# uploads its installers straight to the draft) -> publish (un-draft).
+# Nothing goes through Actions artifact storage: ~3 GB per release, billed as
+# GB-hours, previously exhausted the monthly storage quota and blocked builds.
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# Read-only by default; jobs that touch the release opt in to write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,17 +31,19 @@ env:
 jobs:
   # Gate every release on "package.json version is not yet tagged". Unchanged
   # version -> tag exists -> no-op, so ordinary pushes to main cost one cheap
-  # job and nothing more.
+  # job and nothing more. A draft release does not create its tag, so a failed
+  # run leaves the version untagged and the next push/dispatch retries it.
   detect:
     runs-on: ubuntu-latest
     outputs:
       release: ${{ steps.check.outputs.release }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
 
       - id: check
         run: |
@@ -49,9 +57,54 @@ jobs:
             echo "v$VERSION has no tag yet — building and publishing."
           fi
 
-  build:
+  draft:
     needs: detect
     if: needs.detect.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      # Pick the previous release by version order, not git ancestry. Release
+      # tags have historically landed off main's lineage (squash-merges), so
+      # GitHub's auto "previous tag" detection walks back to v1.0.0 and dumps
+      # every PR into the notes. The current version isn't tagged yet, so the
+      # newest existing tag *is* the prior release.
+      #
+      # A draft left by an earlier failed run is reused (retargeted to this
+      # commit); build legs overwrite its assets with --clobber.
+      - name: Create or reuse draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Draft v$VERSION already exists — reusing it."
+            gh release edit "v$VERSION" --target "$GITHUB_SHA"
+            exit 0
+          fi
+          PREV=$(git tag --sort=-v:refname | head -1)
+          echo "Previous release tag: ${PREV:-<none>}"
+          ARGS=(--draft --title "v$VERSION" --target "$GITHUB_SHA" --generate-notes)
+          if [ -n "$PREV" ]; then
+            ARGS+=(--notes-start-tag "$PREV")
+          fi
+          gh release create "v$VERSION" "${ARGS[@]}"
+
+  # Residual tradeoff: job-level contents: write is needed so each leg can
+  # upload straight to the draft (avoiding the Actions storage quota). The
+  # token is only exposed to the final upload step and is not persisted in
+  # .git/config, but a malicious dependency run by `pnpm install` could still
+  # tamper with later steps via $GITHUB_PATH/$GITHUB_ENV. Such a dependency
+  # would already ship inside the installers, so splitting the upload into a
+  # separate job would cost artifact storage for little real gain.
+  build:
+    needs: [detect, draft]
     strategy:
       fail-fast: false
       matrix:
@@ -60,21 +113,32 @@ jobs:
           - os: ubuntu-latest
           - os: macos-latest
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: oven-sh/setup-bun@v2
-
       - run: pnpm install --frozen-lockfile
+
+      # Typecheck + unit tests are platform-independent, so they run once on
+      # the Linux leg instead of three times. A failure there still blocks the
+      # release: publish needs every build leg to succeed.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: runner.os == 'Linux'
       - run: pnpm run typecheck
+        if: runner.os == 'Linux'
       - run: pnpm run test
+        if: runner.os == 'Linux'
+
       - run: pnpm run build
 
       - name: Install rpm tooling (Linux)
@@ -86,74 +150,38 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      # Artifact only ferries files to the publish job below; the GitHub
-      # Release holds the durable copies. Minimum retention keeps ~3 GB per
-      # release from sitting in Actions storage for the default 90 days.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}
-          retention-days: 1
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/*.exe
-            release/*.dmg
-            release/*.zip
-            release/*.yml
-            release/*.blockmap
-            !release/builder-debug.yml
-          if-no-files-found: warn
+      # Straight to the draft release, no Actions artifact in between. Every OS
+      # emits distinct file names (latest.yml = Windows, latest-mac.yml,
+      # latest-linux.yml, latest-linux-arm64.yml; installers carry arch/target
+      # in the name), so --clobber only replaces this leg's own files from a
+      # previous attempt, never another leg's.
+      - name: Upload to draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          shopt -s nullglob
+          files=(release/*.AppImage release/*.deb release/*.rpm release/*.exe \
+                 release/*.dmg release/*.zip release/latest*.yml release/*.blockmap)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No installers found under release/"
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          gh release upload "v$VERSION" "${files[@]}" --clobber
 
+  # Runs only if every build leg succeeded (default `needs` semantics), so a
+  # half-built release stays a draft. Un-drafting creates the v$VERSION tag at
+  # the draft's target commit, which is what the next `detect` looks for.
   publish:
     needs: [detect, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          pattern: dist-*
-          merge-multiple: true
-
-      - name: List release files
-        run: find release-assets -type f | sort
-
-      # Pick the previous release by version order, not git ancestry. Release
-      # tags have historically landed off main's lineage (squash-merges), so
-      # GitHub's auto "previous tag" detection walks back to v1.0.0 and dumps
-      # every PR into the notes. The current version isn't tagged yet, so the
-      # newest existing tag *is* the prior release.
-      - name: Compute previous release tag
-        id: prev
-        run: |
-          PREV=$(git tag --sort=-v:refname | head -1)
-          echo "tag=$PREV" >> "$GITHUB_OUTPUT"
-          echo "Previous release tag: ${PREV:-<none>}"
-
-      - name: Create tag and publish release
+      - name: Publish release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.detect.outputs.version }}
-        shell: bash
-        run: |
-          shopt -s globstar nullglob
-          assets=()
-          for f in release-assets/**/*; do
-            [ -f "$f" ] && assets+=("$f")
-          done
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo "::error::No release assets found under release-assets/"
-            exit 1
-          fi
-          # gh creates the v$VERSION tag at the pushed commit when it does not
-          # already exist, so no separate `git tag && git push` is needed.
-          ARGS=(--title "v$VERSION" --target "$GITHUB_SHA" --generate-notes)
-          if [ -n "${{ steps.prev.outputs.tag }}" ]; then
-            ARGS+=(--notes-start-tag "${{ steps.prev.outputs.tag }}")
-          fi
-          gh release create "v$VERSION" "${ARGS[@]}" "${assets[@]}"
+        run: gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest

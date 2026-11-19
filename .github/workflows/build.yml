@@ -1,10 +1,22 @@
 name: Build
 
+# PR gate only. Installers are built by release.yml, never here: packaging
+# three OSes on every PR and every merge cost ~30 runner-minutes (macOS bills
+# 10x, Windows 2x) to produce files nobody downloaded. One Linux job covers
+# typecheck, unit tests, the electron-vite build and the Electron e2e smoke.
+# No push-to-main trigger: the PR run already validated the merged code, and
+# release.yml owns main.
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
+    # Docs-only changes can't break the build. electron-builder.yml and
+    # assets/linux are packaging inputs, so they are deliberately NOT ignored.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "llms.txt"
+      - "assets/icon.iconset/**"
   workflow_dispatch:
 
 concurrency:
@@ -19,26 +31,19 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-          - os: ubuntu-latest
-          - os: macos-latest
-    runs-on: ${{ matrix.os }}
+  check:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -52,60 +57,11 @@ jobs:
       - name: Build renderer + main + preload
         run: pnpm run build
 
-      - name: Install rpm tooling (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y rpm
-
-      - name: Package
-        run: pnpm exec electron-builder --publish never
-        env:
-          # No code-signing configured; don't try to discover certificates.
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
-      # Packaging above stays on every run to catch electron-builder breakage,
-      # but installers only get stored when requested manually — release.yml
-      # handles real releases, and 90-day default retention on ~3 GB per run
-      # was burning the Actions storage quota.
-      - name: Upload artifacts
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}
-          retention-days: 3
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-            release/*.exe
-            release/*.dmg
-            release/*.zip
-            release/*.yml
-            release/*.blockmap
-            !release/builder-debug.yml
-          if-no-files-found: warn
-
-  # Playwright drives the *built* Electron app (out/main/index.js) under Xvfb
-  # and opens a CRLF EPUB fixture — the class of bug that passes happy-dom unit
-  # tests but breaks read-along offsets in real Chromium. Electron ships its own
-  # browser binary, so no `playwright install` is needed; only Xvfb for a display.
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build renderer + main + preload
-        run: pnpm run build
-
+      # Playwright drives the *built* Electron app (out/main/index.js) under
+      # Xvfb and opens a CRLF EPUB fixture — the class of bug that passes
+      # happy-dom unit tests but breaks read-along offsets in real Chromium.
+      # Electron ships its own browser binary, so no `playwright install` is
+      # needed; only Xvfb for a display. Reuses the build from the step above.
       - name: Ensure Xvfb is available
         run: command -v xvfb-run >/dev/null || (sudo apt-get update && sudo apt-get install -y xvfb)
 
@@ -114,9 +70,9 @@ jobs:
 
       - name: Upload Playwright traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-traces
-          retention-days: 7
+          retention-days: 3
           path: test-results/
           if-no-files-found: ignore
