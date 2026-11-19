@@ -1,9 +1,10 @@
-import { existsSync } from "node:fs";
+import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
 import type { ReaderChapter } from "../../shared/readerTypes";
+import { MAX_EPUB_BYTES, assertDocumentSize } from "../fileSizeLimit";
 import { htmlToPlainText, sanitizeEpubHtml } from "./htmlToText";
 
 const xml = new XMLParser({
@@ -33,7 +34,12 @@ type ParsedEpub = EpubArchive & {
 	chapters: ReaderChapter[];
 };
 
+/**
+ * Parsed EPUBs (each holds its whole zip in memory), most recently used last.
+ * Keyed by `path:mtimeMs:size` so a replaced file is re-parsed.
+ */
 const epubCache = new Map<string, ParsedEpub>();
+const EPUB_CACHE_MAX = 4;
 
 function asArray<T>(value: T | T[] | undefined): T[] {
 	if (value == null) return [];
@@ -94,7 +100,6 @@ async function readZipEntry(zip: JSZip, path: string): Promise<string | null> {
 
 async function readEpubFileBytes(filePath: string): Promise<Uint8Array | null> {
 	try {
-		if (!existsSync(filePath)) return null;
 		return new Uint8Array(await readFile(filePath));
 	} catch {
 		return null;
@@ -304,8 +309,24 @@ async function buildChapterList(archive: EpubArchive): Promise<ReaderChapter[]> 
 }
 
 async function loadParsedEpub(filePath: string): Promise<ParsedEpub | null> {
-	const cached = epubCache.get(filePath);
-	if (cached) return cached;
+	let key: string;
+	try {
+		const st = statSync(filePath);
+		if (!st.isFile()) return null;
+		// Checked on the compressed size only: entries are inflated lazily, one
+		// chapter at a time. ponytail: a zip bomb chapter can still inflate large.
+		assertDocumentSize(filePath, st.size, MAX_EPUB_BYTES);
+		key = `${filePath}:${st.mtimeMs}:${st.size}`;
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code) return null; // stat failed
+		throw err;
+	}
+	const cached = epubCache.get(key);
+	if (cached) {
+		epubCache.delete(key);
+		epubCache.set(key, cached);
+		return cached;
+	}
 
 	const bytes = await readEpubFileBytes(filePath);
 	if (!bytes) return null;
@@ -335,7 +356,12 @@ async function loadParsedEpub(filePath: string): Promise<ParsedEpub | null> {
 	const chapters = await buildChapterList(archive);
 
 	const parsed: ParsedEpub = { ...archive, chapters };
-	epubCache.set(filePath, parsed);
+	clearEpubCache(filePath); // drop stale versions of this file
+	epubCache.set(key, parsed);
+	while (epubCache.size > EPUB_CACHE_MAX) {
+		const oldest = epubCache.keys().next().value as string;
+		epubCache.delete(oldest);
+	}
 	return parsed;
 }
 
@@ -396,7 +422,7 @@ function pickCoverItem(parsed: ParsedEpub): ManifestItem | null {
 export async function readEpubCoverBytes(
 	filePath: string,
 ): Promise<{ data: Uint8Array; mime: string } | null> {
-	const parsed = await loadParsedEpub(filePath);
+	const parsed = await loadParsedEpub(filePath).catch(() => null);
 	if (!parsed) return null;
 	const item = pickCoverItem(parsed);
 	if (!item) return null;
@@ -423,6 +449,11 @@ export async function readEpubCover(filePath: string): Promise<string | null> {
 }
 
 export function clearEpubCache(filePath?: string): void {
-	if (filePath) epubCache.delete(filePath);
-	else epubCache.clear();
+	if (!filePath) {
+		epubCache.clear();
+		return;
+	}
+	for (const key of [...epubCache.keys()]) {
+		if (key.startsWith(`${filePath}:`)) epubCache.delete(key);
+	}
 }

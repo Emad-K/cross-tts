@@ -10,6 +10,7 @@ import {
 import {
 	getEpubChapterContent,
 	getPendingCrashReports,
+	ipcErrorMessage,
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
@@ -509,8 +510,12 @@ export function ReaderApp() {
 					);
 					setDocument(toLoadedDocument(picked));
 				}
-			} catch {
-				inputRef.current?.click();
+			} catch (err) {
+				showToast({
+					title: "Couldn't open document",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -545,6 +550,12 @@ export function ReaderApp() {
 						: null,
 				);
 				setDocument(doc);
+			} catch (err) {
+				showToast({
+					title: "Couldn't open book",
+					description: ipcErrorMessage(err),
+					variant: "destructive",
+				});
 			} finally {
 				setDocumentLoading(false);
 			}
@@ -621,9 +632,14 @@ export function ReaderApp() {
 			}
 
 			let added = 0;
+			let lastError: string | null = null;
 			for (const file of supported) {
 				const path = pathForFile(file);
-				if (path && (await addBookToLibrary(path)) !== null) added++;
+				try {
+					if (path && (await addBookToLibrary(path)) !== null) added++;
+				} catch (err) {
+					lastError = ipcErrorMessage(err);
+				}
 			}
 			touchSessionSave();
 			if (added > 0) {
@@ -635,7 +651,8 @@ export function ReaderApp() {
 				const failed = supported.length - added;
 				showToast({
 					title: `Couldn't add ${failed} file${failed === 1 ? "" : "s"}`,
-					description: "They may be unreadable or invalid documents.",
+					description:
+						lastError ?? "They may be unreadable or invalid documents.",
 					variant: "destructive",
 				});
 			}

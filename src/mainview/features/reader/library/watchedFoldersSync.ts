@@ -27,7 +27,12 @@ async function handleCandidates(
 	for (const path of fresh) seen.add(path);
 	let added = 0;
 	for (const path of fresh) {
-		if ((await addBookToLibrary(path)) !== null) added++;
+		try {
+			if ((await addBookToLibrary(path)) !== null) added++;
+		} catch (err) {
+			// Over the size cap or unparseable: skip it, keep scanning the rest.
+			console.warn("[watched-folders] skipped", path, err);
+		}
 	}
 	if (added > 0) {
 		touchSessionSave();
