@@ -101,9 +101,10 @@ import {
 
 // TEST-ONLY HOOK (e2e/): point Electron's userData at a sandbox directory so
 // the Playwright smoke test runs against a clean config/session. Has no effect
-// unless the env var is set, which only the e2e harness does.
+// unless the env var is set, which only the e2e harness does, and is ignored in
+// packaged builds so it can't redirect a real install's data.
 const e2eUserData = process.env["CROSS_TTS_E2E_USER_DATA"];
-if (e2eUserData) {
+if (e2eUserData && !app.isPackaged) {
 	app.setPath("userData", e2eUserData);
 }
 
