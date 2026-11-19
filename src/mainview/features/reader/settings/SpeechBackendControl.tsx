@@ -1,5 +1,5 @@
-import { Cpu, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Cpu, Gauge, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { TtsBackend } from "@shared/appConfig";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,8 +25,17 @@ import {
 	onCudaAddonProgress,
 	supertonicPresent,
 } from "@/lib/desktopBridge";
+import { isExportPhaseActive, useExportStore } from "../audiobook/exportStore";
 import { getTtsEngine, resetTtsEngine, useTtsStore } from "../tts";
-import { useAppSettingsStore } from "./appSettingsStore";
+import type { RunningBackend } from "../tts/backendChoice";
+import {
+	type BenchmarkCandidate,
+	type BenchmarkRow,
+	benchmarkCandidates,
+	fasterChoice,
+	runBenchmark,
+} from "../tts/benchmark";
+import { effectiveCpuThreads, useAppSettingsStore } from "./appSettingsStore";
 
 const LABEL: Record<TtsBackend, string> = {
 	auto: "Auto (recommended)",
@@ -128,6 +137,172 @@ function CudaAddonDialog({
 	);
 }
 
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
+/**
+ * The user-run benchmark: times the current engine on each backend this
+ * machine has. Never starts on its own and only changes the backend when
+ * "Use fastest" is clicked.
+ */
+function BackendBenchmark({
+	candidates,
+	onUse,
+}: {
+	candidates: BenchmarkCandidate[];
+	onUse: (backend: RunningBackend) => void;
+}) {
+	const config = useAppSettingsStore((s) => s.config);
+	const engineId = useTtsStore((s) => s.engineId);
+	const playback = useTtsStore((s) => s.playback);
+	const exporting = useExportStore((s) => isExportPhaseActive(s.phase));
+	const [phase, setPhase] = useState<"idle" | "confirm" | "running" | "done">("idle");
+	const [rows, setRows] = useState<BenchmarkRow[]>([]);
+	const abort = useRef<AbortController | null>(null);
+
+	// Leaving Settings (or switching engine) cancels a running benchmark.
+	useEffect(() => () => abort.current?.abort(), [engineId]);
+	useEffect(() => {
+		setPhase("idle");
+		setRows([]);
+	}, [engineId]);
+
+	const busy = playback !== "idle" && playback !== "paused";
+	const blocked = busy || exporting;
+
+	const start = async () => {
+		const controller = new AbortController();
+		abort.current = controller;
+		setRows([]);
+		setPhase("running");
+		// Stops paused playback and unloads the model; the benchmark loads its own.
+		resetTtsEngine();
+		try {
+			await runBenchmark({
+				engine: getTtsEngine(engineId),
+				candidates,
+				prefs: (backend) => ({
+					backend,
+					noFallback: true,
+					gpuPower: config?.gpuPower ?? "auto",
+					cpuThreads: effectiveCpuThreads(),
+					gpuFp16: config?.gpuFp16 ?? false,
+				}),
+				voice: useTtsStore.getState().voice,
+				signal: controller.signal,
+				onRow: (row) => setRows((prev) => [...prev, row]),
+			});
+		} finally {
+			// Clear what the benchmark left in the model status and audio cache.
+			resetTtsEngine();
+			if (abort.current === controller) {
+				abort.current = null;
+				setPhase(controller.signal.aborted ? "idle" : "done");
+			}
+		}
+	};
+
+	const faster =
+		phase === "done" && config ? fasterChoice(engineId, config.ttsBackend, rows) : null;
+
+	return (
+		<div className="mt-3 rounded-lg border border-border bg-muted/20 p-4">
+			<div className="flex items-center justify-between gap-4">
+				<span className="flex items-center gap-2 text-sm font-medium">
+					<Gauge className="size-4 text-muted-foreground" aria-hidden />
+					Benchmark
+				</span>
+				{phase === "running" ? (
+					<Button variant="outline" size="sm" onClick={() => abort.current?.abort()}>
+						Cancel
+					</Button>
+				) : phase !== "confirm" ? (
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={blocked}
+						onClick={() => setPhase("confirm")}
+					>
+						{phase === "done" ? "Run again" : "Run benchmark"}
+					</Button>
+				) : null}
+			</div>
+			<p className="mt-3 text-xs text-muted-foreground">
+				{blocked && phase !== "running"
+					? exporting
+						? "Wait for the audiobook export to finish first."
+						: "Pause playback first."
+					: "Times one sentence on each backend this computer has, so you can pick the fastest. It only runs when you start it."}
+			</p>
+			{phase === "confirm" ? (
+				<div className="mt-3 rounded-md border border-border p-3">
+					<p className="text-xs">
+						This loads the voice model on each backend in turn and reads one
+						sentence twice. It briefly uses the GPU, unloads the current model
+						and stops paused playback at its sentence. No voice model is
+						downloaded for it.
+					</p>
+					<div className="mt-3 flex justify-end gap-2">
+						<Button variant="outline" size="sm" onClick={() => setPhase("idle")}>
+							Not now
+						</Button>
+						<Button size="sm" disabled={blocked} onClick={() => void start()}>
+							Start
+						</Button>
+					</div>
+				</div>
+			) : null}
+			{rows.length > 0 || phase === "running" ? (
+				<table className="mt-3 w-full text-left text-xs tabular-nums">
+					<thead className="text-muted-foreground">
+						<tr>
+							<th className="py-1 font-medium">Backend</th>
+							<th className="py-1 font-medium">Load</th>
+							<th className="py-1 font-medium">First sentence</th>
+							<th className="py-1 font-medium">Speed</th>
+						</tr>
+					</thead>
+					<tbody>
+						{rows.map((row) => (
+							<tr key={row.backend} className="border-t border-border">
+								<td className="py-1.5">{LABEL[row.backend]}</td>
+								{row.realtime === undefined ? (
+									<td colSpan={3} className="py-1.5 text-muted-foreground">
+										{row.note}
+									</td>
+								) : (
+									<>
+										<td className="py-1.5">{seconds(row.loadMs ?? 0)}</td>
+										<td className="py-1.5">{seconds(row.firstMs ?? 0)}</td>
+										<td className="py-1.5">{row.realtime.toFixed(1)}× realtime</td>
+									</>
+								)}
+							</tr>
+						))}
+						{phase === "running" && candidates[rows.length] ? (
+							<tr className="border-t border-border text-muted-foreground">
+								<td className="py-1.5">{LABEL[candidates[rows.length]!.backend]}</td>
+								<td colSpan={3} className="py-1.5">
+									measuring…
+								</td>
+							</tr>
+						) : null}
+					</tbody>
+				</table>
+			) : null}
+			{faster ? (
+				<div className="mt-3 flex items-center justify-between gap-4">
+					<p className="text-xs text-muted-foreground">
+						{LABEL[faster]} was fastest. Timings vary when the computer is busy.
+					</p>
+					<Button size="sm" onClick={() => onUse(faster)}>
+						Use fastest
+					</Button>
+				</div>
+			) : null}
+		</div>
+	);
+}
+
 /**
  * Settings → Performance: where speech synthesis runs. "Auto" keeps the
  * app's own order; the other entries are listed only where they can work.
@@ -212,6 +387,14 @@ export function SpeechBackendControl() {
 					? "If this backend can't start, speech falls back to the CPU and tells you."
 					: null;
 
+	const candidates = benchmarkCandidates(engineId, {
+		webgpu: webgpuAvailable === true,
+		backends,
+		fp32: models?.fp32 ?? false,
+		q8: models?.q8 ?? false,
+		supertonic: models?.supertonic ?? false,
+	});
+
 	return (
 		<>
 			<div className="rounded-lg border border-border bg-muted/20 p-4">
@@ -266,6 +449,9 @@ export function SpeechBackendControl() {
 					</Button>
 				) : null}
 			</div>
+			{candidates.length >= 2 && models ? (
+				<BackendBenchmark candidates={candidates} onUse={(b) => void apply(b)} />
+			) : null}
 			<CudaAddonDialog
 				open={addonOpen}
 				bytes={config.cudaAddonBytes}
