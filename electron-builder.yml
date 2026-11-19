@@ -91,6 +91,8 @@ mac:
     - "!**/node_modules/onnxruntime-node/bin/napi-v3/{win32,linux}/**"
   icon: assets/icon.iconset
   category: public.app-category.productivity
+  # Electron 38+ (Chromium 138+) no longer runs on macOS 11; make Finder say so.
+  minimumSystemVersion: "12.0"
   target:
     - target: dmg
       arch:

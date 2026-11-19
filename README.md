@@ -81,7 +81,7 @@ Cross TTS generates the voice **on your computer**, so playback is as smooth as 
 - **No supported GPU? The CPU keeps up:** the app falls back to a native CPU engine that generates speech faster than you listen on a modern multi-core processor (measured 3–4× realtime on a recent desktop CPU). Expect a few seconds of model loading per session and a brief pause before the first sentence; very old or busy machines may occasionally pause between sentences.
 - **Memory:** 4 GB RAM minimum, 8 GB comfortable.
 - **Disk:** roughly a few hundred MB — the app plus the voice files, downloaded once and cached.
-- **OS:** Windows 10/11, macOS 11+, or a current 64-bit Linux desktop.
+- **OS:** Windows 10/11, macOS 12 (Monterey)+, or a current 64-bit Linux desktop.
 - **Internet:** only for the one-time voice download and app updates. Reading and listening are **100% offline** after that.
 
 Synthesis settings (use GPU, CPU thread count) live in **Settings → Performance** if you want to tune them.
