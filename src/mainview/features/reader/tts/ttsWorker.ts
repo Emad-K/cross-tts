@@ -15,7 +15,11 @@ import {
 import { cacheVoiceBin } from "./prefetchKokoroAssets";
 import { splitPhonemesForTokenLimit } from "./phonemeTokenSplit";
 import { CANCELLED, SynthJobQueue } from "./synthJobQueue";
-import { kokoroVoiceOptions, type KokoroVoiceId } from "./kokoroVoices";
+import {
+	KOKORO_REMOTE_PATH_TEMPLATE,
+	kokoroVoiceOptions,
+	type KokoroVoiceId,
+} from "./kokoroVoices";
 
 /**
  * Kokoro's tokenizer truncates at model_max_length 512 — silently dropping the
@@ -180,6 +184,7 @@ function load(init: InitMessage): Promise<Kokoro> {
 	if (!loadPromise) {
 		hubBaseUrl = init.hubBaseUrl;
 		let ownDevice: GPUDevice | undefined;
+		env.remotePathTemplate = KOKORO_REMOTE_PATH_TEMPLATE;
 		if (init.hubBaseUrl) {
 			env.remoteHost = init.hubBaseUrl;
 			env.useBrowserCache = false;

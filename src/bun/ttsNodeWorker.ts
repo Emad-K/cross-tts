@@ -14,6 +14,7 @@ import {
 	type Kokoro,
 } from "../mainview/features/reader/tts/kokoroModel";
 import {
+	KOKORO_REMOTE_PATH_TEMPLATE,
 	kokoroVoiceOptions,
 	voiceBinUrlFromHub,
 } from "../mainview/features/reader/tts/kokoroVoices";
@@ -142,6 +143,7 @@ function load(init: InitMessage): Promise<Kokoro> {
 	if (!loadPromise) {
 		hubBaseUrl = init.hubBaseUrl;
 		numThreads = init.numThreads;
+		env.remotePathTemplate = KOKORO_REMOTE_PATH_TEMPLATE;
 		if (init.hubBaseUrl) {
 			// Fetch through the main process's caching hub proxy so the native and
 			// renderer backends share one on-disk model cache; skip transformers.js's

@@ -47,6 +47,15 @@ export function kokoroVoiceOptions(): { id: string; label: string }[] {
 export const KOKORO_MODEL_ID = MODEL_REPO;
 
 /**
+ * transformers.js remote path with the pinned revision. Set as
+ * `env.remotePathTemplate` in every worker rather than passing `revision` to
+ * from_pretrained: transformers 4.3's tokenizer loader probes
+ * tokenizer_config.json without forwarding `revision`, so it would ask for
+ * `resolve/main/`, which the hub refuses, and the tokenizer would load empty.
+ */
+export const KOKORO_REMOTE_PATH_TEMPLATE = `{model}/resolve/${MODEL_REVISION}/`;
+
+/**
  * Cache API key voices are stored under. Kept on `main` so voices cached by
  * earlier builds still hit; the bytes stored under it come from the pinned
  * URL (voiceBinUrlFromHub).
