@@ -6,7 +6,15 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import {
+	app,
+	BrowserWindow,
+	dialog,
+	ipcMain,
+	Menu,
+	session,
+	shell,
+} from "electron";
 import {
 	APP_INDEX_URL,
 	APP_ORIGIN,
@@ -572,6 +580,19 @@ app.whenReady().then(async () => {
 	// Remove the default application menu (File / Edit / View / …). This app
 	// has no menu commands; keyboard accelerators are handled in the renderer.
 	Menu.setApplicationMenu(null);
+
+	// Electron grants every permission by default. Deny all except clipboard
+	// writes (context-menu "Copy") from the app's own origin. WebGPU, audio
+	// playback, mediaSession and findInPage need no permission.
+	const allowPermission = (permission: string, url: string) =>
+		permission === "clipboard-sanitized-write" &&
+		isAllowedOrigin(url, TRUSTED_ORIGINS);
+	session.defaultSession.setPermissionRequestHandler((_wc, permission, cb, details) =>
+		cb(allowPermission(permission, details.requestingUrl)),
+	);
+	session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) =>
+		allowPermission(permission, origin),
+	);
 
 	// Serve the built renderer over app:// (with cross-origin-isolation headers)
 	// before the window loads it.
