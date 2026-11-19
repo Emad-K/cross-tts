@@ -83,7 +83,7 @@ type ModelFiles = {
 	remove: (kind: ModelKind) => void;
 };
 
-function useModelFiles(): ModelFiles {
+export function useModelFiles(): ModelFiles {
 	const [disk, setDisk] = useState<ModelsOnDisk | null>(null);
 	const [progress, setProgress] = useState<ModelFiles["progress"]>({});
 	// Loading a model (pressing Play) can download it too: look again after.
@@ -268,7 +268,7 @@ function languageList(codes: readonly string[]): string {
 
 const LINK = "underline underline-offset-2 hover:text-foreground";
 
-function EngineCards({ files }: { files: ModelFiles }) {
+export function EngineCards({ files }: { files: ModelFiles }) {
 	const name = useId();
 	const legendId = useId();
 	const engineId = useTtsStore((s) => s.engineId);
@@ -433,7 +433,7 @@ function EngineCards({ files }: { files: ModelFiles }) {
 	);
 }
 
-function VoiceControl() {
+export function VoiceControl() {
 	const exporting = useExportStore((s) => isExportPhaseActive(s.phase));
 	return (
 		<div className={cn(BOX, "flex items-center justify-between gap-4")}>

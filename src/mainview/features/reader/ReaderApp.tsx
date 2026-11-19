@@ -14,6 +14,7 @@ import {
 	isDesktopApp,
 	pathForFile,
 	pickDocument,
+	setWelcomeSeen,
 	subscribeToCrashReports,
 	subscribeToMainProcessLogs,
 	subscribeToShortcuts,
@@ -47,6 +48,11 @@ const LogPanel = lazy(() =>
 	import("./logging").then((m) => ({ default: m.LogPanel })),
 );
 const CrashReportDialog = lazy(() => import("./crash/CrashReportDialog"));
+const WelcomeDialog = lazy(() =>
+	import("./welcome/WelcomeDialog").then((m) => ({ default: m.WelcomeDialog })),
+);
+import { shouldShowWelcome } from "./welcome/welcomeDecision";
+import { openWelcome, useWelcomeStore } from "./welcome/welcomeStore";
 import { useAppSettingsStore } from "./settings/appSettingsStore";
 import { initUpdateStatusSync } from "./settings/updateStore";
 import { useAppearanceSync } from "./settings/applyAppearance";
@@ -59,8 +65,8 @@ import {
 	toLoadedDocument,
 	touchSessionSave,
 } from "./sessionPersistence";
-import { getBookResume } from "./library/libraryStore";
-import { usePasteText } from "./paste/usePasteText";
+import { getBookResume, useLibraryStore } from "./library/libraryStore";
+import { pasteText, usePasteText } from "./paste/usePasteText";
 import { initWatchedFoldersSync } from "./library/watchedFoldersSync";
 import { getTtsEngine } from "./tts/ttsEngines";
 import {
@@ -248,6 +254,32 @@ export function ReaderApp() {
 	useEffect(() => {
 		void useAppSettingsStore.getState().hydrate();
 	}, []);
+
+	// First run: show the welcome once. The flag is stored as soon as that is
+	// decided, so someone who upgraded never sees it later either.
+	const welcomeOpen = useWelcomeStore((s) => s.open);
+	useEffect(() => {
+		if (booting) return;
+		void (async () => {
+			const settings = useAppSettingsStore.getState();
+			await settings.hydrate();
+			const config = useAppSettingsStore.getState().config;
+			if (!config || config.welcomeSeen) return;
+			const show = shouldShowWelcome({
+				welcomeSeen: config.welcomeSeen,
+				modelsDownloaded: config.modelsDownloaded,
+				libraryCount: Object.keys(useLibraryStore.getState().books).length,
+				hasOpenDocument: documentRef.current !== null,
+			});
+			if (show) openWelcome();
+			const updated = await setWelcomeSeen(true);
+			if (updated) settings.setConfig(updated);
+		})();
+	}, [booting]);
+	// "Show welcome again" is pressed inside Settings.
+	useEffect(() => {
+		if (welcomeOpen) setSettingsSection(null);
+	}, [welcomeOpen]);
 
 	useEffect(() => {
 		return subscribeToMainProcessLogs((entry) => {
@@ -793,6 +825,13 @@ export function ReaderApp() {
 		};
 	}, [handleDroppedFiles]);
 
+	const loadSample = () => {
+		pendingChunkIndexRef.current = null;
+		setInitialChapterId(null);
+		setActiveChapterId(null);
+		setDocument(SAMPLE_TXT_DOCUMENT);
+	};
+
 	if (booting) return <BootScreen />;
 
 	return (
@@ -821,12 +860,7 @@ export function ReaderApp() {
 				onOpenVoiceSettings={() => setSettingsSection("voice")}
 				onOpenLogs={() => setLogsOpen(true)}
 				onOpenAudiobook={() => setAudiobookOpen(true)}
-				onLoadSample={() => {
-					pendingChunkIndexRef.current = null;
-					setInitialChapterId(null);
-					setActiveChapterId(null);
-					setDocument(SAMPLE_TXT_DOCUMENT);
-				}}
+				onLoadSample={loadSample}
 			/>
 			{/* Heavy, on-demand dialogs are code-split: their chunks (and deps like
 			    the MP3 encoder) load on first open, not at startup. */}
@@ -860,6 +894,16 @@ export function ReaderApp() {
 					<CrashReportDialog
 						records={crashRecords}
 						onClose={() => setCrashRecords([])}
+					/>
+				</Suspense>
+			) : null}
+			{/* After the crash dialog, never on top of it. */}
+			{welcomeOpen && crashRecords.length === 0 ? (
+				<Suspense fallback={null}>
+					<WelcomeDialog
+						onOpenFile={openFilePicker}
+						onPasteText={() => void pasteText()}
+						onLoadSample={loadSample}
 					/>
 				</Suspense>
 			) : null}

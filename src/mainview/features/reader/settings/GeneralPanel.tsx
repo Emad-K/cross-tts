@@ -22,6 +22,7 @@ import { useAppSettingsStore } from "./appSettingsStore";
 import { BackupRestoreControl } from "./BackupRestoreControl";
 import { CloseToTrayControl } from "./CloseToTrayControl";
 import { SectionPane, SettingsGroup } from "./SectionPane";
+import { ShowWelcomeControl } from "./ShowWelcomeControl";
 import { useUpdateStore } from "./updateStore";
 
 const BOX = "rounded-lg border border-border bg-muted/20 p-4";
@@ -352,6 +353,9 @@ export function GeneralPanel() {
 			</SettingsGroup>
 			<SettingsGroup title="Crash reports">
 				<CrashReports />
+			</SettingsGroup>
+			<SettingsGroup title="Welcome">
+				<ShowWelcomeControl />
 			</SettingsGroup>
 		</SectionPane>
 	);
