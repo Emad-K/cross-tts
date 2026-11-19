@@ -27,10 +27,10 @@ describe("loadPlan", () => {
 describe("fallbackNotice", () => {
 	test("says when a picked GPU backend ended up on the CPU", () => {
 		expect(fallbackNotice("kokoro", "cuda", "cpu")).toBe(
-			"Using the CPU for speech. NVIDIA CUDA couldn't start; details are in the log.",
+			"Now running on: Processor (native). NVIDIA graphics card (CUDA) couldn't start; details are in the log.",
 		);
-		expect(fallbackNotice("kokoro", "webgpu", "wasm")).toContain("WebGPU couldn't start");
-		expect(fallbackNotice("supertonic", "webgpu", "cpu")).toContain("WebGPU couldn't start");
+		expect(fallbackNotice("kokoro", "webgpu", "wasm")).toContain("Graphics card (WebGPU) couldn't start");
+		expect(fallbackNotice("supertonic", "webgpu", "cpu")).toContain("Graphics card (WebGPU) couldn't start");
 	});
 	test("stays quiet when the choice is running, on auto, and for CPU choices", () => {
 		expect(fallbackNotice("kokoro", "dml", "dml")).toBeNull();

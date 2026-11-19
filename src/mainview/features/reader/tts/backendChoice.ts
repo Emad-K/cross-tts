@@ -6,7 +6,8 @@ import { logWarn } from "../logging";
 export type RunningBackend = Exclude<TtsBackend, "auto">;
 
 /**
- * Backends to try, in order, for a backend choice (Settings → Performance).
+ * Backends to try, in order, for a backend choice (Settings → Voice →
+ * Advanced, "Run speech on").
  * "cuda"/"dml" are the native engine on that GPU provider, "cpu" is the
  * native engine on the CPU, "webgpu"/"wasm" run in the renderer. A step that
  * can't start (no adapter, no native binding, a failed load) is skipped;
@@ -26,15 +27,27 @@ export function loadPlan(engineId: string, backend: TtsBackend): RunningBackend[
 	return ["webgpu", "cpu", "wasm"];
 }
 
-const RUNNING_LABEL: Record<RunningBackend, string> = {
-	webgpu: "the GPU (WebGPU)",
-	cuda: "the NVIDIA GPU (CUDA)",
-	dml: "the GPU (DirectML)",
-	cpu: "the CPU",
-	wasm: "the CPU (WASM)",
+/** What each "Run speech on" choice is called, everywhere it is named. */
+export const BACKEND_LABEL: Record<TtsBackend, string> = {
+	auto: "Automatic (recommended)",
+	webgpu: "Graphics card",
+	cuda: "NVIDIA graphics card",
+	dml: "Graphics card (DirectML, experimental)",
+	cpu: "Processor",
+	wasm: "Processor (compatibility mode)",
 };
 
-const CHOICE_LABEL = { webgpu: "WebGPU", cuda: "NVIDIA CUDA", dml: "DirectML" } as const;
+/**
+ * A backend a model is running on, with its technical name: the status line
+ * in Settings, the fallback toast and the log.
+ */
+export const RUNNING_LABEL: Record<RunningBackend, string> = {
+	webgpu: "Graphics card (WebGPU)",
+	cuda: "NVIDIA graphics card (CUDA)",
+	dml: "Graphics card (DirectML)",
+	cpu: "Processor (native)",
+	wasm: "Processor (compatibility mode, WASM)",
+};
 
 /**
  * What to tell the user when the GPU backend they picked isn't the one that
@@ -49,7 +62,7 @@ export function fallbackNotice(
 	const wanted = loadPlan(engineId, chosen)[0];
 	if (chosen === "auto" || wanted === running) return null;
 	if (wanted !== "webgpu" && wanted !== "cuda" && wanted !== "dml") return null;
-	return `Using ${RUNNING_LABEL[running]} for speech. ${CHOICE_LABEL[wanted]} couldn't start; details are in the log.`;
+	return `Now running on: ${RUNNING_LABEL[running]}. ${RUNNING_LABEL[wanted]} couldn't start; details are in the log.`;
 }
 
 /** Log and show {@link fallbackNotice}, if any. */

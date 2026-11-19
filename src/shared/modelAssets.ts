@@ -224,14 +224,14 @@ export const MODEL_KINDS: ModelKind[] = ["cpu", "gpu", "fp16", "phonon"];
 
 /**
  * Download size in bytes of each kind's files at the pinned revisions (the
- * weights; for Phonon also its 30 voices and tokenizer). Shown before a
+ * weights; for Phonon also its voices and tokenizer). Shown before a
  * download; bump with the revisions.
  */
 export const MODEL_BYTES: Record<ModelKind, number> = {
 	cpu: 92_361_116,
 	gpu: 325_532_232,
 	fp16: 163_234_740,
-	phonon: 72_474_399,
+	phonon: 74_267_351,
 };
 
 /** Download size in bytes of Supertonic 3's four ONNX graphs and configs. */

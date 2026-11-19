@@ -71,7 +71,7 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 			if (config) set({ config });
 		} catch (e) {
 			if (prev) set({ config: prev });
-			logError("Couldn't change the speech backend.", {
+			logError("Couldn't change where speech runs.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});
@@ -101,7 +101,7 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 			if (config) set({ config });
 		} catch (e) {
 			if (prev) set({ config: prev });
-			logError("Couldn't change the half-precision setting.", {
+			logError("Couldn't change the smaller graphics-card model setting.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});
@@ -116,7 +116,7 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
 			if (config) set({ config });
 		} catch (e) {
 			if (prev) set({ config: prev });
-			logError("Couldn't change the CPU threads setting.", {
+			logError("Couldn't change the processor threads setting.", {
 				source: "settings",
 				detail: e instanceof Error ? e.message : String(e),
 			});
