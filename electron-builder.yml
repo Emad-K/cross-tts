@@ -42,6 +42,14 @@ files:
 asar: true
 npmRebuild: false
 
+# Licence notices for code the installers bundle without its npm package's own
+# licence file: the onnxruntime-web wasm/glue in out/renderer (the npm package
+# has none) and the Supertonic helper ported into supertonicModel.ts. Also the
+# Supertonic 3 weights licence the app asks users to accept.
+extraResources:
+  - from: third_party
+    to: licenses
+
 # Turn the packaged binary into "only this app", not a general Node/Electron
 # interpreter: no ELECTRON_RUN_AS_NODE, no NODE_OPTIONS, no --inspect, and no
 # loading code from outside app.asar. The TTS worker uses utilityProcess.fork,

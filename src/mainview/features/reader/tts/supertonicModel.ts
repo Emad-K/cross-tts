@@ -5,6 +5,9 @@
  * web/helper.js) onto flat typed arrays, with no runtime imports so either
  * ORT build can be passed in.
  *
+ * Copyright (c) 2025 Supertone Inc. (MIT License; full notice in
+ * third_party/supertonic-helper/LICENSE, shipped in resources/licenses).
+ *
  * Pipeline: unicode text ids → duration predictor → text encoder → N
  * flow-matching denoising steps of the vector estimator on a noise latent →
  * vocoder → 44.1 kHz mono PCM.
